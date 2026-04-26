@@ -175,8 +175,6 @@ export default function Home() {
         );
       }
     } catch (err) {
-      // Remove the local preview on failure and show error
-      setImagesList((prev) => prev.filter((u) => u !== localUrl));
       setError("Upload failed. Please try again.");
     } finally {
       setIsUploading(false);
