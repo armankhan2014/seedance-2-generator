@@ -1,213 +1,70 @@
 "use client";
-
-import { useState } from "react";
 import { useSession, signIn } from "next-auth/react";
-import { motion } from "framer-motion";
-import { FaBolt, FaCoins, FaCheckCircle, FaStar } from "react-icons/fa";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+
+const PLANS = [
+  { id: "starter", name: "Starter", credits: 3000, price: 15, desc: "Perfect for exploring AI video creation", features: ["3,000 Credits", "All video models", "All image models", "Standard quality"] },
+  { id: "power",   name: "Power Engine", credits: 7000, price: 35, desc: "For serious creators", popular: true, features: ["7,000 Credits", "All video models", "All image models", "Priority generation"] },
+  { id: "quantum", name: "Quantum Flow", credits: 24000, price: 120, desc: "Maximum creative output", features: ["24,000 Credits", "All video models", "All image models", "Fastest generation"] }
+];
 
 export default function PricingPage() {
-  const { data: session, status } = useSession();
-  const router = useRouter();
-  const [loadingTier, setLoadingTier] = useState(null);
+  const { data: session } = useSession();
+  const searchParams = useSearchParams();
+  const [loading, setLoading] = useState(null);
+  const [msg, setMsg] = useState("");
 
-  const tiers = [
-    {
-      name: "Starter Manifest",
-      credits: 3000,
-      price: 15,
-      description: "Perfect for exploring the digital ether.",
-      features: [
-        "1k - 4k Resolution",
-        "Full Aspect Ratio Control",
-        "Permanent Storage",
-        "Basic Support",
-      ],
-      highlight: false,
-    },
-    {
-      name: "Power Engine",
-      credits: 7000,
-      price: 35,
-      description: "High-octane generation for serious creators.",
-      features: [
-        "Priority Extraction",
-        "Google Smart Search",
-        "Alpha Feature Access",
-        "Priority Support",
-      ],
-      highlight: true,
-    },
-    {
-      name: "Quantum Flow",
-      credits: 24000,
-      price: 120,
-      description: "Infinite manifestation for the visual elite.",
-      features: [
-        "Uncapped Resolution",
-        "Bulk Generation",
-        "API Direct Access",
-        "24/7 Concierge",
-      ],
-      highlight: false,
-    },
-  ];
+  useEffect(() => {
+    if (searchParams.get("success")) setMsg("Payment successful! Credits added to your account.");
+    if (searchParams.get("cancelled")) setMsg("Payment cancelled.");
+  }, [searchParams]);
 
-  const handleCheckout = async (price, credits, tierName) => {
-    if (status !== "authenticated") {
-      signIn();
-      return;
-    }
-
+  async function handlePurchase(planId) {
+    if (!session) { signIn("google"); return; }
+    setLoading(planId);
     try {
-      setLoadingTier(tierName);
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ price, credits }),
+        body: JSON.stringify({ plan: planId })
       });
       const data = await res.json();
-      if (data.url) window.location.href = data.url;
-    } catch (err) {
-      console.error("Stripe error", err);
+      if (data.url) { window.location.href = data.url; }
+      else { setMsg("Error: " + (data.error || "Unknown error")); }
+    } catch(e) {
+      setMsg("Error: " + e.message);
     } finally {
-      setLoadingTier(null);
+      setLoading(null);
     }
-  };
+  }
 
   return (
-    <div className="flex-1 bg-transparent overflow-y-auto custom-scrollbar p-4 md:p-12">
-      <header className="max-w-7xl mx-auto mb-16 text-center space-y-4 pt-4 md:pt-0">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary-500/10 border border-primary-500/20 text-primary-400 text-[10px] font-semibold tracking-[0.4em] uppercase">
-          Fuel your manifestation
-        </div>
-        <h1 className="text-4xl md:text-5xl font-semibold tracking-tight leading-tight text-foreground drop-shadow-sm">
-          CREDIT TIERS
-        </h1>
-        <p className="text-muted font-medium text-xs uppercase tracking-widest max-w-xl mx-auto leading-loose">
-          Unlock higher fidelity, faster polling, and permanent storage. <br />
-          Choose your kinetic energy.
-        </p>
-      </header>
-
-      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8 pb-20">
-        {tiers.map((tier, index) => (
-          <motion.div
-            key={tier.name}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
-            className={`relative p-8 rounded-2xl border transition-all flex flex-col ${
-              tier.highlight
-                ? "bg-glass-bg backdrop-blur-3xl border-primary-500 shadow-xl"
-                : "bg-glass-bg backdrop-blur-3xl border-glass-border shadow-sm"
-            }`}
-          >
-            {tier.highlight && (
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-primary-500 rounded-full text-[9px] font-semibold uppercase tracking-widest shadow-lg">
-                MOST POTENT
-              </div>
-            )}
-
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold tracking-tight mb-2 text-foreground drop-shadow-sm">
-                {tier.name}
-              </h3>
-              <p className="text-xs text-muted font-medium leading-relaxed">
-                {tier.description}
-              </p>
-            </div>
-
-            <div className="mb-8 flex items-end gap-1">
-              <span className="text-4xl font-semibold tracking-tight text-foreground drop-shadow-sm">
-                ${tier.price}
-              </span>
-              <span className="text-xs font-medium text-muted mb-1.5 uppercase tracking-widest">
-                / Month
-              </span>
-            </div>
-
-            <div className="flex-1 space-y-4 mb-8">
-              <div className="flex items-center gap-3 p-4 rounded-xl bg-glass-hover border border-glass-border shadow-inner">
-                <FaCoins className="text-yellow-500 text-lg" />
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-medium text-muted uppercase tracking-widest leading-none mb-1">
-                    Yields
-                  </span>
-                  <span className="text-lg font-semibold text-foreground drop-shadow-sm">
-                    {tier.credits} CREDITS
-                  </span>
-                </div>
-              </div>
-
-              <ul className="space-y-3 pt-2">
-                {tier.features.map((feat) => (
-                  <li
-                    key={feat}
-                    className="flex items-center gap-3 text-xs font-medium text-muted"
-                  >
-                    <FaCheckCircle className="text-primary-500 shrink-0" />
-                    {feat}
-                  </li>
-                ))}
+    <div style={{background:"#0a0a0a",minHeight:"100vh",fontFamily:"Inter,sans-serif",padding:"60px 20px"}}>
+      <div style={{maxWidth:"1000px",margin:"0 auto"}}>
+        <h1 style={{textAlign:"center",color:"#fff",fontSize:"2rem",fontWeight:900,marginBottom:8}}>Simple, Transparent Pricing</h1>
+        <p style={{textAlign:"center",color:"#64748b",marginBottom:48}}>Buy credits once, use across all models. No subscriptions.</p>
+        {msg && <div style={{textAlign:"center",padding:"12px",borderRadius:"8px",marginBottom:32,background:msg.includes("success")?"rgba(34,197,94,.1)":"rgba(239,68,68,.1)",color:msg.includes("success")?"#22c55e":"#ef4444",border:`1px solid ${msg.includes("success")?"rgba(34,197,94,.3)":"rgba(239,68,68,.3)"}`}}>{msg}</div>}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:20}}>
+          {PLANS.map(plan => (
+            <div key={plan.id} style={{background:"#111",border:plan.popular?"1px solid #8b5cf6":"1px solid rgba(255,255,255,.08)",borderRadius:16,padding:"32px 28px",position:"relative"}}>
+              {plan.popular && <div style={{position:"absolute",top:-13,left:"50%",transform:"translateX(-50%)",background:"linear-gradient(135deg,#8b5cf6,#7c3aed)",color:"#fff",fontSize:".7rem",fontWeight:700,padding:"4px 14px",borderRadius:50,whiteSpace:"nowrap"}}>Most Popular</div>}
+              <div style={{fontSize:".78rem",fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:"1px",marginBottom:10}}>{plan.name}</div>
+              <div style={{fontSize:"2.6rem",fontWeight:900,color:"#fff",letterSpacing:-1,marginBottom:4}}><sup style={{fontSize:"1.2rem",verticalAlign:"top",marginTop:8}}>$</sup>{plan.price}</div>
+              <div style={{fontSize:".82rem",color:"#8b5cf6",fontWeight:600,marginBottom:16}}>{plan.credits.toLocaleString()} Credits</div>
+              <div style={{fontSize:".83rem",color:"#64748b",marginBottom:20,lineHeight:1.5}}>{plan.desc}</div>
+              <hr style={{border:"none",borderTop:"1px solid rgba(255,255,255,.07)",margin:"20px 0"}}/>
+              <ul style={{listStyle:"none",padding:0,margin:"0 0 24px",display:"flex",flexDirection:"column",gap:8}}>
+                {plan.features.map(f => <li key={f} style={{fontSize:".84rem",color:"#94a3b8",paddingLeft:20,position:"relative"}}><span style={{position:"absolute",left:0,color:"#8b5cf6"}}>✓</span>{f}</li>)}
               </ul>
+              <button onClick={() => handlePurchase(plan.id)} disabled={loading===plan.id} style={{width:"100%",padding:12,borderRadius:10,fontSize:".88rem",fontWeight:700,cursor:"pointer",border:plan.popular?"none":"1px solid rgba(255,255,255,.12)",background:plan.popular?"linear-gradient(135deg,#8b5cf6,#7c3aed)":"transparent",color:plan.popular?"#fff":"#94a3b8",opacity:loading===plan.id?.5:1,fontFamily:"inherit"}}>
+                {loading===plan.id ? "Redirecting to Stripe..." : (session ? "Buy Credits" : "Sign in to Purchase")}
+              </button>
             </div>
-
-            <button
-              onClick={() =>
-                handleCheckout(tier.price, tier.credits, tier.name)
-              }
-              disabled={loadingTier === tier.name}
-              className={`w-full h-12 rounded-xl font-semibold text-[10px] uppercase tracking-widest flex items-center justify-center gap-3 transition-all ${
-                tier.highlight
-                  ? "bg-primary-500 text-white hover:bg-primary-600 shadow-primary-500/20"
-                  : "bg-[var(--solid-bg)] text-foreground hover:opacity-80 border border-glass-border"
-              } disabled:opacity-20`}
-            >
-              {loadingTier === tier.name ? (
-                <div className="w-5 h-5 border-2 border-primary-600 border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <>
-                  Purchase Credits{" "}
-                  <FaBolt
-                    className={
-                      tier.highlight ? "text-primary-500" : "text-muted"
-                    }
-                  />
-                </>
-              )}
-            </button>
-          </motion.div>
-        ))}
+          ))}
+        </div>
+        <p style={{textAlign:"center",color:"#475569",fontSize:".78rem",marginTop:32}}>Payments processed securely by Stripe. Credits never expire.</p>
       </div>
-
-      {/* Credit Counter Hook */}
-      <footer className="max-w-7xl mx-auto py-12 border-t border-glass-border flex flex-col md:flex-row items-center justify-between gap-8">
-        <div className="space-y-2 text-center md:text-left">
-          <div className="text-[10px] font-semibold tracking-[0.4em] text-muted uppercase">
-            Kinetic Stats
-          </div>
-          <div className="text-lg font-medium flex items-center gap-3">
-            Currently Holding:{" "}
-            <span className="text-foreground font-semibold">
-              {session?.user?.credits || 0} Credits
-            </span>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center justify-center gap-4 text-muted text-[10px] font-semibold uppercase tracking-widest text-center">
-          <FaStar className="text-yellow-500/30 hidden sm:block" /> Secure Encryption via Stripe{" "}
-          <FaStar className="text-yellow-500/30 hidden sm:block" />
-        </div>
-      </footer>
-
-      <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 0px;
-        }
-        .custom-scrollbar {
-          scrollbar-width: none;
-        }
-      `}</style>
     </div>
   );
-}
+            }
