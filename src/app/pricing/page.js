@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { useSession, signIn } from "next-auth/react";
 import { useState } from "react";
 
-const P = [{id:"starter",n:"Starter",c:3000,p:15},{id:"power",n:"Power Engine",c:7000,p:35,hot:true},{id:"quantum",n:"Quantum Flow",c:24000,p:120}];
+const P = [{id:"starter",n:"Starter",c:3000,p:10},{id:"power",n:"Power Engine",c:7000,p:35,hot:true},{id:"quantum",n:"Quantum Flow",c:24000,p:120}];
 
 export default function Page() {
   const {data:s} = useSession();
