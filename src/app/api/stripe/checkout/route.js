@@ -6,7 +6,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2023-10-
 
 // Credit plans
 const PLANS = {
-  starter: { name: "Starter Manifest", credits: 3000, amount: 1500, currency: "usd" },
+  starter: { name: "Starter Manifest", credits: 3000, amount: 1000, currency: "usd" },
   power:   { name: "Power Engine",     credits: 7000, amount: 3500, currency: "usd" },
   quantum: { name: "Quantum Flow",     credits: 24000, amount: 12000, currency: "usd" }
 };
