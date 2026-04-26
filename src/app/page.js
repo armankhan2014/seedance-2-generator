@@ -29,6 +29,7 @@ const ASPECT_RATIOS = [
 const RESOLUTIONS = [
   { value: "480p", label: "480p" },
   { value: "720p", label: "720p" },
+  { value: "1080p", label: "1080p" },
 ];
 
 const DURATIONS = [
@@ -318,16 +319,21 @@ export default function Home() {
 
   const creditCost = (() => {
     const isReference = mode === "reference-to-video";
+    const is1080p = resolution === "1080p";
     const is720p = resolution === "720p";
     let rate;
     if (isReference) {
-      if (is720p) {
+      if (is1080p) {
+        rate = quality === "high" ? 80 : 56;
+      } else if (is720p) {
         rate = quality === "high" ? 60 : 42;
       } else {
         rate = quality === "high" ? 48 : 36;
       }
     } else {
-      if (is720p) {
+      if (is1080p) {
+        rate = quality === "high" ? 70 : 45;
+      } else if (is720p) {
         rate = quality === "high" ? 50 : 30;
       } else {
         rate = quality === "high" ? 30 : 24;
