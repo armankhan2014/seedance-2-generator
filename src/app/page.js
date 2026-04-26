@@ -1,5 +1,4 @@
 "use client";
-
 import { useSession, signIn } from "next-auth/react";
 import { useState, useRef, useEffect } from "react";
 import {
@@ -17,6 +16,8 @@ import { FiDownload } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { downloadMedia } from "@/lib/utils";
+
+export const dynamic = "force-dynamic";
 
 const ASPECT_RATIOS = [
   { label: "16:9", value: "16:9" },
@@ -44,7 +45,6 @@ const QUALITIES = [
 function CustomSelect({ label, value, options, onChange, icon: Icon }) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef(null);
-
   useEffect(() => {
     function handleClickOutside(e) {
       if (containerRef.current && !containerRef.current.contains(e.target))
@@ -53,9 +53,7 @@ function CustomSelect({ label, value, options, onChange, icon: Icon }) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
-
   const selectedOption = options.find((o) => o.value === value) || options[0];
-
   return (
     <div className="space-y-1.5" ref={containerRef}>
       <label className="text-[10px] font-medium text-muted uppercase tracking-wider">
@@ -108,10 +106,8 @@ function CustomSelect({ label, value, options, onChange, icon: Icon }) {
 
 export default function Home() {
   const { data: session } = useSession();
-
   // Mode State
   const [mode, setMode] = useState("text-to-video");
-
   // Form State
   const [prompt, setPrompt] = useState("");
   const [aspectRatio, setAspectRatio] = useState(ASPECT_RATIOS[0].value);
@@ -124,7 +120,6 @@ export default function Home() {
   const [newImageUrl, setNewImageUrl] = useState("");
   const [newVideoUrl, setNewVideoUrl] = useState("");
   const [newAudioUrl, setNewAudioUrl] = useState("");
-
   // UI State
   const [isUploading, setIsUploading] = useState(false);
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
@@ -150,10 +145,15 @@ export default function Home() {
     }
   };
 
+  // FIX 1: Show thumbnail immediately from local file, handle both MuAPI response formats
   const handleFileUpload = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
     if (imagesList.length >= 9) return;
+
+    // Show thumbnail immediately using local object URL
+    const localUrl = URL.createObjectURL(file);
+    setImagesList((prev) => [...prev, localUrl]);
 
     try {
       setIsUploading(true);
@@ -166,9 +166,18 @@ export default function Home() {
       });
       if (!res.ok) throw new Error("Upload failed.");
       const data = await res.json();
-      if (data.url) setImagesList([...imagesList, data.url]);
+      // Handle both response formats: data.url or data.data?.url
+      const uploadedUrl = data.url || data.data?.url;
+      if (uploadedUrl) {
+        // Replace local blob URL with the real remote URL
+        setImagesList((prev) =>
+          prev.map((u) => (u === localUrl ? uploadedUrl : u))
+        );
+      }
     } catch (err) {
-      setError("Upload failed.");
+      // Remove the local preview on failure and show error
+      setImagesList((prev) => prev.filter((u) => u !== localUrl));
+      setError("Upload failed. Please try again.");
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -179,7 +188,6 @@ export default function Home() {
     const file = event.target.files?.[0];
     if (!file) return;
     if (videoFiles.length >= 3) return;
-
     try {
       setIsUploadingVideo(true);
       setError(null);
@@ -191,7 +199,8 @@ export default function Home() {
       });
       if (!res.ok) throw new Error("Video upload failed.");
       const data = await res.json();
-      if (data.url) setVideoFiles([...videoFiles, data.url]);
+      const uploadedUrl = data.url || data.data?.url;
+      if (uploadedUrl) setVideoFiles([...videoFiles, uploadedUrl]);
     } catch (err) {
       setError("Video upload failed.");
     } finally {
@@ -204,7 +213,6 @@ export default function Home() {
     const file = event.target.files?.[0];
     if (!file) return;
     if (audioFiles.length >= 3) return;
-
     try {
       setIsUploadingAudio(true);
       setError(null);
@@ -216,7 +224,8 @@ export default function Home() {
       });
       if (!res.ok) throw new Error("Audio upload failed.");
       const data = await res.json();
-      if (data.url) setAudioFiles([...audioFiles, data.url]);
+      const uploadedUrl = data.url || data.data?.url;
+      if (uploadedUrl) setAudioFiles([...audioFiles, uploadedUrl]);
     } catch (err) {
       setError("Audio upload failed.");
     } finally {
@@ -239,13 +248,11 @@ export default function Home() {
       setError("Please add at least one reference image.");
       return;
     }
-
     try {
       setLoading(true);
       setError(null);
       setResultUrl(null);
       setStatusMessage("Starting generation...");
-
       const res = await fetch("/api/seedance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -261,7 +268,6 @@ export default function Home() {
           audio_files: audioFiles,
         }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Request failed.");
       await pollStatus(data.request_id, data.metadata);
@@ -281,7 +287,6 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Status check failed.");
-
       if (data.status === "completed") {
         setResultUrl(data.imageUrl);
         setLoading(false);
@@ -317,7 +322,6 @@ export default function Home() {
     const isReference = mode === "reference-to-video";
     const is720p = resolution === "720p";
     let rate;
-
     if (isReference) {
       if (is720p) {
         rate = quality === "high" ? 60 : 42;
@@ -430,6 +434,7 @@ export default function Home() {
                     accept=".png, .jpg, .jpeg"
                     onChange={handleFileUpload}
                   />
+                  {/* FIX 2: Upload button shows the last uploaded image as preview */}
                   <button
                     onClick={() => {
                       if (!session) {
@@ -439,10 +444,16 @@ export default function Home() {
                       fileInputRef.current?.click();
                     }}
                     disabled={isUploading || imagesList.length >= 9}
-                    className="w-9 h-9 bg-primary-500/10 border border-primary-500/20 text-primary-500 rounded-md flex items-center justify-center hover:bg-primary-500 hover:text-white transition-colors"
+                    className="w-9 h-9 bg-primary-500/10 border border-primary-500/20 text-primary-500 rounded-md flex items-center justify-center hover:bg-primary-500 hover:text-white transition-colors overflow-hidden"
                   >
                     {isUploading ? (
                       <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+                    ) : imagesList.length > 0 ? (
+                      <img
+                        src={imagesList[imagesList.length - 1]}
+                        className="w-full h-full object-cover rounded-md"
+                        alt="preview"
+                      />
                     ) : (
                       <IoImageOutline />
                     )}
@@ -455,6 +466,7 @@ export default function Home() {
                     <FaPlus />
                   </button>
                 </div>
+
                 {imagesList.length > 0 && (
                   <div className="grid grid-cols-5 gap-2">
                     {imagesList.map((url, idx) => (
@@ -466,7 +478,7 @@ export default function Home() {
                         <button
                           onClick={() =>
                             setImagesList(
-                              imagesList.filter((_, i) => i !== idx),
+                              imagesList.filter((_, i) => i !== idx)
                             )
                           }
                           className="absolute top-2 right-2 p-1 rounded bg-red-500/90 items-center justify-center hidden group-hover:flex"
@@ -482,6 +494,7 @@ export default function Home() {
                 )}
               </div>
             )}
+
             {mode === "reference-to-video" && (
               <div className="space-y-6 pt-4 border-t border-glass-border">
                 <div className="space-y-3">
@@ -540,14 +553,11 @@ export default function Home() {
                           key={idx}
                           className="relative aspect-square rounded-md bg-glass-bg overflow-hidden group border border-glass-border"
                         >
-                          <video
-                            src={url}
-                            className="w-full h-full object-cover"
-                          />
+                          <video src={url} className="w-full h-full object-cover" />
                           <button
                             onClick={() =>
                               setVideoFiles(
-                                videoFiles.filter((_, i) => i !== idx),
+                                videoFiles.filter((_, i) => i !== idx)
                               )
                             }
                             className="absolute top-2 right-2 p-1 rounded bg-red-500/80 items-center justify-center hidden group-hover:flex"
@@ -562,6 +572,7 @@ export default function Home() {
                     </div>
                   )}
                 </div>
+
                 <div className="space-y-3">
                   <label className="text-[10px] font-medium text-muted uppercase tracking-wider">
                     Audio Clips ({audioFiles.length}/3)
@@ -630,7 +641,7 @@ export default function Home() {
                           <button
                             onClick={() =>
                               setAudioFiles(
-                                audioFiles.filter((_, i) => i !== idx),
+                                audioFiles.filter((_, i) => i !== idx)
                               )
                             }
                             className="text-muted hover:text-red-500"
@@ -752,6 +763,7 @@ export default function Home() {
           </div>
         </div>
       </div>
+
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar {
           width: 0px;
