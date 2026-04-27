@@ -21,25 +21,11 @@ export async function POST(req) {
     let result;
     if (mode === "reference-to-video") {
       result = await AIService.edit(session.user.id, {
-        mode,
-        prompt,
-        images_list,
-        aspect_ratio,
-        resolution,
-        duration,
-        quality,
-        model
+        mode, prompt, images_list, aspect_ratio, resolution, duration, quality, model
       });
     } else {
       result = await AIService.generate(session.user.id, {
-        mode,
-        prompt,
-        aspect_ratio,
-        resolution,
-        duration,
-        quality,
-        model,
-        images_list
+        mode, prompt, aspect_ratio, resolution, duration, quality, model, images_list
       });
     }
 
@@ -49,9 +35,9 @@ export async function POST(req) {
     });
   } catch (error) {
     if (error.message === "Insufficient credits") {
-      return new NextResponse("Insufficient credits", { status: 403 });
+      return NextResponse.json({ error: "Insufficient credits" }, { status: 403 });
     }
     console.error("[AI_SEEDANCE]", error);
-    return new NextResponse(error.message || "Internal Error", { status: 500 });
+    return NextResponse.json({ error: error.message || "Internal Error" }, { status: 500 });
   }
 }
