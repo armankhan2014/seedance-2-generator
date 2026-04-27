@@ -183,11 +183,8 @@ export const AIService = {
           throw new Error(errMsg);
         }
       } catch (e) {
-        if (e.message && !e.message.includes("Generation failed")) {
-          console.error("[AI_POLL_ERROR]", e.message);
-        } else {
-          throw e;
-        }
+        // Never propagate MuAPI poll errors — just return processing and retry next time
+        console.error("[AI_POLL_ERROR]", e.message);
       }
     }
 

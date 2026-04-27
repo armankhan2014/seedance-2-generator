@@ -31,6 +31,23 @@ export default function CreationsPage() {
     }
   }, [status]);
 
+  const syncCreation = async (requestId) => {
+    try {
+      const res = await fetch("/api/seedance/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId }),
+      });
+      const data = await res.json();
+      if (data.status === "completed") {
+        await fetchCreations();
+      }
+      return data;
+    } catch (e) {
+      console.error("Sync failed:", e);
+    }
+  };
+
   const fetchCreations = async () => {
     try {
       const res = await fetch("/api/creations");
@@ -133,9 +150,16 @@ export default function CreationsPage() {
                       <span className="text-[10px] font-black text-red-500 uppercase tracking-widest">Failed</span>
                     </div>
                   ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center bg-glass-hover gap-4">
+                    <div className="w-full h-full flex flex-col items-center justify-center bg-glass-hover gap-4 relative">
                       <div className="w-8 h-8 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
                       <span className="text-[9px] font-black text-muted uppercase tracking-[0.2em] animate-pulse">Manifesting...</span>
+                      {item.requestId && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); syncCreation(item.requestId); }}
+                          style={{ marginTop: "4px", background: "rgba(139,92,246,0.8)", border: "none", borderRadius: "6px", color: "#fff", padding: "4px 12px", fontSize: "0.7rem", cursor: "pointer" }}>
+                          ↻ Check Status
+                        </button>
+                      )}
                     </div>
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 p-4 flex flex-col justify-end">

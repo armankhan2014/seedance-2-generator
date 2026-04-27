@@ -287,27 +287,47 @@ export default function Home() {
     }
   };
 
-  const pollStatus = async (requestId, metadata) => {
-    setStatusMessage("Processing...");
+  const pollStatus = async (requestId, metadata, attempt = 0) => {
+    const MAX_ATTEMPTS = 200; // ~10 minutes at 3s intervals
+    if (attempt >= MAX_ATTEMPTS) {
+      setError("Generation timed out. Please check your Gallery — the video may still appear there.");
+      setLoading(false);
+      return;
+    }
+
+    setStatusMessage(`Processing... (${Math.round(attempt * 3)}s)`);
+
     try {
       const res = await fetch("/api/seedance/check-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requestId, metadata }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Status check failed.");
+
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        // JSON parse failed (maybe timeout) — retry
+        setTimeout(() => pollStatus(requestId, metadata, attempt + 1), 4000);
+        return;
+      }
+
       if (data.status === "completed") {
         setResultUrl(data.imageUrl);
+        setStatusMessage("Done!");
         setLoading(false);
       } else if (data.status === "failed") {
-        throw new Error("Generation failed.");
+        setError(data.error || "Generation failed. Please try again.");
+        setLoading(false);
       } else {
-        setTimeout(() => pollStatus(requestId, metadata), 3000);
+        // Still processing (or transient error) — always keep retrying
+        setTimeout(() => pollStatus(requestId, metadata, attempt + 1), 3000);
       }
     } catch (err) {
-      setError(err.message);
-      setLoading(false);
+      // Network error — retry silently, don't stop polling
+      console.error("Poll attempt", attempt, "failed:", err.message);
+      setTimeout(() => pollStatus(requestId, metadata, attempt + 1), 5000);
     }
   };
 
