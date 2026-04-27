@@ -14,20 +14,30 @@ export const authOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user, account }) {
+    async jwt({ token, user }) {
+      // On fresh sign-in, user is provided
       if (user) {
         token.id = user.id;
         token.credits = user.credits ?? 10;
       }
-      // If id is missing, look up by email
+      // If id is still missing (old session), find or create the user by email
       if (!token.id && token.email) {
         try {
-          const dbUser = await prisma.user.findUnique({ where: { email: token.email } });
-          if (dbUser) {
-            token.id = dbUser.id;
-            token.credits = dbUser.credits;
+          let dbUser = await prisma.user.findUnique({ where: { email: token.email } });
+          if (!dbUser) {
+            dbUser = await prisma.user.create({
+              data: {
+                email: token.email,
+                name: token.name || null,
+                image: token.picture || null,
+              },
+            });
           }
-        } catch {}
+          token.id = dbUser.id;
+          token.credits = dbUser.credits;
+        } catch (e) {
+          console.error("JWT user lookup failed:", e.message);
+        }
       }
       return token;
     },
