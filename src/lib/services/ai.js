@@ -40,11 +40,13 @@ export const AIService = {
     console.log("[AI_DEBUG] Submitting to:", endpoint);
     console.log("[AI_DEBUG] mode:", mode, "resolution:", resolution, "quality:", quality, "duration:", duration);
 
+    const webhookUrl = `${config.auth.webhook_url}/api/webhook/muapi`;
     const payload = {
       prompt,
       aspect_ratio,
       duration: parseInt(duration),
       quality,
+      webhook: webhookUrl,
     };
 
     if (type === "i2v" || type === "reference") {
