@@ -59,6 +59,11 @@ export const AIService = {
 
     if (!endpoint) throw new Error(`Endpoint not found for mode: ${mode} and resolution: ${resolution}`);
 
+    console.log("[AI_DEBUG] mode:", mode, "type:", type, "resolution:", resolution);
+    console.log("[AI_DEBUG] endpoint:", endpoint);
+    console.log("[AI_DEBUG] apiKey present:", !!apiKey);
+    console.log("[AI_DEBUG] payload:", JSON.stringify(payload));
+
     const webhookUrl = `${config.auth.webhook_url}/api/webhook/muapi`;
     const submitUrl = `${endpoint}?webhook=${encodeURIComponent(webhookUrl)}`;
 

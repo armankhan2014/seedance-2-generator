@@ -31,13 +31,13 @@ const config = {
       endpoints: {
         t2v: {
           "480p": "https://api.muapi.ai/api/v1/seedance-2.0-t2v-480p",
-          "720p": "https://api.muapi.ai/api/v1/seedance-2.0-t2v",
-          "1080p": "https://api.muapi.ai/api/v1/seedance-2.0-t2v-1080p"
+          "720p": "https://api.muapi.ai/api/v1/seedance-v2.0-t2v",
+          "1080p": "https://api.muapi.ai/api/v1/seedance-v2.0-t2v-1080p"
         },
         i2v: {
           "480p": "https://api.muapi.ai/api/v1/seedance-2.0-i2v-480p",
-          "720p": "https://api.muapi.ai/api/v1/seedance-2.0-i2v",
-          "1080p": "https://api.muapi.ai/api/v1/seedance-2.0-i2v-1080p"
+          "720p": "https://api.muapi.ai/api/v1/seedance-v2.0-i2v",
+          "1080p": "https://api.muapi.ai/api/v1/seedance-v2.0-i2v-1080p"
         },
         reference: {
           "480p": "https://api.muapi.ai/api/v1/seedance-2.0-omni-reference-480p",
