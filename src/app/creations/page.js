@@ -175,8 +175,22 @@ export default function CreationsPage() {
                       <span className="text-[9px] font-semibold text-primary-400 uppercase tracking-widest">
                         {item.aspectRatio}
                       </span>
-                      <div className="w-8 h-8 rounded-lg bg-glass-hover border border-glass-border flex items-center justify-center text-white">
-                        <FaExpandAlt className="text-[10px]" />
+                      <div className="flex items-center gap-2">
+                        {item.status === "completed" && item.imageUrl && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              downloadMedia(item.imageUrl, `seedance-${item.id}.mp4`);
+                            }}
+                            title="Download video"
+                            className="w-8 h-8 rounded-lg bg-primary-600 hover:bg-primary-500 border border-primary-400/50 flex items-center justify-center text-white transition-colors"
+                          >
+                            <FiDownload size={12} />
+                          </button>
+                        )}
+                        <div className="w-8 h-8 rounded-lg bg-glass-hover border border-glass-border flex items-center justify-center text-white">
+                          <FaExpandAlt className="text-[10px]" />
+                        </div>
                       </div>
                     </div>
                   </div>
