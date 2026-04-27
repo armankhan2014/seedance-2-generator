@@ -1,13 +1,48 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function Navbar() {
-  const { data: session } = useSession();
+  const { data: session, update } = useSession();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [liveCredits, setLiveCredits] = useState(null);
+
+  // Fetch fresh credits from DB
+  const refreshCredits = async () => {
+    if (!session?.user) return;
+    try {
+      const res = await fetch("/api/user/credits");
+      if (res.ok) {
+        const data = await res.json();
+        setLiveCredits(data.credits);
+      }
+    } catch (e) {}
+  };
+
+  // Refresh on mount when logged in
+  useEffect(() => {
+    if (session?.user) refreshCredits();
+  }, [session?.user?.id]);
+
+  // Refresh when returning from Stripe (success=true in URL)
+  useEffect(() => {
+    if (searchParams?.get("success") === "true" && session?.user) {
+      // Poll a few times to catch the webhook update
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        await refreshCredits();
+        attempts++;
+        if (attempts >= 5) clearInterval(poll);
+      }, 2000);
+      return () => clearInterval(poll);
+    }
+  }, [searchParams, session?.user?.id]);
+
+  const displayCredits = liveCredits ?? session?.user?.credits ?? 0;
 
   const links = [
     { href: "/", label: "Generate" },
@@ -79,7 +114,7 @@ export default function Navbar() {
                 fontFamily: "inherit",
                 whiteSpace: "nowrap",
               }}>
-                ⚡ {(session.user?.credits ?? 0).toLocaleString()} credits
+                ⚡ {displayCredits.toLocaleString()} credits
               </span>
               <button
                 onClick={() => signOut({ callbackUrl: "/" })}
@@ -150,7 +185,7 @@ export default function Navbar() {
                   fontSize: "0.82rem",
                   fontWeight: 700,
                 }}>
-                  ⚡ {(session.user?.credits ?? 0).toLocaleString()} credits remaining
+                  ⚡ {displayCredits.toLocaleString()} credits remaining
                 </div>
               </div>
             ) : (
