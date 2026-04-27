@@ -37,13 +37,25 @@ export default function CreationsPage() {
       const data = await res.json();
       if (res.ok) {
         setCreations(data);
+        return data;
       }
     } catch (error) {
       console.error("Error fetching creations:", error);
     } finally {
       setLoading(false);
     }
+    return [];
   };
+
+  // Auto-refresh gallery every 5s while any creation is still processing
+  useEffect(() => {
+    let timer;
+    const hasPending = creations.some(c => c.status === "processing");
+    if (hasPending) {
+      timer = setTimeout(() => fetchCreations(), 5000);
+    }
+    return () => clearTimeout(timer);
+  }, [creations]);
 
   if (status === "loading" || loading) {
     return (

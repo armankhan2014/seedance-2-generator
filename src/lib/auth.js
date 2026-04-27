@@ -4,23 +4,45 @@ import { prisma } from "./prisma";
 
 export const authOptions = {
   adapter: PrismaAdapter(prisma),
-  session: {
-    strategy: "jwt",
-  },
+  session: { strategy: "jwt" },
   providers: [
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      authorization: {
+        params: {
+          prompt: "select_account",
+          access_type: "offline",
+          response_type: "code",
+        },
+      },
     }),
   ],
+  pages: {
+    signIn: "/",        // redirect to homepage on sign-in
+    error: "/",        // redirect to homepage on error (avoids ugly error pages on mobile)
+  },
   callbacks: {
     async jwt({ token, user }) {
-      // On fresh sign-in, user is provided
+      // On fresh sign-in, user object is provided
       if (user) {
         token.id = user.id;
         token.credits = user.credits ?? 10;
+        return token;
       }
-      // If id is still missing (old session), find or create the user by email
+      // Always refresh credits from DB so they stay up to date
+      if (token.id) {
+        try {
+          const dbUser = await prisma.user.findUnique({ where: { id: token.id } });
+          if (dbUser) {
+            token.credits = dbUser.credits;
+          }
+        } catch (e) {
+          console.error("JWT credits refresh failed:", e.message);
+        }
+        return token;
+      }
+      // Fallback: look up or create user by email (handles old sessions)
       if (!token.id && token.email) {
         try {
           let dbUser = await prisma.user.findUnique({ where: { email: token.email } });
@@ -49,4 +71,5 @@ export const authOptions = {
       return session;
     },
   },
+  secret: process.env.NEXTAUTH_SECRET,
 };

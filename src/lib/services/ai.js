@@ -155,18 +155,22 @@ export const AIService = {
         const result = await this.pollMuAPI(requestId, apiKey);
         console.log("[AI_POLL_PARSED]", requestId, JSON.stringify(result));
 
-        const status = result?.status?.toLowerCase();
-        const isDone = status === "succeeded" || status === "completed" || status === "success";
-        const isFailed = status === "failed" || status === "error";
+        // MuAPI marks completion by having a non-empty outputs array (same as webhook handler)
+        const outputs = result?.outputs || result?.output || [];
+        const outputArr = Array.isArray(outputs) ? outputs : (outputs ? [outputs] : []);
+        const imageUrl = outputArr[0] || null;
 
-        if (result && isDone) {
-          // Handle all possible output field names from MuAPI
-          const rawOutput = result.output ?? result.outputs ?? result.video_url ?? result.url ?? null;
-          const imageUrl = Array.isArray(rawOutput) ? rawOutput[0] : rawOutput;
-          console.log("[AI_POLL_COMPLETE] imageUrl:", imageUrl);
+        const statusStr = result?.status?.toLowerCase() || "";
+        const hasError = result?.error && result.error !== "" && result.error !== null;
+        const isCompleted = outputArr.length > 0 || statusStr === "succeeded" || statusStr === "completed" || statusStr === "success";
+        const isFailed = hasError || statusStr === "failed" || statusStr === "error";
+
+        console.log("[AI_POLL_PARSED] id:", requestId, "status:", statusStr, "outputs:", outputArr.length, "imageUrl:", imageUrl);
+
+        if (result && isCompleted && imageUrl) {
           await creationModel.update({
             where: { requestId },
-            data: { status: "completed", imageUrl: imageUrl || null },
+            data: { status: "completed", imageUrl },
           });
           return { status: "completed", imageUrl };
         }
