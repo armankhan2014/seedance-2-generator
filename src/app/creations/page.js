@@ -64,12 +64,17 @@ export default function CreationsPage() {
     return [];
   };
 
-  // Auto-refresh gallery every 5s while any creation is still processing
+  // Auto-sync processing items with MuAPI every 8s and refresh gallery
   useEffect(() => {
     let timer;
-    const hasPending = creations.some(c => c.status === "processing");
-    if (hasPending) {
-      timer = setTimeout(() => fetchCreations(), 5000);
+    const pending = creations.filter(c => c.status === "processing" && c.requestId);
+    if (pending.length > 0) {
+      timer = setTimeout(async () => {
+        // Sync all processing items with MuAPI in parallel
+        await Promise.all(pending.map(c => syncCreation(c.requestId)));
+        // Then refresh gallery from DB
+        await fetchCreations();
+      }, 8000);
     }
     return () => clearTimeout(timer);
   }, [creations]);
