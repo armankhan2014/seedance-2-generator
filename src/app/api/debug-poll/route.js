@@ -28,7 +28,23 @@ export async function GET(request) {
         headers: { "x-api-key": apiKey },
       });
       const text = await res.text();
-      results[url] = { status: res.status, body: text.slice(0, 1000) };
+      let parsed = null;
+      try { parsed = JSON.parse(text); } catch(e) {}
+      // Show key fields + first 300 chars of raw
+      results[url] = {
+        status: res.status,
+        raw_truncated: text.slice(0, 300),
+        key_fields: parsed ? {
+          id: parsed.id,
+          status: parsed.status,
+          output: parsed.output,
+          outputs: parsed.outputs,
+          video_url: parsed.video_url,
+          url: parsed.url,
+          result: parsed.result,
+          error: parsed.error,
+        } : null
+      };
     } catch (e) {
       results[url] = { error: e.message };
     }
