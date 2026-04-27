@@ -12,6 +12,7 @@ export async function POST(req) {
   try {
     event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
+    console.error("[webhook] Signature failed:", err.message);
     return NextResponse.json({ error: "Webhook signature failed: " + err.message }, { status: 400 });
   }
 
@@ -19,16 +20,36 @@ export async function POST(req) {
     const session = event.data.object;
     const email = session.customer_email || session.metadata?.userEmail;
     const credits = parseInt(session.metadata?.credits || "0");
+    const stripeSessionId = session.id;
 
     if (email && credits > 0) {
       try {
+        const user = await prisma.user.findUnique({
+          where: { email },
+          select: { id: true, lastStripeSession: true }
+        });
+
+        if (!user) {
+          console.error("[webhook] User not found:", email);
+          return NextResponse.json({ received: true });
+        }
+
+        // Idempotency: skip if already processed by verify-session
+        if (user.lastStripeSession === stripeSessionId) {
+          console.log("[webhook] Already redeemed by verify-session, skipping:", stripeSessionId);
+          return NextResponse.json({ received: true });
+        }
+
         await prisma.user.update({
           where: { email },
-          data: { credits: { increment: credits } }
+          data: {
+            credits: { increment: credits },
+            lastStripeSession: stripeSessionId
+          }
         });
-        console.log("Credits awarded:", credits, "to", email);
+        console.log("[webhook] Credits awarded:", credits, "to", email);
       } catch (err) {
-        console.error("Failed to award credits:", err);
+        console.error("[webhook] Failed to award credits:", err);
       }
     }
   }

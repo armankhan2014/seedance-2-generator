@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import Stripe from "stripe";
+import { authOptions } from "@/lib/auth";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2023-10-16" });
 
-// Credit plans
 const PLANS = {
   starter: { name: "Starter Manifest", credits: 3000, amount: 1000, currency: "usd" },
   power:   { name: "Power Engine",     credits: 7000, amount: 3500, currency: "usd" },
@@ -13,7 +13,7 @@ const PLANS = {
 
 export async function POST(req) {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
@@ -43,7 +43,8 @@ export async function POST(req) {
         credits: String(planData.credits),
         plan: plan
       },
-      success_url: baseUrl + "/pricing?success=true&credits=" + planData.credits,
+      // Include session ID so we can verify & add credits on return
+      success_url: baseUrl + "/pricing?success=true&session_id={CHECKOUT_SESSION_ID}",
       cancel_url: baseUrl + "/pricing?cancelled=true"
     });
     return NextResponse.json({ url: checkoutSession.url });
