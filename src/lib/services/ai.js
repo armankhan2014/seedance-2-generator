@@ -94,7 +94,7 @@ export const AIService = {
 
     if (!submitRes.ok) {
       const errorText = await submitRes.text();
-      throw new Error(`API Submission Failed: ${submitRes.status} ${errorText}`);
+      throw new Error(`API Submission Failed: ${submitRes.status} ${errorText} | URL: ${submitUrl}`);
     }
 
     const { request_id } = await submitRes.json();
