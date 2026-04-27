@@ -24,87 +24,107 @@ export const AIService = {
 
   async generate(userId, { mode, prompt, aspect_ratio = "16:9", resolution = "720p", duration = 5, quality = "basic", images_list = [], video_files = [], audio_files = [] }) {
     const cost = this.getCreditCost(mode, duration, quality, resolution);
+
+    // Deduct credits upfront — will be refunded automatically if the API call fails
     await UserService.deductCredits(userId, cost);
 
-    const apiKey = config.ai.seedance.apiKey;
-    if (!apiKey) throw new Error("SEEDANCE_V2_API_KEY is not configured");
-
-    let type;
-    if (mode === "text-to-video") type = "t2v";
-    else if (mode === "image-to-video") type = "i2v";
-    else if (mode === "reference-to-video") type = "reference";
-
-    const endpoint = config.ai.seedance.endpoints[type][resolution];
-    if (!endpoint) throw new Error(`Endpoint not found for mode: ${mode} and resolution: ${resolution}`);
-
-    console.log("[AI_DEBUG] Submitting to:", endpoint);
-    console.log("[AI_DEBUG] mode:", mode, "resolution:", resolution, "quality:", quality, "duration:", duration);
-
-    const webhookUrl = `${config.auth.webhook_url}/api/webhook/muapi`;
-    const payload = {
-      prompt,
-      aspect_ratio,
-      duration: parseInt(duration),
-      quality,
-      webhook: webhookUrl,
-    };
-
-    if (type === "i2v" || type === "reference") {
-      payload.images_list = images_list.slice(0, 9);
-    }
-    if (type === "reference") {
-      payload.video_files = video_files.slice(0, 3);
-      payload.audio_files = audio_files.slice(0, 3);
-    }
-
-    console.log("[AI_DEBUG] payload:", JSON.stringify(payload));
-
-    const submitRes = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    const responseText = await submitRes.text();
-    console.log("[AI_DEBUG] response status:", submitRes.status, "body:", responseText);
-
-    if (!submitRes.ok) {
-      throw new Error(`API Submission Failed: ${submitRes.status} ${responseText}`);
-    }
-
-    let responseData;
     try {
-      responseData = JSON.parse(responseText);
-    } catch (e) {
-      throw new Error(`Invalid JSON response from API: ${responseText}`);
-    }
+      const apiKey = config.ai.seedance.apiKey;
+      if (!apiKey) throw new Error("SEEDANCE_V2_API_KEY is not configured");
 
-    const request_id = responseData.id || responseData.request_id;
-    if (!request_id) throw new Error(`No request_id in response: ${responseText}`);
+      let type;
+      if (mode === "text-to-video") type = "t2v";
+      else if (mode === "image-to-video") type = "i2v";
+      else if (mode === "reference-to-video") type = "reference";
 
-    const creationModel = prisma.creation || prisma.Creation;
-    if (creationModel) {
-      await creationModel.create({
-        data: {
-          userId,
-          prompt,
-          aspectRatio: aspect_ratio,
-          resolution,
-          duration: parseInt(duration),
-          quality,
-          videoFiles: video_files,
-          audioFiles: audio_files,
-          inputImages: images_list,
-          requestId: request_id,
-          status: "processing",
-        }
+      const endpoint = config.ai.seedance.endpoints[type][resolution];
+      if (!endpoint) throw new Error(`Endpoint not found for mode: ${mode} and resolution: ${resolution}`);
+
+      console.log("[AI_DEBUG] Submitting to:", endpoint);
+      console.log("[AI_DEBUG] mode:", mode, "resolution:", resolution, "quality:", quality, "duration:", duration);
+
+      const webhookUrl = `${config.auth.webhook_url}/api/webhook/muapi`;
+      const payload = {
+        prompt,
+        aspect_ratio,
+        duration: parseInt(duration),
+        quality,
+        webhook: webhookUrl,
+      };
+
+      if (type === "i2v" || type === "reference") {
+        payload.images_list = images_list.slice(0, 9);
+      }
+      if (type === "reference") {
+        payload.video_files = video_files.slice(0, 3);
+        payload.audio_files = audio_files.slice(0, 3);
+      }
+
+      console.log("[AI_DEBUG] payload:", JSON.stringify(payload));
+
+      const submitRes = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+        },
+        body: JSON.stringify(payload),
       });
-    }
 
-    return { request_id };
+      const responseText = await submitRes.text();
+      console.log("[AI_DEBUG] response status:", submitRes.status, "body:", responseText);
+
+      if (!submitRes.ok) {
+        // API rejected the request — refund happens in catch block below
+        throw new Error(`API Submission Failed: ${submitRes.status} ${responseText}`);
+      }
+
+      let responseData;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch (e) {
+        throw new Error(`Invalid JSON response from API: ${responseText}`);
+      }
+
+      const request_id = responseData.id || responseData.request_id;
+      if (!request_id) throw new Error(`No request_id in response: ${responseText}`);
+
+      const creationModel = prisma.creation || prisma.Creation;
+      if (creationModel) {
+        await creationModel.create({
+          data: {
+            userId,
+            prompt,
+            aspectRatio: aspect_ratio,
+            resolution,
+            duration: parseInt(duration),
+            quality,
+            videoFiles: video_files,
+            audioFiles: audio_files,
+            inputImages: images_list,
+            requestId: request_id,
+            status: "processing",
+          }
+        });
+      }
+
+      return { request_id };
+
+    } catch (error) {
+      // ── AUTO-REFUND ──────────────────────────────────────────────────────────
+      // Any failure after credit deduction triggers an automatic refund.
+      // This covers: muapi.ai "not enough fund", network errors, bad responses, etc.
+      console.error("[AI_REFUND] Generation failed — refunding", cost, "credits to user", userId, "| reason:", error.message);
+      try {
+        await UserService.addCredits(userId, cost);
+        console.log("[AI_REFUND] Successfully refunded", cost, "credits to user", userId);
+      } catch (refundErr) {
+        // Log refund failure but don't hide the original error
+        console.error("[AI_REFUND_FAILED] Could not refund credits for user", userId, refundErr.message);
+      }
+      // ────────────────────────────────────────────────────────────────────────
+      throw error;
+    }
   },
 
   async edit(userId, params) {
@@ -112,7 +132,6 @@ export const AIService = {
   },
 
   async pollMuAPI(requestId, apiKey) {
-    // Try the /result endpoint first, fall back to base predictions endpoint
     const urls = [
       `${MUAPI_RESULT_URL}/${requestId}/result`,
       `${MUAPI_RESULT_URL}/${requestId}`,
@@ -148,14 +167,12 @@ export const AIService = {
       throw new Error(creation.error || "Generation failed.");
     }
 
-    // Poll MuAPI directly for live status
     const apiKey = config.ai.seedance.apiKey;
     if (apiKey) {
       try {
         const result = await this.pollMuAPI(requestId, apiKey);
         console.log("[AI_POLL_PARSED]", requestId, JSON.stringify(result));
 
-        // MuAPI marks completion by having a non-empty outputs array (same as webhook handler)
         const outputs = result?.outputs || result?.output || [];
         const outputArr = Array.isArray(outputs) ? outputs : (outputs ? [outputs] : []);
         const imageUrl = outputArr[0] || null;
@@ -183,7 +200,6 @@ export const AIService = {
           throw new Error(errMsg);
         }
       } catch (e) {
-        // Never propagate MuAPI poll errors — just return processing and retry next time
         console.error("[AI_POLL_ERROR]", e.message);
       }
     }
