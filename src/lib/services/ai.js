@@ -110,11 +110,26 @@ export const AIService = {
   },
 
   async pollMuAPI(requestId, apiKey) {
-    const res = await fetch(`${MUAPI_RESULT_URL}/${requestId}/result`, {
-      headers: { "x-api-key": apiKey },
-    });
-    if (!res.ok) return null;
-    return res.json();
+    // Try the /result endpoint first, fall back to base predictions endpoint
+    const urls = [
+      `${MUAPI_RESULT_URL}/${requestId}/result`,
+      `${MUAPI_RESULT_URL}/${requestId}`,
+    ];
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, {
+          headers: { "x-api-key": apiKey },
+        });
+        const text = await res.text();
+        console.log("[AI_POLL_RAW] URL:", url, "status:", res.status, "body:", text.slice(0, 500));
+        if (res.ok) {
+          return JSON.parse(text);
+        }
+      } catch (e) {
+        console.error("[AI_POLL_FETCH_ERROR]", url, e.message);
+      }
+    }
+    return null;
   },
 
   async checkStatus(requestId, userId) {
@@ -136,18 +151,25 @@ export const AIService = {
     if (apiKey) {
       try {
         const result = await this.pollMuAPI(requestId, apiKey);
-        console.log("[AI_POLL]", requestId, JSON.stringify(result));
-        if (result && result.status === "succeeded") {
-          const outputs = result.output || result.outputs || [];
-          const imageUrl = Array.isArray(outputs) ? outputs[0] : outputs;
+        console.log("[AI_POLL_PARSED]", requestId, JSON.stringify(result));
+
+        const status = result?.status?.toLowerCase();
+        const isDone = status === "succeeded" || status === "completed" || status === "success";
+        const isFailed = status === "failed" || status === "error";
+
+        if (result && isDone) {
+          // Handle all possible output field names from MuAPI
+          const rawOutput = result.output ?? result.outputs ?? result.video_url ?? result.url ?? null;
+          const imageUrl = Array.isArray(rawOutput) ? rawOutput[0] : rawOutput;
+          console.log("[AI_POLL_COMPLETE] imageUrl:", imageUrl);
           await creationModel.update({
             where: { requestId },
             data: { status: "completed", imageUrl: imageUrl || null },
           });
           return { status: "completed", imageUrl };
         }
-        if (result && result.status === "failed") {
-          const errMsg = result.error || "Generation failed";
+        if (result && isFailed) {
+          const errMsg = result.error || result.detail || "Generation failed";
           await creationModel.update({
             where: { requestId },
             data: { status: "failed", error: errMsg },
@@ -155,7 +177,7 @@ export const AIService = {
           throw new Error(errMsg);
         }
       } catch (e) {
-        if (e.message && e.message !== "Generation failed") {
+        if (e.message && !e.message.includes("Generation failed")) {
           console.error("[AI_POLL_ERROR]", e.message);
         } else {
           throw e;
