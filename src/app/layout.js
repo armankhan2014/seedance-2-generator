@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
@@ -15,7 +16,9 @@ export default function RootLayout({ children }) {
     <html lang="en" className="h-dvh w-full" style={{ colorScheme: "dark" }}>
       <body className={inter.className} style={{ background: "#0a0a0a", color: "#f1f5f9" }}>
         <Providers>
-          <Navbar />
+          <Suspense fallback={null}>
+            <Navbar />
+          </Suspense>
           {children}
         </Providers>
       </body>
