@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-// Run DB migration - call once at /api/setup
 export async function GET(req) {
   const url = new URL(req.url);
   const secret = url.searchParams.get("secret");
-  if (secret !== process.env.NEXTAUTH_SECRET?.substring(0,16)) {
+  if (secret !== "seedance2024") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {
@@ -16,7 +15,7 @@ export async function GET(req) {
         "email" TEXT UNIQUE,
         "emailVerified" TIMESTAMP(3),
         "image" TEXT,
-        "credits" INTEGER NOT NULL DEFAULT 0,
+        "credits" INTEGER NOT NULL DEFAULT 10,
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
@@ -60,19 +59,23 @@ export async function GET(req) {
       CREATE TABLE IF NOT EXISTS "Creation" (
         "id" TEXT NOT NULL PRIMARY KEY,
         "userId" TEXT NOT NULL,
-        "type" TEXT NOT NULL DEFAULT 'video',
         "prompt" TEXT NOT NULL,
-        "model" TEXT NOT NULL,
-        "status" TEXT NOT NULL DEFAULT 'pending',
-        "url" TEXT,
-        "taskId" TEXT,
-        "creditsUsed" INTEGER NOT NULL DEFAULT 0,
+        "imageUrl" TEXT,
+        "aspectRatio" TEXT,
+        "resolution" TEXT,
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "error" TEXT,
+        "requestId" TEXT UNIQUE,
+        "status" TEXT NOT NULL DEFAULT 'processing',
+        "duration" INTEGER,
+        "quality" TEXT,
+        "audioFiles" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+        "videoFiles" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+        "inputImages" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
         FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE
       )
     `);
-    return NextResponse.json({ success: true, message: "All tables created" });
+    return NextResponse.json({ success: true, message: "All tables created successfully!" });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
