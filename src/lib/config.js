@@ -32,17 +32,17 @@ const config = {
         t2v: {
           "480p": "https://api.muapi.ai/api/v1/seedance-2.0-t2v-480p",
           "720p": "https://api.muapi.ai/api/v1/seedance-v2.0-t2v",
-          "1080p": "https://api.muapi.ai/api/v1/seedance-v2.0-t2v-1080p"
+          "1080p": "https://api.muapi.ai/api/v1/seedance-v2.0-t2v"
         },
         i2v: {
           "480p": "https://api.muapi.ai/api/v1/seedance-2.0-i2v-480p",
           "720p": "https://api.muapi.ai/api/v1/seedance-v2.0-i2v",
-          "1080p": "https://api.muapi.ai/api/v1/seedance-v2.0-i2v-1080p"
+          "1080p": "https://api.muapi.ai/api/v1/seedance-v2.0-i2v"
         },
         reference: {
           "480p": "https://api.muapi.ai/api/v1/seedance-2.0-omni-reference-480p",
           "720p": "https://api.muapi.ai/api/v1/seedance-2.0-omni-reference",
-          "1080p": "https://api.muapi.ai/api/v1/seedance-2.0-omni-reference-1080p"
+          "1080p": "https://api.muapi.ai/api/v1/seedance-2.0-omni-reference"
         }
       }
     }

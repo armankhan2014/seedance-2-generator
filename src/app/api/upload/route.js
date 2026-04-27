@@ -41,6 +41,7 @@ export async function POST(req) {
     }
 
     const data = await response.json();
+    console.log("[UPLOAD_DEBUG] MuAPI response:", JSON.stringify(data));
     return NextResponse.json(data);
   } catch (error) {
     console.error("[UPLOAD_ERROR]", error);

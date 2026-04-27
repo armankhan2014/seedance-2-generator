@@ -168,12 +168,16 @@ export default function Home() {
       if (!res.ok) throw new Error("Upload failed.");
       const data = await res.json();
       // Handle both response formats: data.url or data.data?.url
-      const uploadedUrl = data.url || data.data?.url;
+      const uploadedUrl = data.url || data.data?.url || data.output || data.file_url || data.image_url;
       if (uploadedUrl) {
         // Replace local blob URL with the real remote URL
         setImagesList((prev) =>
           prev.map((u) => (u === localUrl ? uploadedUrl : u))
         );
+      } else {
+        // If we can't get a real URL, remove the blob entry
+        setImagesList((prev) => prev.filter((u) => u !== localUrl));
+        setError("Upload succeeded but no URL returned. Please try again.");
       }
     } catch (err) {
       setError("Upload failed. Please try again.");
@@ -247,6 +251,13 @@ export default function Home() {
       setError("Please add at least one reference image.");
       return;
     }
+    // Block generation if images are still uploading (blob URLs not yet replaced)
+    const pendingUploads = imagesList.filter((u) => u.startsWith("blob:"));
+    if (pendingUploads.length > 0) {
+      setError("Please wait for images to finish uploading before generating.");
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
