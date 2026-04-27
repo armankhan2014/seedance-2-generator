@@ -16,6 +16,7 @@ import { FiDownload } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { downloadMedia } from "@/lib/utils";
+import ArmanGallery from "@/components/saas/ArmanGallery";
 
 export const dynamic = "force-dynamic";
 
@@ -798,6 +799,8 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      <ArmanGallery />
 
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar {
