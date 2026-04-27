@@ -68,6 +68,19 @@ export default function Navbar() {
               <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>
                 {session.user?.name?.split(" ")[0]}
               </span>
+              <span style={{
+                background: "linear-gradient(135deg, rgba(139,92,246,0.2), rgba(124,58,237,0.2))",
+                border: "1px solid rgba(139,92,246,0.4)",
+                borderRadius: "20px",
+                color: "#a78bfa",
+                padding: "4px 10px",
+                fontSize: "0.75rem",
+                fontWeight: 700,
+                fontFamily: "inherit",
+                whiteSpace: "nowrap",
+              }}>
+                ⚡ {(session.user?.credits ?? 0).toLocaleString()} credits
+              </span>
               <button
                 onClick={() => signOut({ callbackUrl: "/" })}
                 style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", color: "#94a3b8", padding: "6px 12px", fontSize: "0.78rem", cursor: "pointer", fontFamily: "inherit" }}>
@@ -117,13 +130,28 @@ export default function Navbar() {
           ))}
           <div style={{ marginTop: "4px" }}>
             {session ? (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", borderRadius: "8px", background: "rgba(255,255,255,0.03)" }}>
-                <span style={{ fontSize: "0.85rem", color: "#94a3b8" }}>{session.user?.name}</span>
-                <button
-                  onClick={() => { signOut({ callbackUrl: "/" }); setMenuOpen(false); }}
-                  style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: "6px", color: "#94a3b8", padding: "6px 12px", fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit" }}>
-                  Sign out
-                </button>
+              <div style={{ padding: "8px 14px", borderRadius: "8px", background: "rgba(255,255,255,0.03)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "0.85rem", color: "#94a3b8" }}>{session.user?.name}</span>
+                  <button
+                    onClick={() => { signOut({ callbackUrl: "/" }); setMenuOpen(false); }}
+                    style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: "6px", color: "#94a3b8", padding: "6px 12px", fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit" }}>
+                    Sign out
+                  </button>
+                </div>
+                <div style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  background: "linear-gradient(135deg, rgba(139,92,246,0.2), rgba(124,58,237,0.2))",
+                  border: "1px solid rgba(139,92,246,0.4)",
+                  borderRadius: "20px",
+                  color: "#a78bfa",
+                  padding: "4px 12px",
+                  fontSize: "0.82rem",
+                  fontWeight: 700,
+                }}>
+                  ⚡ {(session.user?.credits ?? 0).toLocaleString()} credits remaining
+                </div>
               </div>
             ) : (
               <button
