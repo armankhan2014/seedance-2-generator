@@ -1,11 +1,11 @@
-"use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+
+export const metadata = {
+  title: "Page Not Found",
+  description: "This page doesn't exist in your Seedance Studio timeline.",
+};
 
 export default function NotFound() {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => { requestAnimationFrame(() => setVisible(true)); }, []);
-
   return (
     <div style={{
       minHeight: "100vh",
@@ -20,6 +20,16 @@ export default function NotFound() {
       overflow: "hidden",
     }}>
 
+      <style>{`
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(20px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .nf-content {
+          animation: fadeUp 0.5s ease forwards;
+        }
+      `}</style>
+
       {/* Ambient glow */}
       <div style={{
         position: "absolute",
@@ -33,13 +43,10 @@ export default function NotFound() {
       }} />
 
       {/* Content */}
-      <div style={{
+      <div className="nf-content" style={{
         position: "relative",
         textAlign: "center",
         maxWidth: "480px",
-        opacity: visible ? 1 : 0,
-        transform: visible ? "translateY(0)" : "translateY(20px)",
-        transition: "opacity 0.5s ease, transform 0.5s ease",
       }}>
 
         {/* Film-strip icon */}
@@ -50,7 +57,7 @@ export default function NotFound() {
           gap: "6px",
           marginBottom: "28px",
         }}>
-          {[...Array(5)].map((_, i) => (
+          {[0, 1, 2, 3, 4].map((i) => (
             <div key={i} style={{
               width: i === 2 ? "40px" : "20px",
               height: i === 2 ? "40px" : "20px",
@@ -123,11 +130,7 @@ export default function NotFound() {
           fontSize: "0.9rem",
           textDecoration: "none",
           boxShadow: "0 8px 32px rgba(139,92,246,0.3)",
-          transition: "opacity 0.2s, transform 0.2s",
-        }}
-          onMouseEnter={e => { e.currentTarget.style.opacity = "0.85"; e.currentTarget.style.transform = "translateY(-1px)"; }}
-          onMouseLeave={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.transform = "translateY(0)"; }}
-        >
+        }}>
           ⚡ Back to Generate
         </Link>
 
@@ -139,11 +142,7 @@ export default function NotFound() {
             textDecoration: "none",
             borderBottom: "1px solid rgba(71,85,105,0.4)",
             paddingBottom: "1px",
-            transition: "color 0.2s",
-          }}
-            onMouseEnter={e => { e.currentTarget.style.color = "#94a3b8"; }}
-            onMouseLeave={e => { e.currentTarget.style.color = "#475569"; }}
-          >
+          }}>
             View my gallery →
           </Link>
         </div>
