@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import ProfileClient from "./ProfileClient";
+import Footer from "@/components/saas/Footer";
 
 export const metadata = {
   title: "Profile",
@@ -19,8 +20,11 @@ export const metadata = {
 
 export default function ProfilePage() {
   return (
-    <Suspense fallback={null}>
-      <ProfileClient />
-    </Suspense>
+    <>
+      <Suspense fallback={null}>
+        <ProfileClient />
+      </Suspense>
+      <Footer />
+    </>
   );
 }

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Footer from "@/components/saas/Footer";
 
 export const metadata = {
   title: "Terms of Service",
@@ -97,5 +98,6 @@ export default function TermsPage() {
 
       </div>
     </div>
+    <Footer />
   );
 }

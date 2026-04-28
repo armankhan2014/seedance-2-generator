@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Footer from "@/components/saas/Footer";
 
 export const metadata = {
   title: "Privacy Policy",
@@ -89,5 +90,6 @@ export default function PrivacyPage() {
 
       </div>
     </div>
+    <Footer />
   );
 }

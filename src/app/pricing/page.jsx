@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import PricingClient from "./PricingClient";
+import Footer from "@/components/saas/Footer";
 
 export const metadata = {
   title: "Pricing",
@@ -20,8 +21,11 @@ export const metadata = {
 
 export default function PricingPage() {
   return (
-    <Suspense fallback={null}>
-      <PricingClient />
-    </Suspense>
+    <>
+      <Suspense fallback={null}>
+        <PricingClient />
+      </Suspense>
+      <Footer />
+    </>
   );
 }
