@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import GenerateClient from "./GenerateClient";
+import GenerateClient from "../GenerateClient";
 
 export const metadata = {
   title: "AI Video Generator",
