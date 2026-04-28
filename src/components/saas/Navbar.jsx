@@ -11,6 +11,9 @@ export default function Navbar() {
   const searchParams = useSearchParams();
   const [menuOpen, setMenuOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  // Close mobile menu on route change
+  useEffect(() => { setMenuOpen(false); }, [pathname]);
   const [liveCredits, setLiveCredits] = useState(null);
   const [liveImage, setLiveImage] = useState(null);
   const [contactOpen, setContactOpen] = useState(false);
@@ -342,11 +345,10 @@ export default function Navbar() {
           .desktop-nav { display: flex !important; }
           .desktop-auth { display: flex !important; }
           .mobile-menu-btn { display: none !important; }
-          .mobile-menu { display: flex !important; }
-          @media (max-width: 600px) {
+          @media (max-width: 768px) {
             .desktop-nav { display: none !important; }
             .desktop-auth { display: none !important; }
-            .mobile-menu-btn { display: block !important; }
+            .mobile-menu-btn { display: flex !important; align-items: center; justify-content: center; }
           }
         `}</style>
       </header>
