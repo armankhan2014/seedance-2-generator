@@ -40,7 +40,7 @@ function useLiveSince(dateStr) {
 }
 
 export default function ProfilePage() {
-  const { data: session, status, update: updateSession } = useSession();
+  const { data: session, status } = useSession();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [imageUrl, setImageUrl] = useState(null);
@@ -49,16 +49,23 @@ export default function ProfilePage() {
   const fileRef = useRef(null);
   const elapsed = useLiveSince(profile?.createdAt);
 
+  const fetchProfile = () => {
+    fetch("/api/user/profile")
+      .then(r => r.json())
+      .then(data => {
+        setProfile(data);
+        // Prefer DB image (could be custom base64) over session image (Google OAuth URL)
+        const img = data.image?.startsWith("data:image/") ? data.image
+          : data.image || session?.user?.image || null;
+        setImageUrl(img);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  };
+
   useEffect(() => {
     if (status === "authenticated") {
-      fetch("/api/user/profile")
-        .then(r => r.json())
-        .then(data => {
-          setProfile(data);
-          setImageUrl(data.image || session?.user?.image || null);
-          setLoading(false);
-        })
-        .catch(() => setLoading(false));
+      fetchProfile();
     } else if (status === "unauthenticated") {
       setLoading(false);
     }
@@ -103,13 +110,22 @@ export default function ProfilePage() {
       });
       const data = await res.json();
       if (res.ok) {
-        setImageUrl(data.image);
-        await updateSession({ image: data.image });
+        // Re-fetch from DB to confirm the image was actually saved
+        const verify = await fetch("/api/user/profile");
+        const verifyData = await verify.json();
+        const savedImage = verifyData?.image;
+        if (savedImage && savedImage.startsWith("data:image/")) {
+          setImageUrl(savedImage);
+        } else {
+          // DB save succeeded but image not confirmed — use local preview
+          setImageUrl(data.image);
+          setUploadError("Image saved for this session but may not persist. Please try a smaller file.");
+        }
       } else {
         setUploadError(data.error || "Upload failed.");
       }
-    } catch {
-      setUploadError("Upload failed. Please try again.");
+    } catch (err) {
+      setUploadError("Upload failed: " + (err.message || "Please try again."));
     } finally {
       setUploading(false);
     }

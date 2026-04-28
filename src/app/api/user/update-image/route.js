@@ -20,11 +20,15 @@ export async function POST(req) {
     return NextResponse.json({ error: "Image too large after compression." }, { status: 400 });
   }
 
-  const user = await prisma.user.update({
-    where: { email: session.user.email },
-    data: { image },
-    select: { image: true },
-  });
-
-  return NextResponse.json({ image: user.image });
+  try {
+    const user = await prisma.user.update({
+      where: { email: session.user.email },
+      data: { image },
+      select: { image: true },
+    });
+    return NextResponse.json({ image: user.image });
+  } catch (err) {
+    console.error("[UPDATE-IMAGE] Prisma error:", err.message);
+    return NextResponse.json({ error: "Database error: " + err.message }, { status: 500 });
+  }
 }
