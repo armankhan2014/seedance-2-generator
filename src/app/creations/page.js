@@ -110,21 +110,61 @@ export default function CreationsPage() {
 
       <div className="max-w-7xl mx-auto">
         {creations.length === 0 ? (
-          <div className="py-32 flex flex-col items-center justify-center text-center space-y-8">
-            <div className="w-20 h-20 rounded-3xl bg-glass-bg border border-glass-border flex items-center justify-center shadow-sm">
-              <FaMagic className="text-3xl text-muted" />
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="flex flex-col items-center justify-center py-20 px-4"
+          >
+            {/* Illustration card */}
+            <div className="relative w-full max-w-sm mb-10">
+              <div className="rounded-2xl bg-glass-bg border border-glass-border overflow-hidden aspect-video flex items-center justify-center">
+                {/* Fake video preview shimmer */}
+                <div className="absolute inset-0 bg-gradient-to-br from-primary-500/5 to-transparent" />
+                <div className="flex flex-col items-center gap-3 z-10">
+                  <div className="w-14 h-14 rounded-full bg-primary-500/10 border border-primary-500/20 flex items-center justify-center">
+                    <FaVideo className="text-2xl text-primary-500/60" />
+                  </div>
+                  <span className="text-[10px] text-muted uppercase tracking-widest">Your first video will appear here</span>
+                </div>
+              </div>
+              {/* Decorative ghost cards behind */}
+              <div className="absolute -bottom-3 -right-3 -z-10 w-full h-full rounded-2xl border border-glass-border bg-glass-bg opacity-50" />
+              <div className="absolute -bottom-6 -right-6 -z-20 w-full h-full rounded-2xl border border-glass-border bg-glass-bg opacity-25" />
             </div>
-            <div className="space-y-4">
-              <h3 className="text-xl font-semibold text-foreground">No videos yet</h3>
-              <p className="text-muted text-sm">Head to the generate page and make your first one.</p>
-              <button
-                onClick={() => router.push("/")}
-                className="px-8 py-3 bg-primary-600 hover:bg-primary-500 text-white rounded-xl font-semibold text-sm transition-all shadow-xl shadow-primary-500/20"
-              >
-                Generate a video
-              </button>
+
+            {/* Heading */}
+            <h2 className="text-2xl font-semibold text-foreground mb-2 text-center">
+              No videos yet
+            </h2>
+            <p className="text-muted text-sm text-center max-w-xs mb-10">
+              Generate your first AI video in seconds — just describe what you want to see.
+            </p>
+
+            {/* Steps */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-xl mb-10">
+              {[
+                { step: "1", icon: "✏️", title: "Write a prompt", desc: "Describe a scene, mood, or idea" },
+                { step: "2", icon: "⚙️", title: "Pick settings",  desc: "Choose ratio, duration & quality" },
+                { step: "3", icon: "▶️", title: "Hit Generate",   desc: "Your video is ready in ~30s" },
+              ].map(({ step, icon, title, desc }) => (
+                <div key={step} className="flex flex-col items-center text-center p-4 rounded-xl bg-glass-bg border border-glass-border gap-2">
+                  <span className="text-2xl">{icon}</span>
+                  <span className="text-xs font-semibold text-foreground">{title}</span>
+                  <span className="text-[11px] text-muted leading-relaxed">{desc}</span>
+                </div>
+              ))}
             </div>
-          </div>
+
+            {/* CTA */}
+            <button
+              onClick={() => router.push("/")}
+              className="px-8 py-3 bg-primary-600 hover:bg-primary-500 text-white rounded-xl font-semibold text-sm transition-all shadow-xl shadow-primary-500/20 flex items-center gap-2"
+            >
+              <FaMagic className="text-xs" />
+              Generate your first video
+            </button>
+          </motion.div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             <AnimatePresence>
