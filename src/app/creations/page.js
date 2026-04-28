@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import CreationsClient from "./CreationsClient";
+import Footer from "@/components/saas/Footer";
 
 export const metadata = {
   title: "My Creations",
@@ -19,8 +20,11 @@ export const metadata = {
 
 export default function CreationsPage() {
   return (
-    <Suspense fallback={null}>
-      <CreationsClient />
-    </Suspense>
+    <>
+      <Suspense fallback={null}>
+        <CreationsClient />
+      </Suspense>
+      <Footer />
+    </>
   );
 }

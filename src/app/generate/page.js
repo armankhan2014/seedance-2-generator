@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import GenerateClient from "../GenerateClient";
+import Footer from "@/components/saas/Footer";
 
 export const metadata = {
   title: "AI Video Generator",
@@ -20,8 +21,11 @@ export const metadata = {
 
 export default function GeneratePage() {
   return (
-    <Suspense fallback={null}>
-      <GenerateClient />
-    </Suspense>
+    <>
+      <Suspense fallback={null}>
+        <GenerateClient />
+      </Suspense>
+      <Footer />
+    </>
   );
 }

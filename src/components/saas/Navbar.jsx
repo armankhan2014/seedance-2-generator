@@ -66,7 +66,7 @@ export default function Navbar() {
   const displayImage = liveImage || session?.user?.image || null;
 
   const links = [
-    { href: "/", label: "Generate" },
+    { href: "/generate", label: "Generate" },
     { href: "/creations", label: "Gallery" },
     { href: "/pricing", label: "Pricing" },
   ];
