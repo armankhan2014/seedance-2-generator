@@ -98,6 +98,11 @@ export default function Navbar() {
         {/* Desktop auth */}
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}
              className="desktop-auth">
+          <a
+            href="mailto:armankhan0826@gmail.com"
+            style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", color: "#94a3b8", padding: "6px 12px", fontSize: "0.78rem", textDecoration: "none", whiteSpace: "nowrap", fontFamily: "inherit" }}>
+            Contact Us
+          </a>
           {session ? (
             <>
               <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>
@@ -163,6 +168,12 @@ export default function Navbar() {
                 background: pathname === l.href ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.03)",
               }}>{l.label}</Link>
           ))}
+          <a
+            href="mailto:armankhan0826@gmail.com"
+            onClick={() => setMenuOpen(false)}
+            style={{ padding: "10px 14px", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, textDecoration: "none", color: "#94a3b8", background: "rgba(255,255,255,0.03)" }}>
+            Contact Us
+          </a>
           <div style={{ marginTop: "4px" }}>
             {session ? (
               <div style={{ padding: "8px 14px", borderRadius: "8px", background: "rgba(255,255,255,0.03)" }}>
