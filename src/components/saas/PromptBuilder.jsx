@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { useSession, signIn } from "next-auth/react";
 
 // ── Guided options ────────────────────────────────────────────────────────────
 const SUBJECTS = [
@@ -263,6 +264,7 @@ function FormattedPrompt({ text }) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function PromptBuilder({ onUse, onClose }) {
+  const { data: session, status: sessionStatus } = useSession();
   const [tab, setTab] = useState("guided");
 
   // guided state
@@ -279,6 +281,19 @@ export default function PromptBuilder({ onUse, onClose }) {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError,   setAiError]   = useState("");
   const [copied,    setCopied]    = useState(false);
+
+  // credits state
+  const [userCredits, setUserCredits] = useState(null);
+
+  // fetch credits when logged in
+  useEffect(() => {
+    if (session?.user?.id) {
+      fetch("/api/user/credits")
+        .then(r => r.json())
+        .then(d => setUserCredits(d.credits ?? 0))
+        .catch(() => setUserCredits(0));
+    }
+  }, [session]);
 
   const overlayRef = useRef(null);
 
@@ -560,89 +575,160 @@ export default function PromptBuilder({ onUse, onClose }) {
           )}
 
           {/* ── DESCRIBE TAB ── */}
-          {tab === "describe" && (
-            <>
-              <p style={{ fontSize: "0.82rem", color: "#64748b", marginBottom: "10px", lineHeight: 1.6 }}>
-                Describe your vision in plain English. Our AI will turn it into a full cinematic Seedance prompt.
-              </p>
-              <label style={S.label}>Your idea</label>
-              <textarea
-                style={S.textarea}
-                placeholder={"e.g. A samurai running through cherry blossoms at night, slow motion, epic and cinematic"}
-                value={freeText}
-                onChange={e => setFreeText(e.target.value)}
-              />
+          {tab === "describe" && (() => {
+            const isLoading = sessionStatus === "loading" || (session && userCredits === null);
+            const isLoggedOut = sessionStatus === "unauthenticated";
+            const hasNoCredits = session && userCredits !== null && userCredits <= 0;
 
-              <button
-                style={S.aiBtn(!!freeText.trim() && !aiLoading)}
-                disabled={!freeText.trim() || aiLoading}
-                onClick={handleAiBuild}
-              >
-                {aiLoading ? "✨ Building your cinematic prompt…" : "✨ Build my prompt"}
-              </button>
+            // ── Not logged in ──
+            if (isLoggedOut) return (
+              <div style={{
+                display: "flex", flexDirection: "column", alignItems: "center",
+                textAlign: "center", padding: "32px 16px", gap: "12px",
+              }}>
+                <div style={{ fontSize: "2rem" }}>🔒</div>
+                <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "#e2e8f0", margin: 0 }}>
+                  Sign in to use AI Prompt Builder
+                </p>
+                <p style={{ fontSize: "0.78rem", color: "#475569", margin: 0, lineHeight: 1.6 }}>
+                  Describe your idea in plain English and AI will write a full cinematic Seedance prompt for you.
+                </p>
+                <button
+                  onClick={() => signIn("google")}
+                  style={{
+                    marginTop: "8px", padding: "10px 24px",
+                    background: "linear-gradient(135deg,#8b5cf6,#7c3aed)",
+                    border: "none", borderRadius: "10px",
+                    color: "#fff", fontSize: "0.85rem", fontWeight: 700,
+                    cursor: "pointer", fontFamily: "inherit",
+                  }}
+                >
+                  Sign in with Google →
+                </button>
+              </div>
+            );
 
-              {aiError && (
-                <p style={{ fontSize: "0.78rem", color: "#f87171", marginTop: "8px" }}>{aiError}</p>
-              )}
+            // ── Loading credits ──
+            if (isLoading) return (
+              <div style={{ padding: "40px 16px", textAlign: "center", color: "#475569", fontSize: "0.82rem" }}>
+                Checking access…
+              </div>
+            );
 
-              {aiPrompt && (
-                <>
-                  {/* Formatted output card */}
-                  <div style={{ marginTop: "16px" }}>
-                    {/* Card header row */}
-                    <div style={{
-                      display: "flex", alignItems: "center",
-                      justifyContent: "space-between",
-                      marginBottom: "8px",
-                    }}>
-                      <span style={{
-                        fontSize: "0.65rem", fontWeight: 700,
-                        color: "#64748b", textTransform: "uppercase",
-                        letterSpacing: "0.08em",
-                      }}>
-                        🎬 Your Seedance prompt
-                      </span>
-                      <button
-                        onClick={handleCopy}
-                        style={{
-                          background: copied ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.05)",
-                          border: `1px solid ${copied ? "rgba(34,197,94,0.3)" : "rgba(255,255,255,0.1)"}`,
-                          borderRadius: "6px",
-                          color: copied ? "#4ade80" : "#64748b",
-                          fontSize: "0.7rem", fontWeight: 700,
-                          padding: "4px 10px",
-                          cursor: "pointer",
-                          fontFamily: "inherit",
-                          transition: "all 0.2s",
-                        }}
-                      >
-                        {copied ? "✓ Copied" : "Copy"}
-                      </button>
-                    </div>
+            // ── No credits ──
+            if (hasNoCredits) return (
+              <div style={{
+                display: "flex", flexDirection: "column", alignItems: "center",
+                textAlign: "center", padding: "32px 16px", gap: "12px",
+              }}>
+                <div style={{ fontSize: "2rem" }}>⚡</div>
+                <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "#e2e8f0", margin: 0 }}>
+                  Credits required
+                </p>
+                <p style={{ fontSize: "0.78rem", color: "#475569", margin: 0, lineHeight: 1.6 }}>
+                  AI Prompt Builder is available to users with credits. Buy a credit pack to unlock it — credits never expire.
+                </p>
+                <a
+                  href="/pricing"
+                  style={{
+                    marginTop: "8px", padding: "10px 24px",
+                    background: "linear-gradient(135deg,#8b5cf6,#7c3aed)",
+                    border: "none", borderRadius: "10px",
+                    color: "#fff", fontSize: "0.85rem", fontWeight: 700,
+                    cursor: "pointer", fontFamily: "inherit",
+                    textDecoration: "none", display: "inline-block",
+                  }}
+                >
+                  View Pricing →
+                </a>
+              </div>
+            );
 
-                    {/* Formatted prompt display */}
-                    <div style={{
-                      background: "rgba(139,92,246,0.04)",
-                      border: "1px solid rgba(139,92,246,0.18)",
-                      borderRadius: "12px",
-                      padding: "16px 18px",
-                      maxHeight: "420px",
-                      overflowY: "auto",
-                    }}>
-                      <FormattedPrompt text={aiPrompt} />
-                    </div>
+            // ── Has access — show normal UI ──
+            return (
+              <>
+                <p style={{ fontSize: "0.82rem", color: "#64748b", marginBottom: "10px", lineHeight: 1.6 }}>
+                  Describe your vision in plain English. AI writes a full cinematic Seedance prompt.
+                </p>
+                <label style={S.label}>Your idea</label>
+                <textarea
+                  style={S.textarea}
+                  placeholder={"e.g. A samurai running through cherry blossoms at night, slow motion, epic and cinematic"}
+                  value={freeText}
+                  onChange={e => setFreeText(e.target.value)}
+                />
+
+                <button
+                  style={S.aiBtn(!!freeText.trim() && !aiLoading)}
+                  disabled={!freeText.trim() || aiLoading}
+                  onClick={handleAiBuild}
+                >
+                  {aiLoading ? "✨ Building your cinematic prompt…" : "✨ Build my prompt"}
+                </button>
+
+                {aiError && (
+                  <div style={{
+                    fontSize: "0.78rem", color: "#f87171", marginTop: "10px",
+                    background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.2)",
+                    borderRadius: "8px", padding: "10px 12px", lineHeight: 1.5,
+                  }}>
+                    {aiError}
+                    {aiError.includes("credits") && (
+                      <a href="/pricing" style={{ color: "#a78bfa", marginLeft: "6px", fontWeight: 700 }}>
+                        Buy credits →
+                      </a>
+                    )}
                   </div>
+                )}
 
-                  <button
-                    style={S.useBtn(true)}
-                    onClick={() => { onUse(aiPrompt); onClose(); }}
-                  >
-                    Use this prompt →
-                  </button>
-                </>
-              )}
-            </>
-          )}
+                {aiPrompt && (
+                  <>
+                    <div style={{ marginTop: "16px" }}>
+                      <div style={{
+                        display: "flex", alignItems: "center",
+                        justifyContent: "space-between", marginBottom: "8px",
+                      }}>
+                        <span style={{
+                          fontSize: "0.65rem", fontWeight: 700, color: "#64748b",
+                          textTransform: "uppercase", letterSpacing: "0.08em",
+                        }}>
+                          🎬 Your Seedance prompt
+                        </span>
+                        <button
+                          onClick={handleCopy}
+                          style={{
+                            background: copied ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.05)",
+                            border: `1px solid ${copied ? "rgba(34,197,94,0.3)" : "rgba(255,255,255,0.1)"}`,
+                            borderRadius: "6px",
+                            color: copied ? "#4ade80" : "#64748b",
+                            fontSize: "0.7rem", fontWeight: 700,
+                            padding: "4px 10px", cursor: "pointer",
+                            fontFamily: "inherit", transition: "all 0.2s",
+                          }}
+                        >
+                          {copied ? "✓ Copied" : "Copy"}
+                        </button>
+                      </div>
+                      <div style={{
+                        background: "rgba(139,92,246,0.04)",
+                        border: "1px solid rgba(139,92,246,0.18)",
+                        borderRadius: "12px", padding: "16px 18px",
+                        maxHeight: "420px", overflowY: "auto",
+                      }}>
+                        <FormattedPrompt text={aiPrompt} />
+                      </div>
+                    </div>
+                    <button
+                      style={S.useBtn(true)}
+                      onClick={() => { onUse(aiPrompt); onClose(); }}
+                    >
+                      Use this prompt →
+                    </button>
+                  </>
+                )}
+              </>
+            );
+          })()}
 
         </div>
       </div>
