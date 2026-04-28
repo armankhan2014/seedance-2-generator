@@ -112,7 +112,7 @@ export default function HomepageV2() {
               Generate a video
             </button>
             <button
-              onClick={() => router.push("/creations")}
+              onClick={() => document.getElementById("gallery")?.scrollIntoView({ behavior: "smooth" })}
               className="px-7 py-3.5 bg-glass-bg border border-glass-border text-foreground rounded-xl text-sm font-medium hover:bg-glass-hover transition-all"
             >
               See examples
@@ -200,7 +200,9 @@ export default function HomepageV2() {
 
       {/* ── Gallery ───────────────────────────────────────────────────────── */}
       {/* ArmanGallery already handles its own header, fetching, and modal */}
-      <ArmanGallery />
+      <div id="gallery">
+        <ArmanGallery />
+      </div>
 
       {/* ── Example prompts ───────────────────────────────────────────────── */}
       <section
