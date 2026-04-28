@@ -2,7 +2,7 @@
 import { useState } from "react";
 
 export default function ContactModal({ onClose }) {
-  const [form, setForm] = useState({ firstName: "", lastName: "", message: "" });
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", message: "" });
   const [status, setStatus] = useState("idle"); // idle | sending | success | error
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -130,6 +130,31 @@ export default function ContactModal({ onClose }) {
                   }}
                 />
               </div>
+            </div>
+
+            {/* Email */}
+            <div>
+              <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "#94a3b8", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Your Email
+              </label>
+              <input
+                type="email"
+                required
+                placeholder="you@example.com"
+                value={form.email}
+                onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                style={{
+                  width: "100%", boxSizing: "border-box",
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: "8px",
+                  color: "#fff",
+                  padding: "10px 12px",
+                  fontSize: "0.875rem",
+                  outline: "none",
+                  fontFamily: "inherit",
+                }}
+              />
             </div>
 
             {/* Message */}

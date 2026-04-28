@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 export async function POST(req) {
   try {
-    const { firstName, lastName, message } = await req.json();
+    const { firstName, lastName, email, message } = await req.json();
 
     if (!firstName || !lastName || !message) {
       return NextResponse.json({ error: "All fields required" }, { status: 400 });
@@ -27,6 +27,7 @@ export async function POST(req) {
         <h2 style="color:#a78bfa;margin-top:0">📬 New Contact Form Submission</h2>
         <table style="width:100%;border-collapse:collapse">
           <tr><td style="padding:6px 0;color:#9ca3af;width:90px">Name</td><td style="padding:6px 0;font-weight:600">${firstName} ${lastName}</td></tr>
+          <tr><td style="padding:6px 0;color:#9ca3af">Email</td><td style="padding:6px 0"><a href="mailto:${email}" style="color:#a78bfa">${email}</a></td></tr>
           <tr><td style="padding:6px 0;color:#9ca3af">Time</td><td style="padding:6px 0">${time}</td></tr>
         </table>
         <div style="margin-top:20px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px">
@@ -47,6 +48,7 @@ export async function POST(req) {
     await transporter.sendMail({
       from: `"Seedance Contact" <${user}>`,
       to: "armankhan0826@gmail.com",
+      replyTo: email || undefined,
       subject: `📬 Contact from ${firstName} ${lastName}`,
       html,
     });
