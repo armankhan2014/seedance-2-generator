@@ -155,6 +155,12 @@ export default function HomepageV2() {
         </div>
       </div>
 
+      {/* ── Gallery ───────────────────────────────────────────────────────── */}
+      {/* ArmanGallery already handles its own header, fetching, and modal */}
+      <div id="gallery">
+        <ArmanGallery />
+      </div>
+
       {/* ── How it works ──────────────────────────────────────────────────── */}
       <section
         style={{
@@ -197,12 +203,6 @@ export default function HomepageV2() {
           ))}
         </div>
       </section>
-
-      {/* ── Gallery ───────────────────────────────────────────────────────── */}
-      {/* ArmanGallery already handles its own header, fetching, and modal */}
-      <div id="gallery">
-        <ArmanGallery />
-      </div>
 
       {/* ── Example prompts ───────────────────────────────────────────────── */}
       <section
