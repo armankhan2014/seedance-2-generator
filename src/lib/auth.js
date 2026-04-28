@@ -1,6 +1,7 @@
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import GoogleProvider from "next-auth/providers/google";
 import { prisma } from "./prisma";
+import { sendSignupNotification } from "./email";
 
 export const authOptions = {
   adapter: PrismaAdapter(prisma),
@@ -20,18 +21,33 @@ export const authOptions = {
     }),
   ],
   pages: {
-    signIn: "/",        // redirect to homepage on sign-in
-    error: "/",        // redirect to homepage on error (avoids ugly error pages on mobile)
+    signIn: "/",
+    error: "/",
   },
+
+  // ─── Notify Arman whenever a brand-new user signs up ───────────────────────
+  events: {
+    async createUser({ user }) {
+      try {
+        await sendSignupNotification({
+          name: user.name,
+          email: user.email,
+          image: user.image,
+        });
+      } catch (err) {
+        console.error("[AUTH_EVENT] createUser notification failed:", err.message);
+      }
+    },
+  },
+  // ───────────────────────────────────────────────────────────────────────────
+
   callbacks: {
     async jwt({ token, user }) {
-      // On fresh sign-in, user object is provided
       if (user) {
         token.id = user.id;
         token.credits = user.credits ?? 10;
         return token;
       }
-      // Always refresh credits from DB so they stay up to date
       if (token.id) {
         try {
           const dbUser = await prisma.user.findUnique({ where: { id: token.id } });
@@ -43,7 +59,6 @@ export const authOptions = {
         }
         return token;
       }
-      // Fallback: look up or create user by email (handles old sessions)
       if (!token.id && token.email) {
         try {
           let dbUser = await prisma.user.findUnique({ where: { email: token.email } });
