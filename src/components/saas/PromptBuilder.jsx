@@ -91,6 +91,176 @@ function buildGuidedPrompt({ subject, setting, action, mood, camera, style }) {
   return parts.join(", ") + ".";
 }
 
+// ── Formatted prompt renderer ─────────────────────────────────────────────────
+function FormattedPrompt({ text }) {
+  const lines = text.split("\n");
+  const elements = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const raw = lines[i];
+    const line = raw.trim();
+
+    // Skip empty lines — add a small spacer
+    if (!line) {
+      elements.push(<div key={i} style={{ height: "6px" }} />);
+      i++;
+      continue;
+    }
+
+    // Section header: **SECTION NAME**
+    if (/^\*\*[A-Z &()–\-/]+\*\*$/.test(line)) {
+      const heading = line.replace(/\*\*/g, "");
+      elements.push(
+        <div key={i} style={{
+          display: "flex", alignItems: "center", gap: "8px",
+          marginTop: i === 0 ? "0" : "16px", marginBottom: "6px",
+        }}>
+          <div style={{
+            height: "1px", width: "16px", flexShrink: 0,
+            background: "rgba(139,92,246,0.5)",
+          }} />
+          <span style={{
+            fontSize: "0.62rem", fontWeight: 800, color: "#8b5cf6",
+            textTransform: "uppercase", letterSpacing: "0.1em",
+            whiteSpace: "nowrap",
+          }}>
+            {heading}
+          </span>
+          <div style={{
+            height: "1px", flex: 1,
+            background: "rgba(139,92,246,0.2)",
+          }} />
+        </div>
+      );
+      i++;
+      continue;
+    }
+
+    // Shot block header: SHOT N (time–time) — Title
+    if (/^SHOT\s+\d+/i.test(line)) {
+      // Collect all bullet lines that follow this shot header
+      const shotLines = [];
+      i++;
+      while (i < lines.length && lines[i].trim().startsWith("•")) {
+        shotLines.push(lines[i].trim());
+        i++;
+      }
+
+      // Parse the header: SHOT N (time) — Title
+      const headerMatch = line.match(/^(SHOT\s+\d+[^—–-]*)([—–-]+\s*(.*))?$/i);
+      const shotLabel  = headerMatch ? headerMatch[1].trim() : line;
+      const shotTitle  = headerMatch && headerMatch[3] ? headerMatch[3].trim() : "";
+
+      // Colour code by shot number
+      const shotNum = parseInt((line.match(/\d+/) || ["1"])[0], 10);
+      const hue = [270, 210, 170, 30, 0, 320][(shotNum - 1) % 6];
+
+      elements.push(
+        <div key={`shot-${i}`} style={{
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.07)",
+          borderLeft: `3px solid hsl(${hue},70%,55%)`,
+          borderRadius: "8px",
+          padding: "10px 12px",
+          marginBottom: "8px",
+        }}>
+          {/* Shot header row */}
+          <div style={{ display: "flex", alignItems: "baseline", gap: "8px", marginBottom: shotLines.length ? "8px" : "0" }}>
+            <span style={{
+              fontSize: "0.68rem", fontWeight: 800,
+              color: `hsl(${hue},70%,65%)`,
+              textTransform: "uppercase", letterSpacing: "0.06em",
+              whiteSpace: "nowrap",
+            }}>
+              {shotLabel}
+            </span>
+            {shotTitle && (
+              <span style={{
+                fontSize: "0.82rem", fontWeight: 600, color: "#e2e8f0",
+              }}>
+                {shotTitle}
+              </span>
+            )}
+          </div>
+
+          {/* Bullet rows */}
+          {shotLines.map((bl, bi) => {
+            // Split "• Key: value" into key and value
+            const inner = bl.replace(/^•\s*/, "");
+            const colonIdx = inner.indexOf(":");
+            const key   = colonIdx > -1 ? inner.slice(0, colonIdx).trim() : null;
+            const value = colonIdx > -1 ? inner.slice(colonIdx + 1).trim() : inner;
+            return (
+              <div key={bi} style={{
+                display: "flex", gap: "6px",
+                fontSize: "0.78rem", lineHeight: 1.55,
+                marginBottom: bi < shotLines.length - 1 ? "3px" : "0",
+              }}>
+                {key && (
+                  <span style={{
+                    color: "#64748b", fontWeight: 700,
+                    minWidth: "52px", flexShrink: 0,
+                    fontSize: "0.72rem", paddingTop: "1px",
+                  }}>
+                    {key}
+                  </span>
+                )}
+                <span style={{ color: "#94a3b8" }}>{value}</span>
+              </div>
+            );
+          })}
+        </div>
+      );
+      continue;
+    }
+
+    // Bullet / list item (outside a shot block)
+    if (line.startsWith("•") || line.startsWith("-")) {
+      const inner = line.replace(/^[•\-]\s*/, "");
+      elements.push(
+        <div key={i} style={{
+          display: "flex", gap: "8px",
+          fontSize: "0.8rem", color: "#94a3b8",
+          lineHeight: 1.6, marginBottom: "3px",
+        }}>
+          <span style={{ color: "#475569", flexShrink: 0 }}>•</span>
+          <span>{inner}</span>
+        </div>
+      );
+      i++;
+      continue;
+    }
+
+    // Regular paragraph line — render inline bold (**text**) segments
+    const renderInline = (txt) => {
+      const parts = txt.split(/(\*\*[^*]+\*\*)/g);
+      return parts.map((p, pi) => {
+        if (/^\*\*[^*]+\*\*$/.test(p)) {
+          return (
+            <strong key={pi} style={{ color: "#c4b5fd", fontWeight: 700 }}>
+              {p.replace(/\*\*/g, "")}
+            </strong>
+          );
+        }
+        return p;
+      });
+    };
+
+    elements.push(
+      <p key={i} style={{
+        fontSize: "0.82rem", color: "#cbd5e1",
+        lineHeight: 1.65, margin: "0 0 4px",
+      }}>
+        {renderInline(line)}
+      </p>
+    );
+    i++;
+  }
+
+  return <div>{elements}</div>;
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function PromptBuilder({ onUse, onClose }) {
   const [tab, setTab] = useState("guided");
@@ -104,10 +274,11 @@ export default function PromptBuilder({ onUse, onClose }) {
   const [style,   setStyle]   = useState("");
 
   // describe state
-  const [freeText, setFreeText] = useState("");
-  const [aiPrompt, setAiPrompt] = useState("");
+  const [freeText,  setFreeText]  = useState("");
+  const [aiPrompt,  setAiPrompt]  = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError,   setAiError]   = useState("");
+  const [copied,    setCopied]    = useState(false);
 
   const overlayRef = useRef(null);
 
@@ -133,6 +304,7 @@ export default function PromptBuilder({ onUse, onClose }) {
     setAiLoading(true);
     setAiError("");
     setAiPrompt("");
+    setCopied(false);
     try {
       const r = await fetch("/api/prompt/build", {
         method: "POST",
@@ -148,7 +320,12 @@ export default function PromptBuilder({ onUse, onClose }) {
     setAiLoading(false);
   }
 
-  const activePrompt = tab === "guided" ? guidedPrompt : aiPrompt;
+  function handleCopy() {
+    navigator.clipboard.writeText(aiPrompt).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   // ── Styles ──────────────────────────────────────────────────────────────────
   const S = {
@@ -164,7 +341,7 @@ export default function PromptBuilder({ onUse, onClose }) {
       border: "1px solid rgba(139,92,246,0.25)",
       borderRadius: "20px",
       width: "100%",
-      maxWidth: "560px",
+      maxWidth: "620px",
       maxHeight: "90vh",
       overflowY: "auto",
       boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(139,92,246,0.1)",
@@ -173,6 +350,9 @@ export default function PromptBuilder({ onUse, onClose }) {
     header: {
       padding: "22px 24px 0",
       borderBottom: "1px solid rgba(255,255,255,0.06)",
+      position: "sticky", top: 0,
+      background: "#111118",
+      zIndex: 10,
     },
     title: {
       fontSize: "1rem", fontWeight: 800, color: "#e2e8f0",
@@ -222,16 +402,18 @@ export default function PromptBuilder({ onUse, onClose }) {
       marginBottom: "16px",
     },
     preview: {
-      background: "rgba(139,92,246,0.06)",
-      border: "1px solid rgba(139,92,246,0.2)",
-      borderRadius: "10px",
-      padding: "12px 14px",
+      background: "rgba(139,92,246,0.04)",
+      border: "1px solid rgba(139,92,246,0.18)",
+      borderRadius: "12px",
+      padding: "14px 16px",
       marginTop: "16px",
+      maxHeight: "380px",
+      overflowY: "auto",
     },
     previewLabel: {
       fontSize: "0.65rem", fontWeight: 700,
       color: "#64748b", textTransform: "uppercase",
-      letterSpacing: "0.08em", marginBottom: "6px",
+      letterSpacing: "0.08em", marginBottom: "10px",
     },
     previewText: {
       fontSize: "0.82rem", color: "#c4b5fd",
@@ -253,7 +435,7 @@ export default function PromptBuilder({ onUse, onClose }) {
     }),
     textarea: {
       width: "100%",
-      minHeight: "320px",
+      minHeight: "90px",
       background: "rgba(255,255,255,0.04)",
       border: "1px solid rgba(255,255,255,0.1)",
       borderRadius: "10px",
@@ -381,12 +563,12 @@ export default function PromptBuilder({ onUse, onClose }) {
           {tab === "describe" && (
             <>
               <p style={{ fontSize: "0.82rem", color: "#64748b", marginBottom: "10px", lineHeight: 1.6 }}>
-                Describe your vision in plain English. Our AI will turn it into an optimised Seedance prompt.
+                Describe your vision in plain English. Our AI will turn it into a full cinematic Seedance prompt.
               </p>
               <label style={S.label}>Your idea</label>
               <textarea
                 style={S.textarea}
-                placeholder={"e.g. A wolf howling at the moon in a dark forest, feels dramatic and cinematic"}
+                placeholder={"e.g. A samurai running through cherry blossoms at night, slow motion, epic and cinematic"}
                 value={freeText}
                 onChange={e => setFreeText(e.target.value)}
               />
@@ -396,7 +578,7 @@ export default function PromptBuilder({ onUse, onClose }) {
                 disabled={!freeText.trim() || aiLoading}
                 onClick={handleAiBuild}
               >
-                {aiLoading ? "✨ Building prompt…" : "✨ Build my prompt"}
+                {aiLoading ? "✨ Building your cinematic prompt…" : "✨ Build my prompt"}
               </button>
 
               {aiError && (
@@ -405,10 +587,52 @@ export default function PromptBuilder({ onUse, onClose }) {
 
               {aiPrompt && (
                 <>
-                  <div style={S.preview}>
-                    <p style={S.previewLabel}>Your Seedance prompt</p>
-                    <p style={S.previewText}>{aiPrompt}</p>
+                  {/* Formatted output card */}
+                  <div style={{ marginTop: "16px" }}>
+                    {/* Card header row */}
+                    <div style={{
+                      display: "flex", alignItems: "center",
+                      justifyContent: "space-between",
+                      marginBottom: "8px",
+                    }}>
+                      <span style={{
+                        fontSize: "0.65rem", fontWeight: 700,
+                        color: "#64748b", textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                      }}>
+                        🎬 Your Seedance prompt
+                      </span>
+                      <button
+                        onClick={handleCopy}
+                        style={{
+                          background: copied ? "rgba(34,197,94,0.12)" : "rgba(255,255,255,0.05)",
+                          border: `1px solid ${copied ? "rgba(34,197,94,0.3)" : "rgba(255,255,255,0.1)"}`,
+                          borderRadius: "6px",
+                          color: copied ? "#4ade80" : "#64748b",
+                          fontSize: "0.7rem", fontWeight: 700,
+                          padding: "4px 10px",
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                          transition: "all 0.2s",
+                        }}
+                      >
+                        {copied ? "✓ Copied" : "Copy"}
+                      </button>
+                    </div>
+
+                    {/* Formatted prompt display */}
+                    <div style={{
+                      background: "rgba(139,92,246,0.04)",
+                      border: "1px solid rgba(139,92,246,0.18)",
+                      borderRadius: "12px",
+                      padding: "16px 18px",
+                      maxHeight: "420px",
+                      overflowY: "auto",
+                    }}>
+                      <FormattedPrompt text={aiPrompt} />
+                    </div>
                   </div>
+
                   <button
                     style={S.useBtn(true)}
                     onClick={() => { onUse(aiPrompt); onClose(); }}
