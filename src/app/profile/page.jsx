@@ -1,23 +1,104 @@
 "use client";
 import { useSession, signOut } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 
+function useLiveSince(dateStr) {
+  const [elapsed, setElapsed] = useState("");
+
+  useEffect(() => {
+    if (!dateStr) return;
+    const joined = new Date(dateStr).getTime();
+
+    const tick = () => {
+      const diff = Date.now() - joined;
+      const totalSecs = Math.floor(diff / 1000);
+      const secs  = totalSecs % 60;
+      const mins  = Math.floor(totalSecs / 60) % 60;
+      const hours = Math.floor(totalSecs / 3600) % 24;
+      const days  = Math.floor(totalSecs / 86400) % 30;
+      const months= Math.floor(totalSecs / (86400 * 30)) % 12;
+      const years = Math.floor(totalSecs / (86400 * 365));
+
+      const parts = [];
+      if (years)  parts.push(`${years}y`);
+      if (months) parts.push(`${months}mo`);
+      if (days)   parts.push(`${days}d`);
+      if (hours)  parts.push(`${hours}h`);
+      if (mins)   parts.push(`${mins}m`);
+      parts.push(`${secs}s`);
+
+      setElapsed(parts.join(" "));
+    };
+
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [dateStr]);
+
+  return elapsed;
+}
+
 export default function ProfilePage() {
-  const { data: session, status } = useSession();
+  const { data: session, status, update: updateSession } = useSession();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [imageUrl, setImageUrl] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const fileRef = useRef(null);
+  const elapsed = useLiveSince(profile?.createdAt);
 
   useEffect(() => {
     if (status === "authenticated") {
       fetch("/api/user/profile")
         .then(r => r.json())
-        .then(data => { setProfile(data); setLoading(false); })
+        .then(data => {
+          setProfile(data);
+          setImageUrl(data.image || session?.user?.image || null);
+          setLoading(false);
+        })
         .catch(() => setLoading(false));
     } else if (status === "unauthenticated") {
       setLoading(false);
     }
   }, [status]);
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setUploadError("Please select an image file.");
+      return;
+    }
+
+    setUploading(true);
+    setUploadError("");
+
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const base64 = ev.target.result;
+      try {
+        const res = await fetch("/api/user/update-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: base64 }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setImageUrl(data.image);
+          await updateSession({ image: data.image });
+        } else {
+          setUploadError(data.error || "Upload failed.");
+        }
+      } catch {
+        setUploadError("Upload failed. Please try again.");
+      } finally {
+        setUploading(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   if (status === "loading" || loading) {
     return (
@@ -38,15 +119,13 @@ export default function ProfilePage() {
     );
   }
 
+  const name = profile?.name || session.user?.name || "User";
+  const email = profile?.email || session.user?.email || "";
+  const credits = profile?.credits ?? session.user?.credits ?? 0;
+  const initials = name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
   const joinDate = profile?.createdAt
     ? new Date(profile.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
     : "—";
-
-  const credits = profile?.credits ?? session.user?.credits ?? 0;
-  const name = profile?.name || session.user?.name || "User";
-  const email = profile?.email || session.user?.email || "";
-  const image = profile?.image || session.user?.image;
-  const initials = name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a0a", fontFamily: "Inter,sans-serif", padding: "40px 16px" }}>
@@ -65,28 +144,62 @@ export default function ProfilePage() {
           padding: "36px",
           boxShadow: "0 24px 60px rgba(0,0,0,0.5)",
         }}>
-          {/* Avatar + name */}
+
+          {/* Avatar + upload */}
           <div style={{ display: "flex", alignItems: "center", gap: "20px", marginBottom: "32px" }}>
-            {image ? (
-              <img
-                src={image}
-                alt={name}
-                style={{ width: "72px", height: "72px", borderRadius: "50%", border: "2px solid rgba(139,92,246,0.4)", objectFit: "cover" }}
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              {imageUrl ? (
+                <img
+                  src={imageUrl}
+                  alt={name}
+                  style={{ width: "80px", height: "80px", borderRadius: "50%", border: "2px solid rgba(139,92,246,0.4)", objectFit: "cover" }}
+                />
+              ) : (
+                <div style={{
+                  width: "80px", height: "80px", borderRadius: "50%",
+                  background: "linear-gradient(135deg,#8b5cf6,#7c3aed)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "1.5rem", fontWeight: 700, color: "#fff",
+                }}>
+                  {initials}
+                </div>
+              )}
+
+              {/* Camera overlay */}
+              <button
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading}
+                title="Change photo"
+                style={{
+                  position: "absolute", bottom: 0, right: 0,
+                  width: "26px", height: "26px",
+                  background: uploading ? "rgba(139,92,246,0.5)" : "#7c3aed",
+                  border: "2px solid #111118",
+                  borderRadius: "50%",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: uploading ? "wait" : "pointer",
+                  fontSize: "0.7rem",
+                }}>
+                {uploading ? "…" : "📷"}
+              </button>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                style={{ display: "none" }}
               />
-            ) : (
-              <div style={{
-                width: "72px", height: "72px", borderRadius: "50%",
-                background: "linear-gradient(135deg,#8b5cf6,#7c3aed)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: "1.4rem", fontWeight: 700, color: "#fff",
-                flexShrink: 0,
-              }}>
-                {initials}
-              </div>
-            )}
+            </div>
+
             <div>
               <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700, color: "#fff" }}>{name}</h1>
               <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "#64748b" }}>{email}</p>
+              {uploadError && (
+                <p style={{ margin: "6px 0 0", fontSize: "0.75rem", color: "#f87171" }}>{uploadError}</p>
+              )}
+              {uploading && (
+                <p style={{ margin: "6px 0 0", fontSize: "0.75rem", color: "#a78bfa" }}>Uploading…</p>
+              )}
             </div>
           </div>
 
@@ -97,8 +210,11 @@ export default function ProfilePage() {
               <p style={{ margin: 0, fontSize: "1.4rem", fontWeight: 800, color: "#a78bfa" }}>⚡ {credits.toLocaleString()}</p>
             </div>
             <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "16px" }}>
-              <p style={{ margin: 0, fontSize: "0.7rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>Member since</p>
-              <p style={{ margin: 0, fontSize: "0.9rem", fontWeight: 600, color: "#e2e8f0" }}>{joinDate}</p>
+              <p style={{ margin: 0, fontSize: "0.7rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>Member Since</p>
+              <p style={{ margin: 0, fontSize: "0.82rem", fontWeight: 600, color: "#e2e8f0", marginBottom: "4px" }}>{joinDate}</p>
+              <p style={{ margin: 0, fontSize: "0.72rem", color: "#a78bfa", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
+                {elapsed ? `🕐 ${elapsed}` : ""}
+              </p>
             </div>
           </div>
 
@@ -151,8 +267,8 @@ export default function ProfilePage() {
               Sign Out
             </button>
           </div>
-        </div>
 
+        </div>
       </div>
     </div>
   );
