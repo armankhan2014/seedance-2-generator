@@ -1,27 +1,10 @@
-import { Suspense } from "react";
-import GenerateClient from "./GenerateClient";
+import HomepageV2 from "@/components/saas/HomepageV2";
 
 export const metadata = {
-  title: "AI Video Generator",
-  description:
-    "Generate stunning AI videos in seconds. Text-to-video, image-to-video, and audio sync powered by Seedance 2.0.",
-  openGraph: {
-    title: "Seedance Studio — AI Video Generator",
-    description:
-      "Generate stunning AI videos in seconds. Text-to-video, image-to-video, and audio sync powered by Seedance 2.0.",
-    url: "https://seedance.visualseffect.com",
-  },
-  twitter: {
-    title: "Seedance Studio — AI Video Generator",
-    description:
-      "Generate stunning AI videos in seconds with Seedance 2.0.",
-  },
+  title: "Seedance Studio — AI Video Generator",
+  description: "Turn your ideas into cinematic AI videos with Seedance 2.0. Write a prompt and generate stunning videos in seconds.",
 };
 
-export default function GeneratePage() {
-  return (
-    <Suspense fallback={null}>
-      <GenerateClient />
-    </Suspense>
-  );
+export default function HomePage() {
+  return <HomepageV2 />;
 }
