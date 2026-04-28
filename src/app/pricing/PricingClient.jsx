@@ -16,13 +16,31 @@ export default function PricingClient() {
   const [loading, setLoading] = useState(null);
   const [message, setMessage] = useState("");
   const [customDollars, setCustomDollars] = useState("");
+  const [liveCredits, setLiveCredits] = useState(null);
   const searchParams = useSearchParams();
   const success = searchParams?.get("success") === "true";
   const successCredits = searchParams?.get("credits");
 
+  // Fetch live credit balance from DB — bypasses stale JWT
+  const fetchLiveCredits = async () => {
+    try {
+      const r = await fetch("/api/user/credits", { cache: "no-store" });
+      if (r.ok) {
+        const d = await r.json();
+        setLiveCredits(d.credits);
+      }
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (session) fetchLiveCredits();
+  }, [session]);
+
   useEffect(() => {
     if (success && successCredits) {
       setMessage(`✅ Payment successful! ${parseInt(successCredits).toLocaleString()} credits added to your account.`);
+      // Re-fetch so the balance shown reflects the just-completed purchase
+      fetchLiveCredits();
     }
   }, []);
 
@@ -62,9 +80,9 @@ export default function PricingClient() {
           </div>
         )}
 
-        {session?.user?.credits !== undefined && (
+        {session && liveCredits !== null && (
           <p style={{ textAlign: "center", color: "#8b5cf6", fontSize: ".85rem", marginBottom: 24, fontWeight: 600 }}>
-            ⚡ Your current balance: {session.user.credits.toLocaleString()} credits
+            ⚡ Your current balance: {liveCredits.toLocaleString()} credits
           </p>
         )}
 
