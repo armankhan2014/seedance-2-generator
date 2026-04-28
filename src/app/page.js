@@ -17,6 +17,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { downloadMedia } from "@/lib/utils";
 import ArmanGallery from "@/components/saas/ArmanGallery";
+import toast from "@/lib/toast";
 
 export const dynamic = "force-dynamic";
 
@@ -175,11 +176,13 @@ export default function Home() {
         setImagesList((prev) =>
           prev.map((u) => (u === localUrl ? uploadedUrl : u))
         );
+        toast.success("Image uploaded");
       }
     } catch (err) {
       // Remove the local preview on failure and show error
       setImagesList((prev) => prev.filter((u) => u !== localUrl));
       setError("Upload failed. Please try again.");
+      toast.error("Image upload failed. Please try again.");
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -202,9 +205,10 @@ export default function Home() {
       if (!res.ok) throw new Error("Video upload failed.");
       const data = await res.json();
       const uploadedUrl = data.url || data.data?.url;
-      if (uploadedUrl) setVideoFiles([...videoFiles, uploadedUrl]);
+      if (uploadedUrl) { setVideoFiles([...videoFiles, uploadedUrl]); toast.success("Video reference added"); }
     } catch (err) {
       setError("Video upload failed.");
+      toast.error("Video upload failed.");
     } finally {
       setIsUploadingVideo(false);
       if (videoInputRef.current) videoInputRef.current.value = "";
@@ -227,9 +231,10 @@ export default function Home() {
       if (!res.ok) throw new Error("Audio upload failed.");
       const data = await res.json();
       const uploadedUrl = data.url || data.data?.url;
-      if (uploadedUrl) setAudioFiles([...audioFiles, uploadedUrl]);
+      if (uploadedUrl) { setAudioFiles([...audioFiles, uploadedUrl]); toast.success("Audio reference added"); }
     } catch (err) {
       setError("Audio upload failed.");
+      toast.error("Audio upload failed.");
     } finally {
       setIsUploadingAudio(false);
       if (audioInputRef.current) audioInputRef.current.value = "";
@@ -275,6 +280,7 @@ export default function Home() {
       await pollStatus(data.request_id, data.metadata);
     } catch (err) {
       setError(err.message);
+      toast.error(err.message || "Generation failed.");
       setLoading(false);
     }
   };
@@ -292,6 +298,7 @@ export default function Home() {
       if (data.status === "completed") {
         setResultUrl(data.imageUrl);
         setLoading(false);
+        toast.success("Video ready! 🎬");
       } else if (data.status === "failed") {
         throw new Error("Generation failed.");
       } else {
@@ -299,6 +306,7 @@ export default function Home() {
       }
     } catch (err) {
       setError(err.message);
+      toast.error(err.message || "Something went wrong.");
       setLoading(false);
     }
   };

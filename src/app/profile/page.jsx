@@ -2,6 +2,7 @@
 import { useSession, signOut } from "next-auth/react";
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
+import toast from "@/lib/toast";
 
 function useLiveSince(dateStr) {
   const [elapsed, setElapsed] = useState("");
@@ -116,11 +117,15 @@ export default function ProfilePage() {
 
       if (res.ok && data.image) {
         setImageUrl(data.image);
+        toast.success("Profile photo updated");
       } else {
-        setUploadError(data.error || "Upload failed — please try a smaller image.");
+        const msg = data.error || "Upload failed — please try a smaller image.";
+        setUploadError(msg);
+        toast.error(msg);
       }
     } catch {
       setUploadError("Upload failed — please try again.");
+      toast.error("Upload failed — please try again.");
     } finally {
       setUploading(false);
     }

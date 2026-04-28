@@ -4,6 +4,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { useState, useEffect, useRef } from "react";
 import ContactModal from "./ContactModal";
+import ToastContainer from "./ToastContainer";
 
 export default function Navbar() {
   const { data: session } = useSession();
@@ -352,6 +353,7 @@ export default function Navbar() {
           }
         `}</style>
       </header>
+      <ToastContainer />
     </>
   );
 }

@@ -14,6 +14,7 @@ import {
 import { useRouter } from "next/navigation";
 import { downloadMedia } from "@/lib/utils";
 import { FiDownload, FiTrash2 } from "react-icons/fi";
+import toast from "@/lib/toast";
 
 export default function CreationsPage() {
   const { data: session, status } = useSession();
@@ -74,9 +75,13 @@ export default function CreationsPage() {
       if (res.ok) {
         setCreations(prev => prev.filter(c => c.id !== id));
         if (selectedImage?.id === id) setSelectedImage(null);
+        toast.success("Video deleted");
+      } else {
+        toast.error("Failed to delete video.");
       }
     } catch (e) {
       console.error("Delete failed:", e);
+      toast.error("Something went wrong. Please try again.");
     } finally {
       setDeleteLoading(false);
       setDeletingId(null);
@@ -254,7 +259,7 @@ export default function CreationsPage() {
                         <div className="flex items-center gap-2">
                           {item.status === "completed" && item.imageUrl && (
                             <button
-                              onClick={(e) => { e.stopPropagation(); downloadMedia(item.imageUrl, `seedance-${item.id}.mp4`); }}
+                              onClick={(e) => { e.stopPropagation(); downloadMedia(item.imageUrl, `seedance-${item.id}.mp4`); toast.info("Download started"); }}
                               title="Download video"
                               className="w-8 h-8 rounded-lg bg-primary-600 hover:bg-primary-500 border border-primary-400/50 flex items-center justify-center text-white transition-colors"
                             >

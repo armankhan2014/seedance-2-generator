@@ -2,6 +2,7 @@
 import { useSession, signIn } from "next-auth/react";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
+import toast from "@/lib/toast";
 
 const CREDITS_PER_DOLLAR = 300;
 
@@ -38,7 +39,9 @@ export default function PricingClient() {
 
   useEffect(() => {
     if (success && successCredits) {
-      setMessage(`✅ Payment successful! ${parseInt(successCredits).toLocaleString()} credits added to your account.`);
+      const added = parseInt(successCredits).toLocaleString();
+      setMessage(`✅ Payment successful! ${added} credits added to your account.`);
+      toast.success(`${added} credits added to your account!`);
       // Re-fetch so the balance shown reflects the just-completed purchase
       fetchLiveCredits();
     }
@@ -63,8 +66,8 @@ export default function PricingClient() {
       });
       const d = await r.json();
       if (d.url) window.location.href = d.url;
-      else setMessage("Error: " + (d.error || "unknown"));
-    } catch (e) { setMessage("Error: " + e.message); }
+      else { const msg = "Error: " + (d.error || "unknown"); setMessage(msg); toast.error(msg); }
+    } catch (e) { const msg = "Error: " + e.message; setMessage(msg); toast.error(msg); }
     setLoading(null);
   }
 
