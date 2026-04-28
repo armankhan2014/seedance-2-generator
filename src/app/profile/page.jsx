@@ -75,7 +75,7 @@ export default function ProfilePage() {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
-      const MAX = 400;
+      const MAX = 300;
       let { width, height } = img;
       if (width > height) { if (width > MAX) { height = Math.round(height * MAX / width); width = MAX; } }
       else { if (height > MAX) { width = Math.round(width * MAX / height); height = MAX; } }
@@ -84,7 +84,7 @@ export default function ProfilePage() {
       canvas.height = height;
       canvas.getContext("2d").drawImage(img, 0, 0, width, height);
       URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL("image/jpeg", 0.75));
+      resolve(canvas.toDataURL("image/jpeg", 0.6));
     };
     img.onerror = reject;
     img.src = url;
@@ -108,24 +108,16 @@ export default function ProfilePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: compressed }),
       });
-      const data = await res.json();
-      if (res.ok) {
-        // Re-fetch from DB to confirm the image was actually saved
-        const verify = await fetch("/api/user/profile");
-        const verifyData = await verify.json();
-        const savedImage = verifyData?.image;
-        if (savedImage && savedImage.startsWith("data:image/")) {
-          setImageUrl(savedImage);
-        } else {
-          // DB save succeeded but image not confirmed — use local preview
-          setImageUrl(data.image);
-          setUploadError("Image saved for this session but may not persist. Please try a smaller file.");
-        }
+      let data;
+      try { data = await res.json(); } catch { data = {}; }
+
+      if (res.ok && data.image) {
+        setImageUrl(data.image);
       } else {
-        setUploadError(data.error || "Upload failed.");
+        setUploadError(data.error || "Upload failed — please try a smaller image.");
       }
     } catch (err) {
-      setUploadError("Upload failed: " + (err.message || "Please try again."));
+      setUploadError("Upload failed — please try again.");
     } finally {
       setUploading(false);
     }
