@@ -199,7 +199,7 @@ export default function ArmanGallery() {
           <span className="text-[10px] font-semibold uppercase tracking-[0.4em]">Live Gallery</span>
         </div>
         <h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-foreground mb-2">
-          Arman&rsquo;s Gallery
+          Gallery
         </h2>
         <p className="text-muted font-medium text-xs uppercase tracking-widest leading-loose max-w-xl">
           Real AI-generated videos created with Seedance v2.0.<br className="hidden md:block" />
