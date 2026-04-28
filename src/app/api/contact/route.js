@@ -8,9 +8,11 @@ export async function POST(req) {
       return NextResponse.json({ error: "All fields required" }, { status: 400 });
     }
 
-    const RESEND_API_KEY = process.env.RESEND_API_KEY;
-    if (!RESEND_API_KEY) {
-      console.error("[CONTACT] RESEND_API_KEY not set");
+    const user = process.env.GMAIL_USER;
+    const pass = process.env.GMAIL_APP_PASS;
+
+    if (!user || !pass) {
+      console.error("[CONTACT] GMAIL_USER or GMAIL_APP_PASS not set");
       return NextResponse.json({ error: "Email not configured" }, { status: 500 });
     }
 
@@ -35,56 +37,25 @@ export async function POST(req) {
       </div>
     `;
 
-    const payload = {
-      from: "Seedance Contact <onboarding@resend.dev>",
-      to: ["armankhan0826@gmail.com"],
-      subject: `📬 Contact from ${firstName} ${lastName}`,
-      html,
-    };
+    const nodemailer = (await import("nodemailer")).default;
 
-    console.log("[CONTACT] Sending via Resend to:", payload.to);
-
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: { user, pass },
     });
 
-    const resBody = await res.text();
-    console.log("[CONTACT] Resend status:", res.status, "body:", resBody);
+    await transporter.sendMail({
+      from: `"Seedance Contact" <${user}>`,
+      to: "armankhan0826@gmail.com",
+      subject: `📬 Contact from ${firstName} ${lastName}`,
+      html,
+    });
 
-    if (!res.ok) {
-      // If Resend rejects the "to" email (sandbox restriction), try sending to account email
-      if (resBody.includes("verify") || resBody.includes("domain") || resBody.includes("not allowed")) {
-        console.log("[CONTACT] Retrying with reply-to approach...");
-        const res2 = await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${RESEND_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            ...payload,
-            to: ["delivered@resend.dev"], // Resend test inbox
-            reply_to: "armankhan0826@gmail.com",
-          }),
-        });
-        const body2 = await res2.text();
-        console.log("[CONTACT] Retry status:", res2.status, "body:", body2);
-        if (!res2.ok) {
-          return NextResponse.json({ error: `Resend error: ${resBody}` }, { status: 500 });
-        }
-        return NextResponse.json({ ok: true });
-      }
-      return NextResponse.json({ error: `Resend error: ${resBody}` }, { status: 500 });
-    }
-
+    console.log("[CONTACT] Email sent for", firstName, lastName);
     return NextResponse.json({ ok: true });
+
   } catch (err) {
-    console.error("[CONTACT] Exception:", err.message);
+    console.error("[CONTACT] Error:", err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
