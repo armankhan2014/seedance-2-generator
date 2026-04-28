@@ -23,6 +23,9 @@ export async function GET() {
         image: true,
         credits: true,
         createdAt: true,
+        // emailVerified is set by NextAuth on first Google OAuth sign-in,
+        // making it a reliable proxy for join date when createdAt is null.
+        emailVerified: true,
       },
     });
 
@@ -30,12 +33,29 @@ export async function GET() {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    return NextResponse.json(user, {
-      headers: {
-        "Cache-Control": "no-store, no-cache, must-revalidate",
-        "Pragma": "no-cache",
+    // Resolve the best available join date.
+    // - createdAt: present if the field was added to the schema with a default
+    // - emailVerified: always set by NextAuth on first Google sign-in, reliable fallback
+    // Explicitly convert to ISO string so JSON serialization is never ambiguous.
+    const joinDate =
+      user.createdAt ?? user.emailVerified ?? null;
+
+    return NextResponse.json(
+      {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        image: user.image,
+        credits: user.credits,
+        createdAt: joinDate ? joinDate.toISOString() : null,
       },
-    });
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+          "Pragma": "no-cache",
+        },
+      }
+    );
   } catch (err) {
     console.error("[PROFILE] Error:", err.message);
     return NextResponse.json({ error: err.message || "Server error" }, { status: 500 });
