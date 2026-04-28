@@ -8,6 +8,7 @@ export const metadata = {
 
 export default function TermsPage() {
   return (
+    <>
     <div style={{
       minHeight: "100vh",
       background: "#0a0a0a",
@@ -99,5 +100,6 @@ export default function TermsPage() {
       </div>
     </div>
     <Footer />
+    </>
   );
 }
