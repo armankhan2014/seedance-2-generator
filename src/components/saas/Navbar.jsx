@@ -6,28 +6,32 @@ import { useState, useEffect } from "react";
 import ContactModal from "./ContactModal";
 
 export default function Navbar() {
-  const { data: session, update } = useSession();
+  const { data: session } = useSession();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [menuOpen, setMenuOpen] = useState(false);
   const [liveCredits, setLiveCredits] = useState(null);
+  const [liveImage, setLiveImage] = useState(null);
   const [contactOpen, setContactOpen] = useState(false);
 
-  // Fetch fresh credits from DB
-  const refreshCredits = async () => {
+  // Fetch fresh credits AND profile image from DB in one call
+  const refreshUserData = async () => {
     if (!session?.user) return;
     try {
-      const res = await fetch("/api/user/credits");
+      const res = await fetch("/api/user/profile", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
-        setLiveCredits(data.credits);
+        if (data.credits !== undefined) setLiveCredits(data.credits);
+        // Only use the DB image if it's a custom base64 upload
+        // Fall back to Google OAuth URL for users who haven't uploaded yet
+        if (data.image) setLiveImage(data.image);
       }
     } catch (e) {}
   };
 
   // Refresh on mount when logged in
   useEffect(() => {
-    if (session?.user) refreshCredits();
+    if (session?.user) refreshUserData();
   }, [session?.user?.id]);
 
   // Refresh when returning from Stripe (success=true in URL)
@@ -35,7 +39,7 @@ export default function Navbar() {
     if (searchParams?.get("success") === "true" && session?.user) {
       let attempts = 0;
       const poll = setInterval(async () => {
-        await refreshCredits();
+        await refreshUserData();
         attempts++;
         if (attempts >= 5) clearInterval(poll);
       }, 2000);
@@ -44,6 +48,8 @@ export default function Navbar() {
   }, [searchParams, session?.user?.id]);
 
   const displayCredits = liveCredits ?? session?.user?.credits ?? 0;
+  // Prefer DB image (custom upload) over session image (Google OAuth URL)
+  const displayImage = liveImage || session?.user?.image || null;
 
   const links = [
     { href: "/", label: "Generate" },
@@ -51,9 +57,32 @@ export default function Navbar() {
     { href: "/pricing", label: "Pricing" },
   ];
 
-  const handleSignIn = () => {
-    signIn("google", { callbackUrl: "/" });
-  };
+  const handleSignIn = () => signIn("google", { callbackUrl: "/" });
+
+  // Avatar: shows image if available, otherwise initials circle
+  const firstName = session?.user?.name?.split(" ")[0] || "";
+  const initials = session?.user?.name
+    ? session.user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
+    : "?";
+
+  const Avatar = ({ size = 24 }) => (
+    displayImage ? (
+      <img
+        src={displayImage}
+        alt={firstName}
+        style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+      />
+    ) : (
+      <div style={{
+        width: size, height: size, borderRadius: "50%",
+        background: "linear-gradient(135deg,#8b5cf6,#7c3aed)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: size * 0.42 + "px", fontWeight: 700, color: "#fff", flexShrink: 0,
+      }}>
+        {initials}
+      </div>
+    )
+  );
 
   return (
     <>
@@ -83,8 +112,7 @@ export default function Navbar() {
           </Link>
 
           {/* Desktop nav */}
-          <nav style={{ display: "flex", gap: "2px", flex: 1, justifyContent: "center" }}
-               className="desktop-nav">
+          <nav style={{ display: "flex", gap: "2px", flex: 1, justifyContent: "center" }} className="desktop-nav">
             {links.map(l => (
               <Link key={l.href} href={l.href} style={{
                 padding: "6px 12px",
@@ -100,20 +128,18 @@ export default function Navbar() {
           </nav>
 
           {/* Desktop auth */}
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}
-               className="desktop-auth">
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }} className="desktop-auth">
             <button
               onClick={() => setContactOpen(true)}
               style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", color: "#94a3b8", padding: "6px 12px", fontSize: "0.78rem", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit" }}>
               Contact Us
             </button>
+
             {session ? (
               <>
                 <Link href="/profile" style={{ fontSize: "0.78rem", color: "#94a3b8", textDecoration: "none", display: "flex", alignItems: "center", gap: "6px" }}>
-                  {session.user?.image && (
-                    <img src={session.user.image} alt="" style={{ width: "24px", height: "24px", borderRadius: "50%", objectFit: "cover" }} />
-                  )}
-                  {session.user?.name?.split(" ")[0]}
+                  <Avatar size={24} />
+                  {firstName}
                 </Link>
                 <span style={{
                   background: "linear-gradient(135deg, rgba(139,92,246,0.2), rgba(124,58,237,0.2))",
@@ -185,9 +211,7 @@ export default function Navbar() {
                 <div style={{ padding: "8px 14px", borderRadius: "8px", background: "rgba(255,255,255,0.03)" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
                     <Link href="/profile" onClick={() => setMenuOpen(false)} style={{ fontSize: "0.85rem", color: "#94a3b8", textDecoration: "none", display: "flex", alignItems: "center", gap: "8px" }}>
-                      {session.user?.image && (
-                        <img src={session.user.image} alt="" style={{ width: "24px", height: "24px", borderRadius: "50%", objectFit: "cover" }} />
-                      )}
+                      <Avatar size={28} />
                       {session.user?.name}
                     </Link>
                     <button
