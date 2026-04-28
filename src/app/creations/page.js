@@ -13,7 +13,7 @@ import {
 } from "react-icons/fa";
 import { useRouter } from "next/navigation";
 import { downloadMedia } from "@/lib/utils";
-import { FiDownload } from "react-icons/fi";
+import { FiDownload, FiTrash2 } from "react-icons/fi";
 
 export default function CreationsPage() {
   const { data: session, status } = useSession();
@@ -22,6 +22,9 @@ export default function CreationsPage() {
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);   // card confirm overlay
+  const [deletingModal, setDeletingModal] = useState(false); // modal confirm state
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -62,6 +65,23 @@ export default function CreationsPage() {
       setLoading(false);
     }
     return [];
+  };
+
+  const deleteCreation = async (id) => {
+    setDeleteLoading(true);
+    try {
+      const res = await fetch(`/api/creations/${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setCreations(prev => prev.filter(c => c.id !== id));
+        if (selectedImage?.id === id) setSelectedImage(null);
+      }
+    } catch (e) {
+      console.error("Delete failed:", e);
+    } finally {
+      setDeleteLoading(false);
+      setDeletingId(null);
+      setDeletingModal(false);
+    }
   };
 
   // Auto-sync processing items with MuAPI every 8s and refresh gallery
@@ -206,39 +226,78 @@ export default function CreationsPage() {
                       )}
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 p-4 flex flex-col justify-end gap-2">
-                    {/* Prompt — up to 3 lines */}
-                    {item.prompt && (
-                      <p className="text-white text-xs leading-relaxed" style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                        {item.prompt}
-                      </p>
-                    )}
-                    {/* Date + actions row */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-white/50">
-                        {item.createdAt
-                          ? new Date(item.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                          : ""}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        {item.status === "completed" && item.imageUrl && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              downloadMedia(item.imageUrl, `seedance-${item.id}.mp4`);
-                            }}
-                            title="Download video"
-                            className="w-8 h-8 rounded-lg bg-primary-600 hover:bg-primary-500 border border-primary-400/50 flex items-center justify-center text-white transition-colors"
-                          >
-                            <FiDownload size={12} />
-                          </button>
-                        )}
-                        <div className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-white">
-                          <FaExpandAlt className="text-[10px]" />
+                  {/* Normal hover overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 p-4 flex flex-col justify-between">
+                    {/* Trash button — top right */}
+                    <div className="flex justify-end">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDeletingId(item.id); }}
+                        title="Delete video"
+                        className="w-7 h-7 rounded-lg bg-black/40 hover:bg-red-500/80 border border-white/10 hover:border-red-400/50 flex items-center justify-center text-white/60 hover:text-white transition-all"
+                      >
+                        <FiTrash2 size={11} />
+                      </button>
+                    </div>
+                    {/* Bottom: prompt + date + actions */}
+                    <div className="flex flex-col gap-2">
+                      {item.prompt && (
+                        <p className="text-white text-xs leading-relaxed" style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                          {item.prompt}
+                        </p>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-white/50">
+                          {item.createdAt
+                            ? new Date(item.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                            : ""}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          {item.status === "completed" && item.imageUrl && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); downloadMedia(item.imageUrl, `seedance-${item.id}.mp4`); }}
+                              title="Download video"
+                              className="w-8 h-8 rounded-lg bg-primary-600 hover:bg-primary-500 border border-primary-400/50 flex items-center justify-center text-white transition-colors"
+                            >
+                              <FiDownload size={12} />
+                            </button>
+                          )}
+                          <div className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-white">
+                            <FaExpandAlt className="text-[10px]" />
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
+
+                  {/* Delete confirmation overlay (replaces hover overlay) */}
+                  {deletingId === item.id && (
+                    <div
+                      className="absolute inset-0 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3 z-10 p-4"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="w-10 h-10 rounded-full bg-red-500/20 border border-red-400/40 flex items-center justify-center">
+                        <FiTrash2 size={16} className="text-red-400" />
+                      </div>
+                      <p className="text-white text-xs font-semibold text-center">Delete this video?</p>
+                      <p className="text-white/40 text-[10px] text-center">This can't be undone.</p>
+                      <div className="flex gap-2 mt-1">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setDeletingId(null); }}
+                          className="px-4 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); deleteCreation(item.id); }}
+                          disabled={deleteLoading}
+                          className="px-4 py-1.5 rounded-lg bg-red-500 hover:bg-red-400 text-white text-xs font-semibold transition-colors disabled:opacity-60 flex items-center gap-1.5"
+                        >
+                          {deleteLoading ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : null}
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </motion.div>
               ))}
             </AnimatePresence>
@@ -254,7 +313,7 @@ export default function CreationsPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[1000] bg-black/20 backdrop-blur-sm p-4 md:p-12 flex flex-col items-center justify-center"
-            onClick={() => setSelectedImage(null)}
+            onClick={() => { setSelectedImage(null); setDeletingModal(false); }}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.98, y: 10 }}
@@ -401,7 +460,7 @@ export default function CreationsPage() {
                   </div>
                 </div>
 
-                <div className="pt-12">
+                <div className="pt-12 flex flex-col gap-3">
                   <button
                     onClick={async () => {
                       if (selectedImage.status !== "completed") return;
@@ -423,12 +482,43 @@ export default function CreationsPage() {
                         ? "Generation Failed"
                         : "Generating..."}
                   </button>
+
+                  {/* Delete button */}
+                  {!deletingModal ? (
+                    <button
+                      onClick={() => setDeletingModal(true)}
+                      className="w-full py-2.5 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs font-semibold flex items-center justify-center gap-2 transition-all"
+                    >
+                      <FiTrash2 size={13} />
+                      Delete Video
+                    </button>
+                  ) : (
+                    <div className="flex flex-col gap-2 p-3 rounded-lg border border-red-500/30 bg-red-500/5">
+                      <p className="text-xs text-red-400 text-center font-semibold">Delete this video permanently?</p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setDeletingModal(false)}
+                          className="flex-1 py-2 rounded-lg bg-white/10 hover:bg-white/15 text-white text-xs transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => deleteCreation(selectedImage.id)}
+                          disabled={deleteLoading}
+                          className="flex-1 py-2 rounded-lg bg-red-500 hover:bg-red-400 text-white text-xs font-bold transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5"
+                        >
+                          {deleteLoading ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <FiTrash2 size={12} />}
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Close Button */}
               <button
-                onClick={() => setSelectedImage(null)}
+                onClick={() => { setSelectedImage(null); setDeletingModal(false); }}
                 className="absolute top-6 right-6 w-8 h-8 flex items-center justify-center text-muted hover:text-white transition-colors"
               >
                 <span className="text-xl">✕</span>
