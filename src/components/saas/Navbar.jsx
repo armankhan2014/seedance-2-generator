@@ -109,9 +109,12 @@ export default function Navbar() {
             </button>
             {session ? (
               <>
-                <span style={{ fontSize: "0.78rem", color: "#94a3b8" }}>
+                <Link href="/profile" style={{ fontSize: "0.78rem", color: "#94a3b8", textDecoration: "none", display: "flex", alignItems: "center", gap: "6px" }}>
+                  {session.user?.image && (
+                    <img src={session.user.image} alt="" style={{ width: "24px", height: "24px", borderRadius: "50%", objectFit: "cover" }} />
+                  )}
                   {session.user?.name?.split(" ")[0]}
-                </span>
+                </Link>
                 <span style={{
                   background: "linear-gradient(135deg, rgba(139,92,246,0.2), rgba(124,58,237,0.2))",
                   border: "1px solid rgba(139,92,246,0.4)",
@@ -181,7 +184,12 @@ export default function Navbar() {
               {session ? (
                 <div style={{ padding: "8px 14px", borderRadius: "8px", background: "rgba(255,255,255,0.03)" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-                    <span style={{ fontSize: "0.85rem", color: "#94a3b8" }}>{session.user?.name}</span>
+                    <Link href="/profile" onClick={() => setMenuOpen(false)} style={{ fontSize: "0.85rem", color: "#94a3b8", textDecoration: "none", display: "flex", alignItems: "center", gap: "8px" }}>
+                      {session.user?.image && (
+                        <img src={session.user.image} alt="" style={{ width: "24px", height: "24px", borderRadius: "50%", objectFit: "cover" }} />
+                      )}
+                      {session.user?.name}
+                    </Link>
                     <button
                       onClick={() => { signOut({ callbackUrl: "/" }); setMenuOpen(false); }}
                       style={{ background: "rgba(255,255,255,0.08)", border: "none", borderRadius: "6px", color: "#94a3b8", padding: "6px 12px", fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit" }}>
