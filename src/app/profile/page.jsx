@@ -229,17 +229,33 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Stats row */}
+          {/* Stats grid — 2×2 */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "28px" }}>
+            {/* Credits remaining */}
             <div style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)", borderRadius: "12px", padding: "16px" }}>
               <p style={{ margin: 0, fontSize: "0.7rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>Credits</p>
               <p style={{ margin: 0, fontSize: "1.4rem", fontWeight: 800, color: "#a78bfa" }}>⚡ {credits.toLocaleString()}</p>
             </div>
+            {/* Member since */}
             <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "16px" }}>
               <p style={{ margin: 0, fontSize: "0.7rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>Member Since</p>
               <p style={{ margin: 0, fontSize: "0.82rem", fontWeight: 600, color: "#e2e8f0", marginBottom: "4px" }}>{joinDate}</p>
               <p style={{ margin: 0, fontSize: "0.72rem", color: "#a78bfa", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
                 {elapsed ? `🕐 ${elapsed}` : ""}
+              </p>
+            </div>
+            {/* Videos generated */}
+            <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "16px" }}>
+              <p style={{ margin: 0, fontSize: "0.7rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>Videos Generated</p>
+              <p style={{ margin: 0, fontSize: "1.4rem", fontWeight: 800, color: "#e2e8f0" }}>
+                🎬 {(profile?.videosGenerated ?? 0).toLocaleString()}
+              </p>
+            </div>
+            {/* Total credits spent */}
+            <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "16px" }}>
+              <p style={{ margin: 0, fontSize: "0.7rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>Credits Spent</p>
+              <p style={{ margin: 0, fontSize: "1.4rem", fontWeight: 800, color: "#e2e8f0" }}>
+                ⚡ {(profile?.totalCreditsSpent ?? 0).toLocaleString()}
               </p>
             </div>
           </div>
