@@ -118,7 +118,7 @@ export default function NotFound() {
         </p>
 
         {/* CTA */}
-        <Link href="/" style={{
+        <Link href="/generate" style={{
           display: "inline-flex",
           alignItems: "center",
           gap: "8px",

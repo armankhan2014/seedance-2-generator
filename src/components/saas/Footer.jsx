@@ -16,7 +16,7 @@ const SOCIAL = [
 ];
 
 const NAV = [
-  { label: "Generate", href: "/" },
+  { label: "Generate", href: "/generate" },
   { label: "Gallery",  href: "/creations" },
   { label: "Pricing",  href: "/pricing" },
 ];

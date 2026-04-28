@@ -17,7 +17,7 @@ export default function PrivacyPage() {
     }}>
       <div style={{ maxWidth: "720px", margin: "0 auto" }}>
 
-        <Link href="/" style={{
+        <Link href="/generate" style={{
           display: "inline-flex",
           alignItems: "center",
           gap: "6px",
