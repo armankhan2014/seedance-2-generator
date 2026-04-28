@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import { downloadMedia } from "@/lib/utils";
 import ArmanGallery from "@/components/saas/ArmanGallery";
 import toast from "@/lib/toast";
+import PromptBuilder from "@/components/saas/PromptBuilder";
 
 export const dynamic = "force-dynamic";
 
@@ -113,6 +114,7 @@ export default function Home() {
   const [mode, setMode] = useState("text-to-video");
   // Form State
   const [prompt, setPrompt] = useState("");
+  const [showBuilder, setShowBuilder] = useState(false);
   const [aspectRatio, setAspectRatio] = useState(ASPECT_RATIOS[0].value);
   const [resolution, setResolution] = useState(RESOLUTIONS[1].value); // 720p default
   const [duration, setDuration] = useState(DURATIONS[0].value);
@@ -424,9 +426,18 @@ export default function Home() {
           <div className="space-y-4">
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-[10px] font-medium text-muted uppercase tracking-wider">
-                  Prompt
-                </label>
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] font-medium text-muted uppercase tracking-wider">
+                    Prompt
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowBuilder(true)}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold text-primary-500 bg-primary-500/10 border border-primary-500/20 hover:bg-primary-500/20 transition-colors"
+                  >
+                    ✨ Build my prompt
+                  </button>
+                </div>
                 <span className={`text-[10px] font-medium tabular-nums transition-colors ${
                   prompt.length >= 1900 ? "text-red-400" :
                   prompt.length >= 1600 ? "text-amber-400" :
@@ -885,5 +896,11 @@ export default function Home() {
         }
       `}</style>
     </div>
+      {showBuilder && (
+        <PromptBuilder
+          onUse={(p) => setPrompt(p)}
+          onClose={() => setShowBuilder(false)}
+        />
+      )}
   );
 }
