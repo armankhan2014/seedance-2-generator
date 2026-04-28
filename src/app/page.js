@@ -319,6 +319,20 @@ export default function Home() {
     }
   }, [mode]);
 
+  // Cmd+Enter / Ctrl+Enter to generate
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key !== "Enter") return;
+      if (loading) return;
+      if (mode === "text-to-video" && !prompt.trim()) return;
+      if (mode !== "text-to-video" && imagesList.length === 0) return;
+      e.preventDefault();
+      handleGenerate();
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [loading, mode, prompt, imagesList]);
+
   const creditCost = (() => {
     const isReference = mode === "reference-to-video";
     const is720p = resolution === "720p";
@@ -707,7 +721,10 @@ export default function Home() {
             {loading ? (
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
             ) : (
-              `Generate (${creditCost} Credits)`
+              <span className="flex items-center justify-center gap-2">
+                Generate ({creditCost} Credits)
+                <span className="hidden sm:inline text-[10px] opacity-40 font-normal">⌘↵</span>
+              </span>
             )}
           </button>
 
