@@ -11,16 +11,22 @@ export default function ContactModal({ onClose }) {
     setStatus("sending");
     setErrorMsg("");
     try {
-      const res = await fetch("/api/contact", {
+      const res = await fetch("https://formsubmit.co/ajax/armankhan0826@gmail.com", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({
+          "First Name": form.firstName,
+          "Last Name": form.lastName,
+          "Message": form.message,
+          "_subject": `📬 Seedance Contact: ${form.firstName} ${form.lastName}`,
+          "_captcha": "false",
+        }),
       });
       const data = await res.json();
-      if (res.ok) {
+      if (data.success === "true" || data.success === true) {
         setStatus("success");
       } else {
-        setErrorMsg(data?.error || "Unknown error");
+        setErrorMsg(data?.message || "Submission failed");
         setStatus("error");
       }
     } catch (err) {
