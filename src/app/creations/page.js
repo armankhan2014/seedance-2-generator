@@ -97,16 +97,14 @@ export default function CreationsPage() {
         <div className="flex items-center gap-3 text-primary-500 mb-1">
           <FaCalendarAlt className="text-sm" />
           <span className="text-[10px] font-semibold uppercase tracking-[0.4em]">
-            Historical Archive
+            Your Videos
           </span>
         </div>
         <h1 className="text-3xl md:text-5xl font-semibold tracking-tight text-foreground">
-          MY CREATIONS
+          My Gallery
         </h1>
-        <p className="text-muted font-medium text-xs uppercase tracking-widest leading-loose max-w-xl">
-          Your generative legacy, manifested and stored.{" "}
-          <br className="hidden md:block" />
-          Quick access to your visual nodes.
+        <p className="text-muted text-sm max-w-xl">
+          All the videos you've created, saved in one place.
         </p>
       </header>
 
@@ -117,12 +115,13 @@ export default function CreationsPage() {
               <FaMagic className="text-3xl text-muted" />
             </div>
             <div className="space-y-4">
-              <h3 className="text-xl font-bold italic text-foreground">COLLECTION EMPTY</h3>
+              <h3 className="text-xl font-semibold text-foreground">No videos yet</h3>
+              <p className="text-muted text-sm">Head to the generate page and make your first one.</p>
               <button
                 onClick={() => router.push("/")}
-                className="px-8 py-3 bg-primary-600 hover:bg-primary-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-xl shadow-primary-500/20"
+                className="px-8 py-3 bg-primary-600 hover:bg-primary-500 text-white rounded-xl font-semibold text-sm transition-all shadow-xl shadow-primary-500/20"
               >
-                Start your first Manifestation
+                Generate a video
               </button>
             </div>
           </div>
@@ -157,7 +156,7 @@ export default function CreationsPage() {
                   ) : (
                     <div className="w-full h-full flex flex-col items-center justify-center bg-glass-hover gap-4 relative">
                       <div className="w-8 h-8 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
-                      <span className="text-[9px] font-black text-muted uppercase tracking-[0.2em] animate-pulse">Manifesting...</span>
+                      <span className="text-[9px] font-semibold text-muted uppercase tracking-[0.2em] animate-pulse">Generating...</span>
                       {item.requestId && (
                         <button
                           onClick={(e) => { e.stopPropagation(); syncCreation(item.requestId); }}
@@ -235,7 +234,7 @@ export default function CreationsPage() {
                     </div>
                     <div className="text-center space-y-2">
                       <h3 className="text-sm font-bold text-red-500 uppercase tracking-widest">Generation Failed</h3>
-                      <p className="text-xs text-muted max-w-xs">{selectedImage.error || "An unknown error occurred during manifestation."}</p>
+                      <p className="text-xs text-muted max-w-xs">{selectedImage.error || "Something went wrong. Please try generating again."}</p>
                     </div>
                   </div>
                 ) : (
@@ -248,7 +247,7 @@ export default function CreationsPage() {
                     </div>
                     <div className="text-center space-y-2">
                       <h3 className="text-sm font-black text-foreground uppercase tracking-[0.3em] animate-pulse">Generating...</h3>
-                      <p className="text-[10px] text-muted uppercase tracking-widest">Bringing your vision to resonance</p>
+                      <p className="text-[10px] text-muted">This might take a moment…</p>
                     </div>
                   </div>
                 )}
@@ -259,7 +258,7 @@ export default function CreationsPage() {
                 <div className="flex flex-col justify-center space-y-4">
                   <div className="space-y-2">
                     <div className="text-xs text-muted">
-                      MANIFEST PARAMETERS
+                      Prompt
                     </div>
                     <p className="text-sm font-normal text-foreground leading-relaxed">
                       {selectedImage.prompt}
@@ -372,10 +371,10 @@ export default function CreationsPage() {
                     ) : (
                       <FiDownload size={16} />
                     )}
-                    {selectedImage.status === "completed" 
-                      ? (downloading ? "Extracting..." : "Download Piece")
-                      : selectedImage.status === "failed" 
-                        ? "Generation Failed" 
+                    {selectedImage.status === "completed"
+                      ? (downloading ? "Downloading..." : "Download Video")
+                      : selectedImage.status === "failed"
+                        ? "Generation Failed"
                         : "Generating..."}
                   </button>
                 </div>
