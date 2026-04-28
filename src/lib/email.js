@@ -26,7 +26,10 @@ export async function sendSignupNotification({ name, email, image }) {
         <tr><td style="padding:6px 0;color:#9ca3af">Time</td><td style="padding:6px 0">${time}</td></tr>
       </table>
       ${image ? `<img src="${image}" width="64" height="64" style="border-radius:50%;margin-top:16px;border:2px solid rgba(167,139,250,0.4)" />` : ""}
-      <p style="margin-top:24px;font-size:12px;color:#6b7280">Sent automatically by Seedance · <a href="https://seedance.visualseffect.com" style="color:#a78bfa">seedance.visualseffect.com</a></p>
+      <p style="margin-top:24px;font-size:12px;color:#6b7280">
+        Sent automatically by Seedance · <a href="https://seedance.visualseffect.com" style="color:#a78bfa">seedance.visualseffect.com</a><br/>
+        Contact: <a href="mailto:visualseffect@gmail.com" style="color:#a78bfa">visualseffect@gmail.com</a>
+      </p>
     </div>
   `;
 
