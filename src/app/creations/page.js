@@ -206,13 +206,19 @@ export default function CreationsPage() {
                       )}
                     </div>
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 p-4 flex flex-col justify-end">
-                    <p className="text-white text-xs font-semibold tracking-tight truncate mb-1">
-                      {item.prompt}
-                    </p>
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 p-4 flex flex-col justify-end gap-2">
+                    {/* Prompt — up to 3 lines */}
+                    {item.prompt && (
+                      <p className="text-white text-xs leading-relaxed" style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                        {item.prompt}
+                      </p>
+                    )}
+                    {/* Date + actions row */}
                     <div className="flex items-center justify-between">
-                      <span className="text-[9px] font-semibold text-primary-400 uppercase tracking-widest">
-                        {item.aspectRatio}
+                      <span className="text-[10px] text-white/50">
+                        {item.createdAt
+                          ? new Date(item.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                          : ""}
                       </span>
                       <div className="flex items-center gap-2">
                         {item.status === "completed" && item.imageUrl && (
@@ -227,7 +233,7 @@ export default function CreationsPage() {
                             <FiDownload size={12} />
                           </button>
                         )}
-                        <div className="w-8 h-8 rounded-lg bg-glass-hover border border-glass-border flex items-center justify-center text-white">
+                        <div className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-white">
                           <FaExpandAlt className="text-[10px]" />
                         </div>
                       </div>
