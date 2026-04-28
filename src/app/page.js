@@ -30,7 +30,6 @@ const ASPECT_RATIOS = [
 const RESOLUTIONS = [
   { value: "480p", label: "480p" },
   { value: "720p", label: "720p" },
-  { value: "1080p", label: "1080p" },
 ];
 
 const DURATIONS = [
@@ -169,18 +168,16 @@ export default function Home() {
       if (!res.ok) throw new Error("Upload failed.");
       const data = await res.json();
       // Handle both response formats: data.url or data.data?.url
-      const uploadedUrl = data.url || data.data?.url || data.output || data.file_url || data.image_url;
+      const uploadedUrl = data.url || data.data?.url;
       if (uploadedUrl) {
         // Replace local blob URL with the real remote URL
         setImagesList((prev) =>
           prev.map((u) => (u === localUrl ? uploadedUrl : u))
         );
-      } else {
-        // If we can't get a real URL, remove the blob entry
-        setImagesList((prev) => prev.filter((u) => u !== localUrl));
-        setError("Upload succeeded but no URL returned. Please try again.");
       }
     } catch (err) {
+      // Remove the local preview on failure and show error
+      setImagesList((prev) => prev.filter((u) => u !== localUrl));
       setError("Upload failed. Please try again.");
     } finally {
       setIsUploading(false);
@@ -240,7 +237,7 @@ export default function Home() {
 
   const handleGenerate = async () => {
     if (!session) {
-      signIn("google", { callbackUrl: "/" });
+      signIn();
       return;
     }
     if (mode === "text-to-video" && !prompt.trim()) return;
@@ -252,13 +249,6 @@ export default function Home() {
       setError("Please add at least one reference image.");
       return;
     }
-    // Block generation if images are still uploading (blob URLs not yet replaced)
-    const pendingUploads = imagesList.filter((u) => u.startsWith("blob:"));
-    if (pendingUploads.length > 0) {
-      setError("Please wait for images to finish uploading before generating.");
-      return;
-    }
-
     try {
       setLoading(true);
       setError(null);
@@ -288,47 +278,27 @@ export default function Home() {
     }
   };
 
-  const pollStatus = async (requestId, metadata, attempt = 0) => {
-    const MAX_ATTEMPTS = 200; // ~10 minutes at 3s intervals
-    if (attempt >= MAX_ATTEMPTS) {
-      setError("Generation timed out. Please check your Gallery — the video may still appear there.");
-      setLoading(false);
-      return;
-    }
-
-    setStatusMessage(`Processing... (${Math.round(attempt * 3)}s)`);
-
+  const pollStatus = async (requestId, metadata) => {
+    setStatusMessage("Processing...");
     try {
       const res = await fetch("/api/seedance/check-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requestId, metadata }),
       });
-
-      let data;
-      try {
-        data = await res.json();
-      } catch {
-        // JSON parse failed (maybe timeout) — retry
-        setTimeout(() => pollStatus(requestId, metadata, attempt + 1), 4000);
-        return;
-      }
-
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Status check failed.");
       if (data.status === "completed") {
         setResultUrl(data.imageUrl);
-        setStatusMessage("Done!");
         setLoading(false);
       } else if (data.status === "failed") {
-        setError(data.error || "Generation failed. Please try again.");
-        setLoading(false);
+        throw new Error("Generation failed.");
       } else {
-        // Still processing (or transient error) — always keep retrying
-        setTimeout(() => pollStatus(requestId, metadata, attempt + 1), 3000);
+        setTimeout(() => pollStatus(requestId, metadata), 3000);
       }
     } catch (err) {
-      // Network error — retry silently, don't stop polling
-      console.error("Poll attempt", attempt, "failed:", err.message);
-      setTimeout(() => pollStatus(requestId, metadata, attempt + 1), 5000);
+      setError(err.message);
+      setLoading(false);
     }
   };
 
@@ -351,21 +321,16 @@ export default function Home() {
 
   const creditCost = (() => {
     const isReference = mode === "reference-to-video";
-    const is1080p = resolution === "1080p";
     const is720p = resolution === "720p";
     let rate;
     if (isReference) {
-      if (is1080p) {
-        rate = quality === "high" ? 80 : 56;
-      } else if (is720p) {
+      if (is720p) {
         rate = quality === "high" ? 60 : 42;
       } else {
         rate = quality === "high" ? 48 : 36;
       }
     } else {
-      if (is1080p) {
-        rate = quality === "high" ? 70 : 45;
-      } else if (is720p) {
+      if (is720p) {
         rate = quality === "high" ? 50 : 30;
       } else {
         rate = quality === "high" ? 30 : 24;
@@ -435,12 +400,22 @@ export default function Home() {
 
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-[10px] font-medium text-muted uppercase tracking-wider">
-                Prompt
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-medium text-muted uppercase tracking-wider">
+                  Prompt
+                </label>
+                <span className={`text-[10px] font-medium tabular-nums transition-colors ${
+                  prompt.length >= 1900 ? "text-red-400" :
+                  prompt.length >= 1600 ? "text-amber-400" :
+                  "text-muted"
+                }`}>
+                  {prompt.length} / 2000
+                </span>
+              </div>
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
+                maxLength={2000}
                 placeholder={
                   mode === "reference-to-video"
                     ? "Use @image1, @video1, @audio1 to reference your files... \nExample: @video1 in the style of @image1 with @audio1"
@@ -474,7 +449,7 @@ export default function Home() {
                   <button
                     onClick={() => {
                       if (!session) {
-                        signIn("google", { callbackUrl: "/" });
+                        signIn();
                         return;
                       }
                       fileInputRef.current?.click();
@@ -555,7 +530,7 @@ export default function Home() {
                     <button
                       onClick={() => {
                         if (!session) {
-                          signIn("google", { callbackUrl: "/" });
+                          signIn();
                           return;
                         }
                         videoInputRef.current?.click();
@@ -631,7 +606,7 @@ export default function Home() {
                     <button
                       onClick={() => {
                         if (!session) {
-                          signIn("google", { callbackUrl: "/" });
+                          signIn();
                           return;
                         }
                         audioInputRef.current?.click();
