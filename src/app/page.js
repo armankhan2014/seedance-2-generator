@@ -774,11 +774,29 @@ export default function Home() {
                 </div>
               </div>
             ) : loading ? (
-              <div className="flex flex-col items-center gap-4">
-                <div className="w-10 h-10 border-2 border-primary-500/20 border-t-primary-500 rounded-full animate-spin" />
-                <p className="text-[10px] font-medium text-muted uppercase tracking-widest animate-pulse">
-                  {statusMessage}
-                </p>
+              <div className="w-full h-full flex flex-col p-4 gap-3">
+                {/* Shimmer video block */}
+                <div className="relative w-full rounded-md overflow-hidden bg-glass-hover shimmer-box" style={{ aspectRatio: "16/9" }}>
+                  <div className="shimmer-overlay" />
+                  {/* Fake play button in centre */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-full shimmer-btn" />
+                  </div>
+                </div>
+
+                {/* Status row */}
+                <div className="flex items-center gap-2 px-1">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary-500 animate-ping shrink-0" />
+                  <p className="text-[10px] font-medium text-primary-500 uppercase tracking-widest">
+                    {statusMessage || "Processing…"}
+                  </p>
+                </div>
+
+                {/* Skeleton meta badges */}
+                <div className="flex gap-2 px-1">
+                  <div className="h-5 w-10 rounded shimmer-box" />
+                  <div className="h-5 w-10 rounded shimmer-box" />
+                </div>
               </div>
             ) : (
               <div className="text-center p-8 space-y-3">
@@ -800,6 +818,61 @@ export default function Home() {
         }
         .custom-scrollbar {
           scrollbar-width: none;
+        }
+
+        /* Shimmer skeleton */
+        @keyframes shimmer {
+          0%   { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        .shimmer-box {
+          background: rgba(255,255,255,0.04);
+          position: relative;
+          overflow: hidden;
+        }
+        .shimmer-box::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(
+            90deg,
+            transparent 0%,
+            rgba(139,92,246,0.08) 40%,
+            rgba(139,92,246,0.14) 50%,
+            rgba(139,92,246,0.08) 60%,
+            transparent 100%
+          );
+          animation: shimmer 1.6s ease-in-out infinite;
+        }
+        .shimmer-overlay {
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(
+            90deg,
+            transparent 0%,
+            rgba(139,92,246,0.1) 40%,
+            rgba(139,92,246,0.18) 50%,
+            rgba(139,92,246,0.1) 60%,
+            transparent 100%
+          );
+          animation: shimmer 1.6s ease-in-out infinite;
+        }
+        .shimmer-btn {
+          background: rgba(255,255,255,0.06);
+          position: relative;
+          overflow: hidden;
+        }
+        .shimmer-btn::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(
+            90deg,
+            transparent 0%,
+            rgba(255,255,255,0.08) 50%,
+            transparent 100%
+          );
+          animation: shimmer 1.6s ease-in-out infinite;
         }
       `}</style>
     </div>
