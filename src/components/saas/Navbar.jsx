@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import ContactModal from "./ContactModal";
 
 export default function Navbar() {
@@ -10,9 +10,11 @@ export default function Navbar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [liveCredits, setLiveCredits] = useState(null);
   const [liveImage, setLiveImage] = useState(null);
   const [contactOpen, setContactOpen] = useState(false);
+  const dropdownRef = useRef(null);
 
   // Fetch fresh credits AND profile image from DB in one call
   const refreshUserData = async () => {
@@ -22,8 +24,6 @@ export default function Navbar() {
       if (res.ok) {
         const data = await res.json();
         if (data.credits !== undefined) setLiveCredits(data.credits);
-        // Only use the DB image if it's a custom base64 upload
-        // Fall back to Google OAuth URL for users who haven't uploaded yet
         if (data.image) setLiveImage(data.image);
       }
     } catch (e) {}
@@ -47,8 +47,18 @@ export default function Navbar() {
     }
   }, [searchParams, session?.user?.id]);
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(false);
+      }
+    };
+    if (dropdownOpen) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [dropdownOpen]);
+
   const displayCredits = liveCredits ?? session?.user?.credits ?? 0;
-  // Prefer DB image (custom upload) over session image (Google OAuth URL)
   const displayImage = liveImage || session?.user?.image || null;
 
   const links = [
@@ -59,7 +69,6 @@ export default function Navbar() {
 
   const handleSignIn = () => signIn("google", { callbackUrl: "/" });
 
-  // Avatar: shows image if available, otherwise initials circle
   const firstName = session?.user?.name?.split(" ")[0] || "";
   const initials = session?.user?.name
     ? session.user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
@@ -137,10 +146,7 @@ export default function Navbar() {
 
             {session ? (
               <>
-                <Link href="/profile" style={{ fontSize: "0.78rem", color: "#94a3b8", textDecoration: "none", display: "flex", alignItems: "center", gap: "6px" }}>
-                  <Avatar size={24} />
-                  {firstName}
-                </Link>
+                {/* Credits badge */}
                 <span style={{
                   background: "linear-gradient(135deg, rgba(139,92,246,0.2), rgba(124,58,237,0.2))",
                   border: "1px solid rgba(139,92,246,0.4)",
@@ -154,11 +160,98 @@ export default function Navbar() {
                 }}>
                   ⚡ {displayCredits.toLocaleString()} credits
                 </span>
-                <button
-                  onClick={() => signOut({ callbackUrl: "/" })}
-                  style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", color: "#94a3b8", padding: "6px 12px", fontSize: "0.78rem", cursor: "pointer", fontFamily: "inherit" }}>
-                  Sign out
-                </button>
+
+                {/* Avatar dropdown trigger */}
+                <div ref={dropdownRef} style={{ position: "relative" }}>
+                  <button
+                    onClick={() => setDropdownOpen(o => !o)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: "6px",
+                      background: dropdownOpen ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.04)",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: "8px",
+                      padding: "5px 10px 5px 6px",
+                      cursor: "pointer",
+                      color: "#94a3b8",
+                      fontSize: "0.78rem",
+                      fontFamily: "inherit",
+                      transition: "background 0.15s",
+                    }}>
+                    <Avatar size={24} />
+                    <span>{firstName}</span>
+                    {/* Chevron */}
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ marginLeft: 2, opacity: 0.5, transform: dropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
+                      <path d="M2 3.5L5 6.5L8 3.5" stroke="#94a3b8" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+
+                  {/* Dropdown menu */}
+                  {dropdownOpen && (
+                    <div style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      right: 0,
+                      minWidth: "160px",
+                      background: "#1a1a1a",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: "10px",
+                      boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+                      overflow: "hidden",
+                      zIndex: 100,
+                    }}>
+                      <Link
+                        href="/profile"
+                        onClick={() => setDropdownOpen(false)}
+                        style={{
+                          display: "flex", alignItems: "center", gap: "8px",
+                          padding: "10px 14px",
+                          fontSize: "0.82rem",
+                          fontWeight: 500,
+                          color: "#cbd5e1",
+                          textDecoration: "none",
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}
+                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                      >
+                        {/* Person icon */}
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0, opacity: 0.6 }}>
+                          <circle cx="7" cy="4.5" r="2.5" stroke="#94a3b8" strokeWidth="1.3"/>
+                          <path d="M2 12c0-2.76 2.24-5 5-5s5 2.24 5 5" stroke="#94a3b8" strokeWidth="1.3" strokeLinecap="round"/>
+                        </svg>
+                        View Profile
+                      </Link>
+
+                      <div style={{ height: "1px", background: "rgba(255,255,255,0.07)", margin: "0 10px" }} />
+
+                      <button
+                        onClick={() => { signOut({ callbackUrl: "/" }); setDropdownOpen(false); }}
+                        style={{
+                          display: "flex", alignItems: "center", gap: "8px",
+                          width: "100%",
+                          padding: "10px 14px",
+                          fontSize: "0.82rem",
+                          fontWeight: 500,
+                          color: "#f87171",
+                          background: "transparent",
+                          border: "none",
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                          textAlign: "left",
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = "rgba(248,113,113,0.08)"}
+                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                      >
+                        {/* Sign out icon */}
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+                          <path d="M5 2H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h2" stroke="#f87171" strokeWidth="1.3" strokeLinecap="round"/>
+                          <path d="M9 10l3-3-3-3" stroke="#f87171" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M12 7H5.5" stroke="#f87171" strokeWidth="1.3" strokeLinecap="round"/>
+                        </svg>
+                        Sign out
+                      </button>
+                    </div>
+                  )}
+                </div>
               </>
             ) : (
               <button
