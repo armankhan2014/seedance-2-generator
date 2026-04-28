@@ -365,6 +365,7 @@ export default function Home() {
   })();
 
   return (
+    <>
     <div className="flex-1 w-full flex flex-col items-center p-4 md:p-8 overflow-y-auto custom-scrollbar">
       {/* Playground Header */}
       <div className="max-w-6xl w-full mb-10 text-center space-y-4">
@@ -902,5 +903,6 @@ export default function Home() {
           onClose={() => setShowBuilder(false)}
         />
       )}
+    </>
   );
 }
