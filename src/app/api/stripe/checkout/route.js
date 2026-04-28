@@ -4,10 +4,12 @@ import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2023-10-16" });
 
-// Credit plans
+const CREDITS_PER_DOLLAR = 300;
+
+// Fixed plans
 const PLANS = {
-  starter: { name: "Starter Manifest", credits: 3000, amount: 1000, currency: "usd" },
-  power:   { name: "Power Engine",     credits: 7000, amount: 3500, currency: "usd" },
+  starter: { name: "Starter Manifest", credits: 3000,  amount: 1000,  currency: "usd" },
+  power:   { name: "Power Engine",     credits: 7000,  amount: 3500,  currency: "usd" },
   quantum: { name: "Quantum Flow",     credits: 24000, amount: 12000, currency: "usd" }
 };
 
@@ -17,12 +19,34 @@ export async function POST(req) {
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
-    const { plan } = await req.json();
-    const planData = PLANS[plan];
-    if (!planData) {
-      return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
+
+    const body = await req.json();
+    const { plan, amount: customDollars } = body;
+
+    let planData;
+
+    if (plan === "custom") {
+      // Custom amount: minimum $1, 300 credits per dollar
+      const dollars = parseInt(customDollars);
+      if (!dollars || dollars < 1) {
+        return NextResponse.json({ error: "Minimum custom amount is $1" }, { status: 400 });
+      }
+      const credits = dollars * CREDITS_PER_DOLLAR;
+      planData = {
+        name: `Custom — ${credits.toLocaleString()} Credits`,
+        credits,
+        amount: dollars * 100, // Stripe uses cents
+        currency: "usd",
+      };
+    } else {
+      planData = PLANS[plan];
+      if (!planData) {
+        return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
+      }
     }
+
     const baseUrl = process.env.NEXTAUTH_URL || "https://seedance.visualseffect.com";
+
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: "payment",
       payment_method_types: ["card"],
@@ -30,7 +54,7 @@ export async function POST(req) {
         price_data: {
           currency: planData.currency,
           product_data: {
-            name: planData.name + " — " + planData.credits.toLocaleString() + " Credits",
+            name: planData.name,
             description: "Seedance Studio AI Video Generation Credits"
           },
           unit_amount: planData.amount
@@ -46,7 +70,9 @@ export async function POST(req) {
       success_url: baseUrl + "/pricing?success=true&credits=" + planData.credits,
       cancel_url: baseUrl + "/pricing?cancelled=true"
     });
+
     return NextResponse.json({ url: checkoutSession.url });
+
   } catch (error) {
     console.error("Stripe checkout error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });

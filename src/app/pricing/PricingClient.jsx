@@ -1,7 +1,9 @@
 "use client";
 import { useSession, signIn } from "next-auth/react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
+
+const CREDITS_PER_DOLLAR = 300;
 
 const PLANS = [
   { id: "starter", n: "Starter",      c: 3000,  p: 10  },
@@ -13,6 +15,7 @@ export default function PricingClient() {
   const { data: session } = useSession();
   const [loading, setLoading] = useState(null);
   const [message, setMessage] = useState("");
+  const [customDollars, setCustomDollars] = useState("");
   const searchParams = useSearchParams();
   const success = searchParams?.get("success") === "true";
   const successCredits = searchParams?.get("credits");
@@ -23,11 +26,23 @@ export default function PricingClient() {
     }
   }, []);
 
-  async function buy(id) {
+  // Credits the user will get for their custom dollar input
+  const customAmount = parseInt(customDollars) || 0;
+  const customCredits = customAmount * CREDITS_PER_DOLLAR;
+
+  async function buy(id, extraData = {}) {
     if (!session) { signIn("google"); return; }
     setLoading(id);
+    setMessage("");
     try {
-      const r = await fetch("/api/stripe/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan: id }) });
+      const body = id === "custom"
+        ? { plan: "custom", amount: customAmount }
+        : { plan: id };
+      const r = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
       const d = await r.json();
       if (d.url) window.location.href = d.url;
       else setMessage("Error: " + (d.error || "unknown"));
@@ -37,29 +52,141 @@ export default function PricingClient() {
 
   return (
     <div style={{ background: "#0a0a0a", minHeight: "100vh", fontFamily: "Inter,sans-serif", padding: "60px 20px" }}>
-      <div style={{ maxWidth: "900px", margin: "0 auto" }}>
+      <div style={{ maxWidth: "960px", margin: "0 auto" }}>
         <h1 style={{ textAlign: "center", color: "#fff", fontSize: "2rem", fontWeight: 900, marginBottom: 8 }}>Simple Pricing</h1>
         <p style={{ textAlign: "center", color: "#64748b", marginBottom: 40 }}>Buy credits once. No subscriptions. Never expire.</p>
-        {message && <div style={{ textAlign: "center", padding: "10px", borderRadius: "8px", marginBottom: 24, background: "rgba(139,92,246,.1)", color: "#a78bfa", border: "1px solid rgba(139,92,246,.3)" }}>{message}</div>}
+
+        {message && (
+          <div style={{ textAlign: "center", padding: "10px", borderRadius: "8px", marginBottom: 24, background: "rgba(139,92,246,.1)", color: "#a78bfa", border: "1px solid rgba(139,92,246,.3)" }}>
+            {message}
+          </div>
+        )}
+
         {session?.user?.credits !== undefined && (
           <p style={{ textAlign: "center", color: "#8b5cf6", fontSize: ".85rem", marginBottom: 24, fontWeight: 600 }}>
             ⚡ Your current balance: {session.user.credits.toLocaleString()} credits
           </p>
         )}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20 }}>
+
+        {/* Fixed plans */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20, marginBottom: 20 }}>
           {PLANS.map(plan => (
             <div key={plan.id} style={{ background: "#111", border: plan.hot ? "1px solid #8b5cf6" : "1px solid rgba(255,255,255,.08)", borderRadius: 16, padding: "32px 24px", position: "relative" }}>
-              {plan.hot && <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", background: "linear-gradient(135deg,#8b5cf6,#7c3aed)", color: "#fff", fontSize: ".7rem", fontWeight: 700, padding: "3px 14px", borderRadius: 50 }}>Most Popular</div>}
+              {plan.hot && (
+                <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", background: "linear-gradient(135deg,#8b5cf6,#7c3aed)", color: "#fff", fontSize: ".7rem", fontWeight: 700, padding: "3px 14px", borderRadius: 50 }}>
+                  Most Popular
+                </div>
+              )}
               <div style={{ fontSize: ".75rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "1px", marginBottom: 10 }}>{plan.n}</div>
-              <div style={{ fontSize: "2.4rem", fontWeight: 900, color: "#fff", marginBottom: 4 }}><sup style={{ fontSize: "1.1rem", verticalAlign: "top", marginTop: 6 }}>$</sup>{plan.p}</div>
+              <div style={{ fontSize: "2.4rem", fontWeight: 900, color: "#fff", marginBottom: 4 }}>
+                <sup style={{ fontSize: "1.1rem", verticalAlign: "top", marginTop: 6 }}>$</sup>{plan.p}
+              </div>
               <div style={{ fontSize: ".82rem", color: "#8b5cf6", fontWeight: 600, marginBottom: 24 }}>{plan.c.toLocaleString()} Credits</div>
-              <button onClick={() => buy(plan.id)} disabled={loading === plan.id} style={{ width: "100%", padding: "11px", borderRadius: 9, fontSize: ".88rem", fontWeight: 700, cursor: "pointer", border: plan.hot ? "none" : "1px solid rgba(255,255,255,.12)", background: plan.hot ? "linear-gradient(135deg,#8b5cf6,#7c3aed)" : "transparent", color: plan.hot ? "#fff" : "#94a3b8", fontFamily: "inherit", opacity: loading === plan.id ? 0.5 : 1 }}>
-                {loading === plan.id ? "Redirecting..." : (session ? "Buy Credits" : "Sign in to Buy")}
+              <button
+                onClick={() => buy(plan.id)}
+                disabled={loading === plan.id}
+                style={{ width: "100%", padding: "11px", borderRadius: 9, fontSize: ".88rem", fontWeight: 700, cursor: loading === plan.id ? "wait" : "pointer", border: plan.hot ? "none" : "1px solid rgba(255,255,255,.12)", background: plan.hot ? "linear-gradient(135deg,#8b5cf6,#7c3aed)" : "transparent", color: plan.hot ? "#fff" : "#94a3b8", fontFamily: "inherit", opacity: loading === plan.id ? 0.5 : 1 }}
+              >
+                {loading === plan.id ? "Redirecting…" : (session ? "Buy Credits" : "Sign in to Buy")}
               </button>
             </div>
           ))}
         </div>
-        <p style={{ textAlign: "center", color: "#475569", fontSize: ".75rem", marginTop: 28 }}>Secure payments via Stripe. Credits never expire.</p>
+
+        {/* Custom credits card — full width */}
+        <div style={{ background: "#111", border: "1px solid rgba(139,92,246,0.35)", borderRadius: 16, padding: "32px 28px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+            <div style={{ fontSize: ".75rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "1px" }}>Custom Amount</div>
+            <div style={{ fontSize: ".68rem", fontWeight: 600, color: "#a78bfa", background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.25)", borderRadius: 50, padding: "2px 10px" }}>
+              $1 = {CREDITS_PER_DOLLAR} credits
+            </div>
+          </div>
+          <p style={{ fontSize: ".82rem", color: "#475569", marginBottom: 20, marginTop: 0 }}>
+            Need an exact amount? Enter any dollar value and get exactly {CREDITS_PER_DOLLAR} credits per dollar.
+          </p>
+
+          <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
+            {/* Dollar input */}
+            <div style={{ flex: "1 1 180px" }}>
+              <label style={{ display: "block", fontSize: ".72rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
+                Amount (USD)
+              </label>
+              <div style={{ position: "relative" }}>
+                <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#8b5cf6", fontWeight: 700, fontSize: "1rem", pointerEvents: "none" }}>$</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="e.g. 5"
+                  value={customDollars}
+                  onChange={e => setCustomDollars(e.target.value.replace(/[^0-9]/g, ""))}
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    padding: "10px 12px 10px 28px",
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    borderRadius: 9,
+                    color: "#fff",
+                    fontSize: "1rem",
+                    fontWeight: 700,
+                    fontFamily: "inherit",
+                    outline: "none",
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Credits preview */}
+            <div style={{ flex: "1 1 160px", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+              <label style={{ display: "block", fontSize: ".72rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
+                You will get
+              </label>
+              <div style={{ padding: "10px 14px", background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)", borderRadius: 9, minHeight: 42, display: "flex", alignItems: "center" }}>
+                <span style={{ fontSize: customCredits > 0 ? "1.1rem" : ".9rem", fontWeight: 800, color: customCredits > 0 ? "#a78bfa" : "#334155" }}>
+                  {customCredits > 0 ? `⚡ ${customCredits.toLocaleString()} credits` : "Enter amount above"}
+                </span>
+              </div>
+            </div>
+
+            {/* Buy button */}
+            <div style={{ flex: "1 1 140px", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+              <label style={{ display: "block", fontSize: ".72rem", fontWeight: 600, color: "transparent", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, userSelect: "none" }}>
+                &nbsp;
+              </label>
+              <button
+                onClick={() => buy("custom")}
+                disabled={customAmount < 1 || loading === "custom"}
+                style={{
+                  padding: "11px 20px",
+                  borderRadius: 9,
+                  fontSize: ".88rem",
+                  fontWeight: 700,
+                  cursor: customAmount < 1 || loading === "custom" ? "not-allowed" : "pointer",
+                  border: "none",
+                  background: customAmount >= 1
+                    ? "linear-gradient(135deg,#8b5cf6,#7c3aed)"
+                    : "rgba(255,255,255,0.06)",
+                  color: customAmount >= 1 ? "#fff" : "#475569",
+                  fontFamily: "inherit",
+                  opacity: loading === "custom" ? 0.5 : 1,
+                  whiteSpace: "nowrap",
+                  width: "100%",
+                }}
+              >
+                {loading === "custom"
+                  ? "Redirecting…"
+                  : customAmount >= 1
+                  ? `Pay $${customAmount}`
+                  : session ? "Enter Amount" : "Sign in to Buy"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <p style={{ textAlign: "center", color: "#475569", fontSize: ".75rem", marginTop: 28 }}>
+          Secure payments via Stripe. Credits never expire.
+        </p>
       </div>
     </div>
   );
