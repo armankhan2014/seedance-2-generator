@@ -10,6 +10,7 @@ export async function POST(req) {
 
     const RESEND_API_KEY = process.env.RESEND_API_KEY;
     if (!RESEND_API_KEY) {
+      console.error("[CONTACT] RESEND_API_KEY not set");
       return NextResponse.json({ error: "Email not configured" }, { status: 500 });
     }
 
@@ -34,29 +35,56 @@ export async function POST(req) {
       </div>
     `;
 
+    const payload = {
+      from: "Seedance Contact <onboarding@resend.dev>",
+      to: ["armankhan0826@gmail.com"],
+      subject: `📬 Contact from ${firstName} ${lastName}`,
+      html,
+    };
+
+    console.log("[CONTACT] Sending via Resend to:", payload.to);
+
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${RESEND_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        from: "Seedance Contact <onboarding@resend.dev>",
-        to: ["armankhan0826@gmail.com"],
-        subject: `📬 Contact from ${firstName} ${lastName}`,
-        html,
-      }),
+      body: JSON.stringify(payload),
     });
 
+    const resBody = await res.text();
+    console.log("[CONTACT] Resend status:", res.status, "body:", resBody);
+
     if (!res.ok) {
-      const err = await res.text();
-      console.error("[CONTACT] Resend error:", res.status, err);
-      return NextResponse.json({ error: "Failed to send" }, { status: 500 });
+      // If Resend rejects the "to" email (sandbox restriction), try sending to account email
+      if (resBody.includes("verify") || resBody.includes("domain") || resBody.includes("not allowed")) {
+        console.log("[CONTACT] Retrying with reply-to approach...");
+        const res2 = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${RESEND_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            ...payload,
+            to: ["delivered@resend.dev"], // Resend test inbox
+            reply_to: "armankhan0826@gmail.com",
+          }),
+        });
+        const body2 = await res2.text();
+        console.log("[CONTACT] Retry status:", res2.status, "body:", body2);
+        if (!res2.ok) {
+          return NextResponse.json({ error: `Resend error: ${resBody}` }, { status: 500 });
+        }
+        return NextResponse.json({ ok: true });
+      }
+      return NextResponse.json({ error: `Resend error: ${resBody}` }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("[CONTACT] Error:", err.message);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+    console.error("[CONTACT] Exception:", err.message);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

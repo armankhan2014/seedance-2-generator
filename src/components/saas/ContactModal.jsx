@@ -4,22 +4,27 @@ import { useState } from "react";
 export default function ContactModal({ onClose }) {
   const [form, setForm] = useState({ firstName: "", lastName: "", message: "" });
   const [status, setStatus] = useState("idle"); // idle | sending | success | error
+  const [errorMsg, setErrorMsg] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setStatus("sending");
+    setErrorMsg("");
     try {
       const res = await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
+      const data = await res.json();
       if (res.ok) {
         setStatus("success");
       } else {
+        setErrorMsg(data?.error || "Unknown error");
         setStatus("error");
       }
-    } catch {
+    } catch (err) {
+      setErrorMsg(err.message);
       setStatus("error");
     }
   };
@@ -154,8 +159,8 @@ export default function ContactModal({ onClose }) {
             </div>
 
             {status === "error" && (
-              <p style={{ margin: 0, fontSize: "0.8rem", color: "#f87171" }}>
-                Something went wrong. Please try again.
+              <p style={{ margin: 0, fontSize: "0.8rem", color: "#f87171", wordBreak: "break-word" }}>
+                {errorMsg || "Something went wrong. Please try again."}
               </p>
             )}
 
