@@ -253,7 +253,7 @@ export default function PromptBuilder({ onUse, onClose }) {
     }),
     textarea: {
       width: "100%",
-      minHeight: "90px",
+      minHeight: "320px",
       background: "rgba(255,255,255,0.04)",
       border: "1px solid rgba(255,255,255,0.1)",
       borderRadius: "10px",
