@@ -18,30 +18,30 @@ export async function POST(req) {
       return NextResponse.json({ error: "No description provided." }, { status: 400 });
     }
 
-    // ── Try OpenAI ───────────────────────────────────────────────────────────
-    if (process.env.OPENAI_API_KEY) {
-      const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    // ── Try Anthropic Claude ─────────────────────────────────────────────────
+    if (process.env.ANTHROPIC_API_KEY) {
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          "x-api-key": process.env.ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
-          model: "gpt-4o-mini",
-          max_tokens: 200,
-          temperature: 0.85,
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 300,
+          system: SYSTEM,
           messages: [
-            { role: "system", content: SYSTEM },
             { role: "user", content: description.trim() },
           ],
         }),
       });
       const d = await r.json();
-      const prompt = d.choices?.[0]?.message?.content?.trim();
+      const prompt = d.content?.[0]?.text?.trim();
       if (prompt) return NextResponse.json({ prompt });
     }
 
-    // ── Fallback: smart template from keywords ───────────────────────────────
+    // ── Fallback: smart keyword-based template ───────────────────────────────
     const prompt = buildFallbackPrompt(description.trim());
     return NextResponse.json({ prompt });
 
@@ -51,50 +51,44 @@ export async function POST(req) {
   }
 }
 
-// Keyword-based fallback — good enough for most descriptions
 function buildFallbackPrompt(desc) {
   const d = desc.toLowerCase();
 
-  // Detect mood
   const moodMap = [
-    [["epic", "dramatic", "powerful", "intense"],  "epic and cinematic atmosphere"],
-    [["dark", "mysterious", "shadow", "night"],     "dark, mysterious atmosphere"],
-    [["peaceful", "calm", "serene", "gentle"],      "peaceful, serene atmosphere"],
-    [["dreamy", "magical", "ethereal", "fantasy"],  "dreamy, ethereal atmosphere"],
-    [["romantic", "warm", "sunset", "golden"],      "warm, golden-hour atmosphere"],
+    [["epic", "dramatic", "powerful", "intense"],   "epic and cinematic atmosphere"],
+    [["dark", "mysterious", "shadow", "night"],      "dark, mysterious atmosphere"],
+    [["peaceful", "calm", "serene", "gentle"],       "peaceful, serene atmosphere"],
+    [["dreamy", "magical", "ethereal", "fantasy"],   "dreamy, ethereal atmosphere"],
+    [["romantic", "warm", "sunset", "golden"],       "warm, golden-hour atmosphere"],
   ];
   let mood = "cinematic atmosphere";
   for (const [keys, m] of moodMap) {
     if (keys.some(k => d.includes(k))) { mood = m; break; }
   }
 
-  // Detect style hint
   const styleMap = [
-    [["anime", "cartoon", "illustrated"],          "anime style, vibrant colours"],
-    [["realistic", "photorealistic", "real"],       "photorealistic, 8K, hyper-detailed"],
-    [["vintage", "retro", "old"],                   "vintage 35mm film aesthetic"],
-    [["neon", "cyber", "futuristic", "sci-fi"],     "neon cyberpunk aesthetic"],
-    [["painting", "art", "impressionist"],          "painterly impressionist style"],
+    [["anime", "cartoon", "illustrated"],            "anime style, vibrant colours"],
+    [["realistic", "photorealistic", "real"],        "photorealistic, 8K, hyper-detailed"],
+    [["vintage", "retro", "old"],                    "vintage 35mm film aesthetic"],
+    [["neon", "cyber", "futuristic", "sci-fi"],      "neon cyberpunk aesthetic"],
+    [["painting", "art", "impressionist"],           "painterly impressionist style"],
   ];
   let style = "cinematic film look, 35mm grain";
   for (const [keys, s] of styleMap) {
     if (keys.some(k => d.includes(k))) { style = s; break; }
   }
 
-  // Detect camera hint
   const camMap = [
-    [["close", "face", "portrait"],              "extreme close-up shot"],
-    [["wide", "landscape", "vast", "panorama"],  "sweeping wide establishing shot"],
-    [["drone", "aerial", "above", "bird"],       "cinematic drone aerial shot"],
-    [["slow", "motion"],                         "slow motion, 240fps"],
+    [["close", "face", "portrait"],                 "extreme close-up shot"],
+    [["wide", "landscape", "vast", "panorama"],     "sweeping wide establishing shot"],
+    [["drone", "aerial", "above", "bird"],          "cinematic drone aerial shot"],
+    [["slow", "motion"],                            "slow motion, 240fps"],
   ];
   let camera = "smooth tracking shot";
   for (const [keys, c] of camMap) {
     if (keys.some(k => d.includes(k))) { camera = c; break; }
   }
 
-  // Capitalise first letter of description
   const cleanDesc = desc.charAt(0).toUpperCase() + desc.slice(1).replace(/[.!?]+$/, "");
-
   return `${cleanDesc}, ${camera}, ${mood}, ${style}.`;
 }
