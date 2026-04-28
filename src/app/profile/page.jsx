@@ -50,12 +50,15 @@ export default function ProfilePage() {
   const elapsed = useLiveSince(profile?.createdAt);
 
   const fetchProfile = () => {
-    fetch("/api/user/profile")
+    // cache: "no-store" ensures we always get fresh data from the server,
+    // never a stale cached version — critical for the profile image to persist
+    fetch("/api/user/profile", { cache: "no-store" })
       .then(r => r.json())
       .then(data => {
         setProfile(data);
-        // Prefer DB image (could be custom base64) over session image (Google OAuth URL)
-        const img = data.image?.startsWith("data:image/") ? data.image
+        // Prefer custom base64 image over Google OAuth URL
+        const img = data.image?.startsWith("data:image/")
+          ? data.image
           : data.image || session?.user?.image || null;
         setImageUrl(img);
         setLoading(false);
@@ -116,7 +119,7 @@ export default function ProfilePage() {
       } else {
         setUploadError(data.error || "Upload failed — please try a smaller image.");
       }
-    } catch (err) {
+    } catch {
       setUploadError("Upload failed — please try again.");
     } finally {
       setUploading(false);
