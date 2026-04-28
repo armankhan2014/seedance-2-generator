@@ -64,6 +64,25 @@ export default function ProfilePage() {
     }
   }, [status]);
 
+  const compressImage = (file) => new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const MAX = 400;
+      let { width, height } = img;
+      if (width > height) { if (width > MAX) { height = Math.round(height * MAX / width); width = MAX; } }
+      else { if (height > MAX) { width = Math.round(width * MAX / height); height = MAX; } }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL("image/jpeg", 0.75));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -75,29 +94,25 @@ export default function ProfilePage() {
     setUploading(true);
     setUploadError("");
 
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const base64 = ev.target.result;
-      try {
-        const res = await fetch("/api/user/update-image", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image: base64 }),
-        });
-        const data = await res.json();
-        if (res.ok) {
-          setImageUrl(data.image);
-          await updateSession({ image: data.image });
-        } else {
-          setUploadError(data.error || "Upload failed.");
-        }
-      } catch {
-        setUploadError("Upload failed. Please try again.");
-      } finally {
-        setUploading(false);
+    try {
+      const compressed = await compressImage(file);
+      const res = await fetch("/api/user/update-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: compressed }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setImageUrl(data.image);
+        await updateSession({ image: data.image });
+      } else {
+        setUploadError(data.error || "Upload failed.");
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      setUploadError("Upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+    }
   };
 
   if (status === "loading" || loading) {

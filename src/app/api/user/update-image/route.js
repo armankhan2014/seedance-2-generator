@@ -15,9 +15,9 @@ export async function POST(req) {
     return NextResponse.json({ error: "Invalid image format" }, { status: 400 });
   }
 
-  // ~500KB limit (base64 ~700KB string)
-  if (image.length > 800000) {
-    return NextResponse.json({ error: "Image too large — please use an image under 500KB." }, { status: 400 });
+  // ~200KB limit after client compression (400x400 JPEG ~20-50KB base64)
+  if (image.length > 300000) {
+    return NextResponse.json({ error: "Image too large after compression." }, { status: 400 });
   }
 
   const user = await prisma.user.update({
