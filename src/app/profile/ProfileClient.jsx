@@ -48,14 +48,6 @@ export default function ProfilePage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadStatus, setUploadStatus] = useState("");
-    } catch (err) {
-      setUploadStatus(`Ã¢ÂÂ Network error: ${err.message}`);
-      setUploadError("Network error: " + err.message);
-      toast.error("Network error: " + err.message);
-    } finally {
-      setUploading(false);
-    }
-  };
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
