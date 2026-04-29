@@ -48,6 +48,7 @@ export default function ProfilePage() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [uploadStatus, setUploadStatus] = useState("");
+  const fileRef = useRef(null);
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
