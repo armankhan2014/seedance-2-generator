@@ -43,7 +43,7 @@ function useLiveSince(dateStr) {
 export default function ProfilePage() {
   const { data: session, status } = useSession();
   const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [imageUrl, setImageUrl] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -134,7 +134,7 @@ export default function ProfilePage() {
   if (status === "loading" || loading) {
     return (
       <div style={{ minHeight: "100vh", background: "#0a0a0a", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <div style={{ color: "#64748b", fontFamily: "Inter,sans-serif", fontSize: "0.9rem" }}>LoadingÃ¢ÂÂ¦</div>
+        <div style={{ color: "#64748b", fontFamily: "Inter,sans-serif", fontSize: "0.9rem" }}>Loading...</div>
       </div>
     );
   }
