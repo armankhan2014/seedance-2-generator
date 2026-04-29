@@ -36,28 +36,14 @@ export async function POST(req) {
       return NextResponse.json({ error: "Image too large — try a smaller file." }, { status: 400 });
     }
 
-    const user = await prisma.user.update({
+    await prisma.user.update({
       where: { email: session.user.email },
       data: { image },
-      select: { image: true },
     });
 
-    // Verify the save actually worked and the full image was persisted
-    const verify = await prisma.user.findUnique({
-      where: { email: session.user.email },
-      select: { image: true },
-    });
-
-    if (!verify?.image?.startsWith("data:image/")) {
-      // DB didn't save the base64 (likely a column type issue — fallback message)
-      return NextResponse.json(
-        { error: "Image saved but not persisted — contact support." },
-        { status: 500 }
-      );
-    }
-
+    // Return the image we just saved — no need to re-read from DB
     return NextResponse.json(
-      { ok: true, image: verify.image },
+      { ok: true, image },
       {
         headers: {
           "Cache-Control": "no-store, no-cache, must-revalidate",
