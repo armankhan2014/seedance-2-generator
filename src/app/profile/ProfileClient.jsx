@@ -76,29 +76,54 @@ export default function ProfilePage() {
   }, [status]);
 
   const compressImage = (file) => new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const MAX = 300;
-      let { width, height } = img;
-      if (width > height) { if (width > MAX) { height = Math.round(height * MAX / width); width = MAX; } }
-      else { if (height > MAX) { width = Math.round(width * MAX / height); height = MAX; } }
-      const canvas = document.createElement("canvas");
-      canvas.width = width;
-      canvas.height = height;
-      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-      URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL("image/jpeg", 0.6));
+    // Use FileReader (more reliable than Object URLs for all image formats)
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Could not read file. Please try a JPEG or PNG."));
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Could not decode image. Please use a JPEG or PNG file."));
+      img.onload = () => {
+        const MAX = 400;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+          else { width = Math.round(width * MAX / height); height = MAX; }
+        }
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", 0.8));
+        } catch (canvasErr) {
+          reject(new Error("Could not process image. Please try a different file."));
+        }
+      };
+      img.src = ev.target.result;
     };
-    img.onerror = reject;
-    img.src = url;
+    reader.readAsDataURL(file);
   });
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setUploadError("Please select an image file.");
+
+    // Detect HEIC/HEIF (iPhone default — not supported in most browsers)
+    const name = file.name?.toLowerCase() || "";
+    const isHeic = file.type === "image/heic" || file.type === "image/heif" ||
+                   name.endsWith(".heic") || name.endsWith(".heif");
+    if (isHeic) {
+      setUploadError("HEIC photos aren't supported. Please convert to JPEG or PNG first (iPhone: share → save as JPEG).");
+      return;
+    }
+
+    if (file.type && !file.type.startsWith("image/")) {
+      setUploadError("Please select an image file (JPEG, PNG, WebP, etc.).");
+      return;
+    }
+
+    if (file.size > 20 * 1024 * 1024) {
+      setUploadError("File too large. Please pick an image under 20MB.");
       return;
     }
 
