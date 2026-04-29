@@ -169,8 +169,9 @@ export default function Home() {
         method: "POST",
         body: formData,
       });
-      if (!res.ok) throw new Error("Upload failed.");
-      const data = await res.json();
+      let data = {};
+      try { data = await res.json(); } catch {}
+      if (!res.ok) throw new Error(data.error || `Upload failed (HTTP ${res.status})`);
       // Handle both response formats: data.url or data.data?.url
       const uploadedUrl = data.url || data.data?.url;
       if (uploadedUrl) {
@@ -179,12 +180,15 @@ export default function Home() {
           prev.map((u) => (u === localUrl ? uploadedUrl : u))
         );
         toast.success("Image uploaded");
+      } else {
+        throw new Error("No URL returned from upload service");
       }
     } catch (err) {
       // Remove the local preview on failure and show error
       setImagesList((prev) => prev.filter((u) => u !== localUrl));
-      setError("Upload failed. Please try again.");
-      toast.error("Image upload failed. Please try again.");
+      const msg = err?.message || "Upload failed. Please try again.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -204,13 +208,16 @@ export default function Home() {
         method: "POST",
         body: formData,
       });
-      if (!res.ok) throw new Error("Video upload failed.");
-      const data = await res.json();
+      let data = {};
+      try { data = await res.json(); } catch {}
+      if (!res.ok) throw new Error(data.error || `Video upload failed (HTTP ${res.status})`);
       const uploadedUrl = data.url || data.data?.url;
       if (uploadedUrl) { setVideoFiles([...videoFiles, uploadedUrl]); toast.success("Video reference added"); }
+      else throw new Error("No URL returned from upload service");
     } catch (err) {
-      setError("Video upload failed.");
-      toast.error("Video upload failed.");
+      const msg = err?.message || "Video upload failed.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setIsUploadingVideo(false);
       if (videoInputRef.current) videoInputRef.current.value = "";
@@ -230,13 +237,16 @@ export default function Home() {
         method: "POST",
         body: formData,
       });
-      if (!res.ok) throw new Error("Audio upload failed.");
-      const data = await res.json();
+      let data = {};
+      try { data = await res.json(); } catch {}
+      if (!res.ok) throw new Error(data.error || `Audio upload failed (HTTP ${res.status})`);
       const uploadedUrl = data.url || data.data?.url;
       if (uploadedUrl) { setAudioFiles([...audioFiles, uploadedUrl]); toast.success("Audio reference added"); }
+      else throw new Error("No URL returned from upload service");
     } catch (err) {
-      setError("Audio upload failed.");
-      toast.error("Audio upload failed.");
+      const msg = err?.message || "Audio upload failed.";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setIsUploadingAudio(false);
       if (audioInputRef.current) audioInputRef.current.value = "";
