@@ -17,7 +17,7 @@ export async function GET(request) {
       prisma.user.aggregate({ _sum: { credits: true } }),
       prisma.creation.count(),
       prisma.creation.count({ where: { status: 'completed' } }),
-      prisma.user.findMany({ select: { id: true, name: true, email: true, credits: true, createdAt: false }, orderBy: { id: 'asc' } }),
+      prisma.user.findMany({ select: { id: true, name: true, email: true, credits: true }, orderBy: { id: 'asc' } }),
     ]);
 
     return NextResponse.json({
