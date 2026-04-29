@@ -47,6 +47,7 @@ export default function ProfilePage() {
   const [imageUrl, setImageUrl] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
+  const [uploadStatus, setUploadStatus] = useState("");
   const fileRef = useRef(null);
   const elapsed = useLiveSince(profile?.createdAt);
 
@@ -75,72 +76,120 @@ export default function ProfilePage() {
     }
   }, [status]);
 
-  const handleFileChange = (e) => {
+  // Hardcoded 1×1 white pixel JPEG for connection testing
+  const TEST_IMG = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAMCAgMCAgMDAwMEAwMEBQgFBQQEBQoHBwYIDAoMCwsKCwsNCxAQDQ4RDgsLEBYQERMUFRUVDA8XGBYUGBIUFRQBAgMEBQQGBwYHCwgHCAkLDQsKCg0QDA0ODQ4RCwsKCxEMDA8QEA8MCwsLDA8TDg8PDxAODg4QDhIQEBAQEhESERD/wAARCAABAAEDASIAAhEBAxEB/8QAFAABAAAAAAAAAAAAAAAAAAAACP/EABQQAQAAAAAAAAAAAAAAAAAAAAD/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AJQAB/9k=";
+
+  const testApiConnection = async () => {
+    setUploading(true);
+    setUploadError("");
+    setUploadStatus("🔌 Testing API connection...");
+    try {
+      const res = await fetch("/api/user/update-image", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: TEST_IMG }),
+      });
+      let data = {};
+      try { data = await res.json(); } catch {}
+      if (res.ok) {
+        setUploadStatus("✅ API works! Now try uploading a real photo.");
+        toast.success("Connection test passed!");
+      } else {
+        const msg = data.error || `HTTP ${res.status}`;
+        setUploadStatus(`❌ API error: ${msg}`);
+        setUploadError(msg);
+        toast.error("Test failed: " + msg);
+      }
+    } catch (err) {
+      setUploadStatus(`❌ Network error: ${err.message}`);
+      setUploadError("Network error: " + err.message);
+      toast.error("Network error: " + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setUploading(true);
     setUploadError("");
+    setUploadStatus(`📂 Reading ${file.name}…`);
 
-    // Step 1: read file with FileReader (reliable cross-browser)
-    const reader = new FileReader();
-    reader.onerror = () => {
+    try {
+      // Step 1: Read file into data URL
+      const rawDataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("Could not read file — try a JPEG or PNG"));
+        reader.onload = (ev) => resolve(ev.target.result);
+        reader.readAsDataURL(file);
+      });
+
+      setUploadStatus("🖼 Resizing image…");
+
+      // Step 2: Compress via canvas (max 250×250, JPEG 0.72)
+      const compressed = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onerror = () => reject(new Error("Could not decode image — try a different file"));
+        img.onload = () => {
+          try {
+            const MAX = 250;
+            let { width, height } = img;
+            if (width > MAX || height > MAX) {
+              if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+              else { width = Math.round(width * MAX / height); height = MAX; }
+            }
+            const canvas = document.createElement("canvas");
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) throw new Error("Canvas not available in this browser");
+            ctx.drawImage(img, 0, 0, width, height);
+            const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
+            if (!dataUrl || dataUrl === "data:,") throw new Error("Canvas output is empty — try a different image");
+            resolve(dataUrl);
+          } catch (canvasErr) {
+            reject(canvasErr);
+          }
+        };
+        img.src = rawDataUrl;
+      });
+
+      const kbSize = (compressed.length / 1024).toFixed(0);
+      setUploadStatus(`📤 Uploading (${kbSize} KB)…`);
+
+      // Step 3: POST to API
+      const res = await fetch("/api/user/update-image", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: compressed }),
+      });
+
+      let data = {};
+      try { data = await res.json(); } catch {}
+
+      if (res.ok) {
+        setImageUrl(compressed);
+        setUploadStatus("✅ Photo updated!");
+        toast.success("Profile photo updated!");
+        setTimeout(() => setUploadStatus(""), 3000);
+      } else {
+        const msg = data.error || `Server error (HTTP ${res.status})`;
+        setUploadStatus(`❌ ${msg}`);
+        setUploadError(msg);
+        toast.error(msg);
+      }
+    } catch (err) {
+      const msg = err?.message || "Upload error — please try again";
+      setUploadStatus(`❌ ${msg}`);
+      setUploadError(msg);
+      toast.error(msg);
+    } finally {
       setUploading(false);
-      setUploadError("Could not read file — try a JPEG or PNG.");
-      toast.error("Could not read file.");
-    };
-    reader.onload = (ev) => {
-      const rawDataUrl = ev.target.result;
-
-      // Step 2: compress to max 300×300 JPEG using canvas
-      const img = new Image();
-      img.onerror = () => {
-        setUploading(false);
-        setUploadError("Could not decode image — try a different file.");
-        toast.error("Could not decode image.");
-      };
-      img.onload = async () => {
-        try {
-          const MAX = 300;
-          let { width, height } = img;
-          if (width > MAX || height > MAX) {
-            if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
-            else { width = Math.round(width * MAX / height); height = MAX; }
-          }
-          const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = height;
-          canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-          const compressed = canvas.toDataURL("image/jpeg", 0.75); // ~20-50 KB
-
-          // Step 3: upload compressed image
-          const res = await fetch("/api/user/update-image", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ image: compressed }),
-          });
-
-          let data = {};
-          try { data = await res.json(); } catch { /* non-JSON */ }
-
-          if (res.ok) {
-            setImageUrl(compressed);
-            toast.success("Profile photo updated!");
-          } else {
-            const msg = data.error || `Upload failed (HTTP ${res.status})`;
-            setUploadError(msg);
-            toast.error(msg);
-          }
-        } catch (err) {
-          setUploadError(err?.message || "Upload error — please try again.");
-          toast.error(err?.message || "Upload error — please try again.");
-        } finally {
-          setUploading(false);
-        }
-      };
-      img.src = rawDataUrl; // load from data URL — much more reliable than blob URL
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
   if (status === "loading" || loading) {
@@ -237,12 +286,31 @@ export default function ProfilePage() {
             <div>
               <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700, color: "#fff" }}>{name}</h1>
               <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "#64748b" }}>{email}</p>
+              {/* Step-by-step upload status */}
+              {uploadStatus && !uploadError && (
+                <p style={{ margin: "6px 0 0", fontSize: "0.75rem", color: uploadStatus.startsWith("✅") ? "#4ade80" : "#a78bfa" }}>{uploadStatus}</p>
+              )}
               {uploadError && (
                 <p style={{ margin: "6px 0 0", fontSize: "0.75rem", color: "#f87171" }}>{uploadError}</p>
               )}
-              {uploading && (
-                <p style={{ margin: "6px 0 0", fontSize: "0.75rem", color: "#a78bfa" }}>Uploading…</p>
-              )}
+              {/* Test connection button — helps diagnose upload issues */}
+              <button
+                onClick={testApiConnection}
+                disabled={uploading}
+                style={{
+                  marginTop: "8px",
+                  background: "transparent",
+                  border: "1px solid rgba(139,92,246,0.35)",
+                  borderRadius: "6px",
+                  color: "#a78bfa",
+                  padding: "4px 10px",
+                  fontSize: "0.7rem",
+                  cursor: uploading ? "not-allowed" : "pointer",
+                  fontFamily: "inherit",
+                  opacity: uploading ? 0.5 : 1,
+                }}>
+                🔧 Test connection
+              </button>
             </div>
           </div>
 
