@@ -440,17 +440,17 @@ export default function Home() {
                   </button>
                 </div>
                 <span className={`text-[10px] font-medium tabular-nums transition-colors ${
-                  prompt.length >= 19000 ? "text-red-400" :
-                  prompt.length >= 17000 ? "text-amber-400" :
+                  prompt.trim().split(/\s+/).filter(Boolean).length >= 18000 ? "text-red-400" :
+                  prompt.trim().split(/\s+/).filter(Boolean).length >= 15000 ? "text-amber-400" :
                   "text-muted"
                 }`}>
-                  {prompt.length} / 20000
+                  {prompt.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} / 20,000 words
                 </span>
               </div>
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                maxLength={20000}
+                
                 placeholder={
                   mode === "reference-to-video"
                     ? "Use @image1, @video1, @audio1 to reference your files... \nExample: @video1 in the style of @image1 with @audio1"
