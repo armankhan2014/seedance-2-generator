@@ -47,9 +47,7 @@ export async function GET() {
         email: true,
         image: true,
         credits: true,
-        createdAt: true,
-        // emailVerified is always set by NextAuth on first Google sign-in —
-        // used as a reliable join-date fallback when createdAt is null.
+        // createdAt doesn't exist on User model — emailVerified is used as join date
         emailVerified: true,
       },
     });
@@ -83,7 +81,7 @@ export async function GET() {
     }, 0);
 
     // Resolve the best available join date — explicitly toISOString() for safe serialization
-    const joinDate = user.createdAt ?? user.emailVerified ?? null;
+    const joinDate = user.emailVerified ?? null;
 
     return NextResponse.json(
       {
