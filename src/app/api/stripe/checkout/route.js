@@ -4,13 +4,13 @@ import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2023-10-16" });
 
-const CREDITS_PER_DOLLAR = 300;
+const CREDITS_PER_DOLLAR = 80;
 
-// Fixed plans
+// Fixed plans — rate: 100 credits = $1.25 (125 cents)
 const PLANS = {
-  starter: { name: "Starter Manifest", credits: 3000,  amount: 1000,  currency: "usd" },
-  power:   { name: "Power Engine",     credits: 7000,  amount: 3500,  currency: "usd" },
-  quantum: { name: "Quantum Flow",     credits: 24000, amount: 12000, currency: "usd" }
+  starter: { name: "Starter Manifest", credits: 3000,  amount: 3750,  currency: "usd" },
+  power:   { name: "Power Engine",     credits: 7000,  amount: 8750,  currency: "usd" },
+  quantum: { name: "Quantum Flow",     credits: 24000, amount: 30000, currency: "usd" }
 };
 
 export async function POST(req) {
@@ -24,9 +24,8 @@ export async function POST(req) {
     const { plan, amount: customDollars } = body;
 
     let planData;
-
     if (plan === "custom") {
-      // Custom amount: minimum $1, 300 credits per dollar
+      // Custom amount: minimum $1, 80 credits per dollar (100 credits = $1.25)
       const dollars = parseInt(customDollars);
       if (!dollars || dollars < 1) {
         return NextResponse.json({ error: "Minimum custom amount is $1" }, { status: 400 });
@@ -35,7 +34,7 @@ export async function POST(req) {
       planData = {
         name: `Custom — ${credits.toLocaleString()} Credits`,
         credits,
-        amount: dollars * 100, // Stripe uses cents
+        amount: dollars * 100,
         currency: "usd",
       };
     } else {
@@ -46,7 +45,6 @@ export async function POST(req) {
     }
 
     const baseUrl = process.env.NEXTAUTH_URL || "https://seedance.visualseffect.com";
-
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: "payment",
       payment_method_types: ["card"],
@@ -68,11 +66,10 @@ export async function POST(req) {
         plan: plan
       },
       success_url: baseUrl + "/pricing?success=true&credits=" + planData.credits,
-      cancel_url: baseUrl + "/pricing?cancelled=true"
+      cancel_url:  baseUrl + "/pricing?cancelled=true"
     });
 
     return NextResponse.json({ url: checkoutSession.url });
-
   } catch (error) {
     console.error("Stripe checkout error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
