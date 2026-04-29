@@ -204,7 +204,8 @@ export default function CreationsPage() {
                 >
                   {item.status === "completed" ? (
                     <video
-                      src={item.imageUrl}
+                       src={item.videoFiles?.[0]}
+                       poster={item.imageUrl}
                       className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                       muted
                       autoPlay
