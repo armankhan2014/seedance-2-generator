@@ -57,23 +57,23 @@ export default function ProfilePage() {
 
     setUploading(true);
     setUploadError("");
-    setUploadStatus(`Ã°ÂÂÂ Reading ${file.name}Ã¢ÂÂ¦`);
+    setUploadStatus(`= Reading ${file.name}&`);
 
     try {
       // Step 1: Read file into data URL
       const rawDataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onerror = () => reject(new Error("Could not read file Ã¢ÂÂ try a JPEG or PNG"));
+        reader.onerror = () => reject(new Error("Could not read file  try a JPEG or PNG"));
         reader.onload = (ev) => resolve(ev.target.result);
         reader.readAsDataURL(file);
       });
 
-      setUploadStatus("Ã°ÂÂÂ¼ Resizing imageÃ¢ÂÂ¦");
+      setUploadStatus("= Resizing image&");
 
-      // Step 2: Compress via canvas (max 250ÃÂ250, JPEG 0.72)
+      // Step 2: Compress via canvas (max 250×250, JPEG 0.72)
       const compressed = await new Promise((resolve, reject) => {
         const img = new Image();
-        img.onerror = () => reject(new Error("Could not decode image Ã¢ÂÂ try a different file"));
+        img.onerror = () => reject(new Error("Could not decode image  try a different file"));
         img.onload = () => {
           try {
             const MAX = 250;
@@ -89,7 +89,7 @@ export default function ProfilePage() {
             if (!ctx) throw new Error("Canvas not available in this browser");
             ctx.drawImage(img, 0, 0, width, height);
             const dataUrl = canvas.toDataURL("image/jpeg", 0.72);
-            if (!dataUrl || dataUrl === "data:,") throw new Error("Canvas output is empty Ã¢ÂÂ try a different image");
+            if (!dataUrl || dataUrl === "data:,") throw new Error("Canvas output is empty  try a different image");
             resolve(dataUrl);
           } catch (canvasErr) {
             reject(canvasErr);
@@ -99,7 +99,7 @@ export default function ProfilePage() {
       });
 
       const kbSize = (compressed.length / 1024).toFixed(0);
-      setUploadStatus(`Ã°ÂÂÂ¤ Uploading (${kbSize} KB)Ã¢ÂÂ¦`);
+      setUploadStatus(`= Uploading (${kbSize} KB)&`);
 
       // Step 3: POST to API
       const res = await fetch("/api/user/update-image", {
@@ -114,18 +114,18 @@ export default function ProfilePage() {
 
       if (res.ok) {
         setImageUrl(compressed);
-        setUploadStatus("Ã¢ÂÂ Photo updated!");
+        setUploadStatus(" Photo updated!");
         toast.success("Profile photo updated!");
         setTimeout(() => setUploadStatus(""), 3000);
       } else {
         const msg = data.error || `Server error (HTTP ${res.status})`;
-        setUploadStatus(`Ã¢ÂÂ ${msg}`);
+        setUploadStatus(`L ${msg}`);
         setUploadError(msg);
         toast.error(msg);
       }
     } catch (err) {
-      const msg = err?.message || "Upload error Ã¢ÂÂ please try again";
-      setUploadStatus(`Ã¢ÂÂ ${msg}`);
+      const msg = err?.message || "Upload error  please try again";
+      setUploadStatus(`L ${msg}`);
       setUploadError(msg);
       toast.error(msg);
     } finally {
@@ -146,7 +146,7 @@ export default function ProfilePage() {
       <div style={{ minHeight: "100vh", background: "#0a0a0a", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter,sans-serif" }}>
         <div style={{ textAlign: "center" }}>
           <p style={{ color: "#64748b", marginBottom: "16px" }}>You need to be signed in to view your profile.</p>
-          <Link href="/" style={{ color: "#a78bfa", textDecoration: "none", fontWeight: 600 }}>Ã¢ÂÂ Back to home</Link>
+          <Link href="/" style={{ color: "#a78bfa", textDecoration: "none", fontWeight: 600 }}>← Back to home</Link>
         </div>
       </div>
     );
@@ -158,7 +158,7 @@ export default function ProfilePage() {
   const initials = name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
   const joinDate = profile?.createdAt
     ? new Date(profile.createdAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
-    : "Ã¢ÂÂ";
+    : "";
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a0a", fontFamily: "Inter,sans-serif", padding: "40px 16px" }}>
@@ -166,7 +166,7 @@ export default function ProfilePage() {
 
         {/* Back link */}
         <Link href="/" style={{ color: "#64748b", textDecoration: "none", fontSize: "0.85rem", display: "inline-flex", alignItems: "center", gap: "6px", marginBottom: "32px" }}>
-          Ã¢ÂÂ Back to Generate
+          ← Back to Generate
         </Link>
 
         {/* Profile card */}
@@ -213,7 +213,7 @@ export default function ProfilePage() {
                   cursor: uploading ? "wait" : "pointer",
                   fontSize: "0.7rem",
                 }}>
-                {uploading ? "Ã¢ÂÂ¦" : "Ã°ÂÂÂ·"}
+                {uploading ? "&" : "="}
               </button>
               <input
                 ref={fileRef}
@@ -229,42 +229,42 @@ export default function ProfilePage() {
               <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "#64748b" }}>{email}</p>
               {/* Step-by-step upload status */}
               {uploadStatus && !uploadError && (
-                <p style={{ margin: "6px 0 0", fontSize: "0.75rem", color: uploadStatus.startsWith("Ã¢ÂÂ") ? "#4ade80" : "#a78bfa" }}>{uploadStatus}</p>
+                <p style={{ margin: "6px 0 0", fontSize: "0.75rem", color: uploadStatus.startsWith("") ? "#4ade80" : "#a78bfa" }}>{uploadStatus}</p>
               )}
               {uploadError && (
                 <p style={{ margin: "6px 0 0", fontSize: "0.75rem", color: "#f87171" }}>{uploadError}</p>
               )}
-              {/* Test connection button Ã¢ÂÂ helps diagnose upload issues */}
+              {/* Test connection button  helps diagnose upload issues */}
             </div>
           </div>
 
-          {/* Stats grid Ã¢ÂÂ 2ÃÂ2 */}
+          {/* Stats grid  2×2 */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "28px" }}>
             {/* Credits remaining */}
             <div style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)", borderRadius: "12px", padding: "16px" }}>
               <p style={{ margin: 0, fontSize: "0.7rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>Credits</p>
-              <p style={{ margin: 0, fontSize: "1.4rem", fontWeight: 800, color: "#a78bfa" }}>Ã¢ÂÂ¡ {credits.toLocaleString()}</p>
+              <p style={{ margin: 0, fontSize: "1.4rem", fontWeight: 800, color: "#a78bfa" }}>⚡ {credits.toLocaleString()}</p>
             </div>
             {/* Member since */}
             <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "16px" }}>
               <p style={{ margin: 0, fontSize: "0.7rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>Member Since</p>
               <p style={{ margin: 0, fontSize: "0.82rem", fontWeight: 600, color: "#e2e8f0", marginBottom: "4px" }}>{joinDate}</p>
               <p style={{ margin: 0, fontSize: "0.72rem", color: "#a78bfa", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
-                {elapsed ? `Ã°ÂÂÂ ${elapsed}` : ""}
+                {elapsed ? `= ${elapsed}` : ""}
               </p>
             </div>
             {/* Videos generated */}
             <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "16px" }}>
               <p style={{ margin: 0, fontSize: "0.7rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>Videos Generated</p>
               <p style={{ margin: 0, fontSize: "1.4rem", fontWeight: 800, color: "#e2e8f0" }}>
-                Ã°ÂÂÂ¬ {(profile?.videosGenerated ?? 0).toLocaleString()}
+                < {(profile?.videosGenerated ?? 0).toLocaleString()}
               </p>
             </div>
             {/* Total credits spent */}
             <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "16px" }}>
               <p style={{ margin: 0, fontSize: "0.7rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>Credits Spent</p>
               <p style={{ margin: 0, fontSize: "1.4rem", fontWeight: 800, color: "#e2e8f0" }}>
-                Ã¢ÂÂ¡ {(profile?.totalCreditsSpent ?? 0).toLocaleString()}
+                ⚡ {(profile?.totalCreditsSpent ?? 0).toLocaleString()}
               </p>
             </div>
           </div>
@@ -299,7 +299,7 @@ export default function ProfilePage() {
               textAlign: "center",
               display: "block",
             }}>
-              Ã¢ÂÂ¡ Buy Credits
+              ⚡ Buy Credits
             </Link>
             <button
               onClick={() => signOut({ callbackUrl: "/" })}
