@@ -45,9 +45,9 @@ export async function POST(req) {
 
     console.log("[UPDATE-IMAGE] Save successful for:", session.user.email);
 
-    // Return the image we just saved — no need to re-read from DB
+    // Return ok only — don't echo image back (causes large response parse failures)
     return NextResponse.json(
-      { ok: true, image },
+      { ok: true },
       {
         headers: {
           "Cache-Control": "no-store, no-cache, must-revalidate",

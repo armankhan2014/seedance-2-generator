@@ -121,8 +121,8 @@ export default function ProfilePage() {
         let data = {};
         try { data = await res.json(); } catch { /* non-JSON body */ }
 
-        if (res.ok && data.image) {
-          setImageUrl(data.image);
+        if (res.ok) {
+          setImageUrl(dataUrl);  // use local copy — no need to re-parse from server
           toast.success("Profile photo updated!");
         } else {
           const msg = data.error || `Upload failed (HTTP ${res.status}) — please try again.`;
