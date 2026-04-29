@@ -75,88 +75,70 @@ export default function ProfilePage() {
     }
   }, [status]);
 
-  const compressImage = (file) => new Promise((resolve, reject) => {
-    // Use FileReader (more reliable than Object URLs for all image formats)
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Could not read file. Please try a JPEG or PNG."));
-    reader.onload = (ev) => {
-      const img = new Image();
-      img.onerror = () => reject(new Error("Could not decode image. Please use a JPEG or PNG file."));
-      img.onload = () => {
-        const MAX = 400;
-        let { width, height } = img;
-        if (width > MAX || height > MAX) {
-          if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
-          else { width = Math.round(width * MAX / height); height = MAX; }
-        }
-        try {
-          const canvas = document.createElement("canvas");
-          canvas.width = width;
-          canvas.height = height;
-          canvas.getContext("2d").drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL("image/jpeg", 0.8));
-        } catch (canvasErr) {
-          reject(new Error("Could not process image. Please try a different file."));
-        }
-      };
-      img.src = ev.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
-
-  const handleFileChange = async (e) => {
+  const handleFileChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Detect HEIC/HEIF (iPhone default — not supported in most browsers)
-    const name = file.name?.toLowerCase() || "";
-    const isHeic = file.type === "image/heic" || file.type === "image/heif" ||
-                   name.endsWith(".heic") || name.endsWith(".heif");
-    if (isHeic) {
-      setUploadError("HEIC photos aren't supported. Please convert to JPEG or PNG first (iPhone: share → save as JPEG).");
+    // Block HEIC/HEIF (iPhone default — Chrome can't decode these)
+    const fname = file.name?.toLowerCase() || "";
+    if (fname.endsWith(".heic") || fname.endsWith(".heif") ||
+        file.type === "image/heic" || file.type === "image/heif") {
+      setUploadError("iPhone HEIC photos aren\'t supported. In Photos app tap Share → Save as JPEG first.");
       return;
     }
 
-    if (file.type && !file.type.startsWith("image/")) {
-      setUploadError("Please select an image file (JPEG, PNG, WebP, etc.).");
-      return;
-    }
-
-    if (file.size > 20 * 1024 * 1024) {
-      setUploadError("File too large. Please pick an image under 20MB.");
+    // 3 MB hard cap before even reading
+    if (file.size > 3 * 1024 * 1024) {
+      setUploadError("Image too large (max 3 MB). Please resize it first.");
       return;
     }
 
     setUploading(true);
     setUploadError("");
 
-    try {
-      const compressed = await compressImage(file);
-      const res = await fetch("/api/user/update-image", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: compressed }),
-      });
-      let data;
-      try { data = await res.json(); } catch (e) { console.error("[UPLOAD JSON PARSE ERROR]", e); data = {}; }
+    const reader = new FileReader();
 
-      if (res.ok && data.image) {
-        setImageUrl(data.image);
-        toast.success("Profile photo updated");
-      } else {
-        console.error("[UPLOAD API ERROR] status:", res.status, "data:", data);
-        const msg = data.error || `Upload failed (${res.status}) — please try again.`;
+    reader.onerror = () => {
+      setUploading(false);
+      setUploadError("Could not read file — please try a different image.");
+      toast.error("Could not read file.");
+    };
+
+    reader.onload = async (ev) => {
+      try {
+        const dataUrl = ev.target.result; // e.g. "data:image/jpeg;base64,..."
+
+        if (!dataUrl || !dataUrl.startsWith("data:image/")) {
+          throw new Error("File does not appear to be a valid image.");
+        }
+
+        const res = await fetch("/api/user/update-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: dataUrl }),
+        });
+
+        let data = {};
+        try { data = await res.json(); } catch { /* non-JSON body */ }
+
+        if (res.ok && data.image) {
+          setImageUrl(data.image);
+          toast.success("Profile photo updated!");
+        } else {
+          const msg = data.error || `Upload failed (HTTP ${res.status}) — please try again.`;
+          setUploadError(msg);
+          toast.error(msg);
+        }
+      } catch (err) {
+        const msg = err?.message || "Network error — please try again.";
         setUploadError(msg);
         toast.error(msg);
+      } finally {
+        setUploading(false);
       }
-    } catch (err) {
-      console.error("[UPLOAD ERROR]", err);
-      const msg = err?.message || "Upload failed — please try again.";
-      setUploadError(msg);
-      toast.error(msg);
-    } finally {
-      setUploading(false);
-    }
+    };
+
+    reader.readAsDataURL(file);
   };
 
   if (status === "loading" || loading) {

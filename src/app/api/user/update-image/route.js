@@ -31,8 +31,8 @@ export async function POST(req) {
       return NextResponse.json({ error: "Invalid image format" }, { status: 400 });
     }
 
-    // ~375KB limit (base64 overhead ~33%, so 500KB base64 ≈ 375KB original)
-    if (image.length > 500000) {
+    // 3 MB file = ~4 MB base64 — generous limit for profile photos
+    if (image.length > 4000000) {
       return NextResponse.json({ error: "Image too large — try a smaller file." }, { status: 400 });
     }
 
