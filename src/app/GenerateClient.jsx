@@ -22,6 +22,24 @@ import PromptBuilder from "@/components/saas/PromptBuilder";
 
 export const dynamic = "force-dynamic";
 
+const RECENT_IMAGES_KEY = "seedance_recent_images";
+const MAX_RECENT = 12;
+
+function saveRecentImage(url) {
+  try {
+    const existing = JSON.parse(localStorage.getItem(RECENT_IMAGES_KEY) || "[]");
+    const updated = [url, ...existing.filter(u => u !== url)].slice(0, MAX_RECENT);
+    localStorage.setItem(RECENT_IMAGES_KEY, JSON.stringify(updated));
+    return updated;
+  } catch { return []; }
+}
+
+function loadRecentImages() {
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_IMAGES_KEY) || "[]");
+  } catch { return []; }
+}
+
 const ASPECT_RATIOS = [
   { label: "16:9", value: "16:9" },
   { label: "9:16", value: "9:16" },
@@ -120,6 +138,7 @@ export default function Home() {
   const [duration, setDuration] = useState(DURATIONS[0].value);
   const [quality, setQuality] = useState(QUALITIES[0].value);
   const [imagesList, setImagesList] = useState([]); // Max 9 URLs for I2V/Reference
+  const [recentImages, setRecentImages] = useState([]); // Recently uploaded image URLs
   const [videoFiles, setVideoFiles] = useState([]); // Max 3 URLs for Reference
   const [audioFiles, setAudioFiles] = useState([]); // Max 3 URLs for Reference
   const [newImageUrl, setNewImageUrl] = useState("");
@@ -132,6 +151,11 @@ export default function Home() {
   const fileInputRef = useRef(null);
   const videoInputRef = useRef(null);
   const audioInputRef = useRef(null);
+
+  // Load recent images from localStorage on mount
+  useEffect(() => {
+    setRecentImages(loadRecentImages());
+  }, []);
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [resultUrl, setResultUrl] = useState(null);
@@ -179,6 +203,9 @@ export default function Home() {
         setImagesList((prev) =>
           prev.map((u) => (u === localUrl ? uploadedUrl : u))
         );
+        // Save to recent images
+        const updated = saveRecentImage(uploadedUrl);
+        setRecentImages(updated);
         toast.success("Image uploaded");
       } else {
         throw new Error("No URL returned from upload service");
@@ -546,6 +573,45 @@ export default function Home() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Recent images strip */}
+                {recentImages.length > 0 && (
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-medium text-muted uppercase tracking-wider flex items-center gap-1">
+                      <FaSyncAlt className="text-[8px]" /> Recent
+                    </label>
+                    <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
+                      {recentImages.map((url, idx) => {
+                        const alreadyAdded = imagesList.includes(url);
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => {
+                              if (!alreadyAdded && imagesList.length < 9) {
+                                setImagesList(prev => [...prev, url]);
+                              }
+                            }}
+                            disabled={alreadyAdded || imagesList.length >= 9}
+                            title={alreadyAdded ? "Already added" : "Add to images"}
+                            className="relative flex-shrink-0 w-12 h-12 rounded-md overflow-hidden border border-glass-border hover:border-primary-500/60 transition-all group disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            <img src={url} className="w-full h-full object-cover" alt="" />
+                            {!alreadyAdded && (
+                              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <FaPlus className="text-white text-[10px]" />
+                              </div>
+                            )}
+                            {alreadyAdded && (
+                              <div className="absolute inset-0 bg-primary-500/30 flex items-center justify-center">
+                                <span className="text-white text-[10px] font-bold">✓</span>
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
