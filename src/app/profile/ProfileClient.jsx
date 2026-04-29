@@ -113,19 +113,22 @@ export default function ProfilePage() {
         body: JSON.stringify({ image: compressed }),
       });
       let data;
-      try { data = await res.json(); } catch { data = {}; }
+      try { data = await res.json(); } catch (e) { console.error("[UPLOAD JSON PARSE ERROR]", e); data = {}; }
 
       if (res.ok && data.image) {
         setImageUrl(data.image);
         toast.success("Profile photo updated");
       } else {
-        const msg = data.error || "Upload failed — please try a smaller image.";
+        console.error("[UPLOAD API ERROR] status:", res.status, "data:", data);
+        const msg = data.error || `Upload failed (${res.status}) — please try again.`;
         setUploadError(msg);
         toast.error(msg);
       }
-    } catch {
-      setUploadError("Upload failed — please try again.");
-      toast.error("Upload failed — please try again.");
+    } catch (err) {
+      console.error("[UPLOAD ERROR]", err);
+      const msg = err?.message || "Upload failed — please try again.";
+      setUploadError(msg);
+      toast.error(msg);
     } finally {
       setUploading(false);
     }
