@@ -4,12 +4,12 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import toast from "@/lib/toast";
 
-const CREDITS_PER_DOLLAR = 300;
+const CREDITS_PER_DOLLAR = 80;
 
 const PLANS = [
-  { id: "starter", n: "Starter",      c: 3000,  p: 10  },
-  { id: "power",   n: "Power Engine", c: 7000,  p: 35, hot: true },
-  { id: "quantum", n: "Quantum Flow", c: 24000, p: 120 }
+  { id: "starter",  n: "Starter",      c: 3000,  p: 37.50 },
+  { id: "power",    n: "Power Engine", c: 7000,  p: 87.50, hot: true },
+  { id: "quantum",  n: "Quantum Flow", c: 24000, p: 300 }
 ];
 
 export default function PricingClient() {
