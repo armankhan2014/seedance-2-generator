@@ -12,11 +12,12 @@ export async function GET(request) {
   }
 
   try {
-    const [totalUsers, creditsAgg, totalVideos, completedVideos] = await Promise.all([
+    const [totalUsers, creditsAgg, totalVideos, completedVideos, users] = await Promise.all([
       prisma.user.count(),
       prisma.user.aggregate({ _sum: { credits: true } }),
       prisma.creation.count(),
       prisma.creation.count({ where: { status: 'completed' } }),
+      prisma.user.findMany({ select: { id: true, name: true, email: true, credits: true, createdAt: false }, orderBy: { id: 'asc' } }),
     ]);
 
     return NextResponse.json({
@@ -24,6 +25,7 @@ export async function GET(request) {
       totalCreditsHeld: creditsAgg._sum.credits ?? 0,
       totalVideosGenerated: totalVideos,
       completedVideos,
+      users,
       generatedAt: new Date().toISOString(),
     });
   } catch (error) {
