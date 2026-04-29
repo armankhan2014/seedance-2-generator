@@ -79,65 +79,67 @@ export default function ProfilePage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Block HEIC/HEIF (iPhone default — Chrome can't decode these)
-    const fname = file.name?.toLowerCase() || "";
-    if (fname.endsWith(".heic") || fname.endsWith(".heif") ||
-        file.type === "image/heic" || file.type === "image/heif") {
-      setUploadError("iPhone HEIC photos aren\'t supported. In Photos app tap Share → Save as JPEG first.");
-      return;
-    }
-
-    // 3 MB hard cap before even reading
-    if (file.size > 3 * 1024 * 1024) {
-      setUploadError("Image too large (max 3 MB). Please resize it first.");
-      return;
-    }
-
     setUploading(true);
     setUploadError("");
 
+    // Step 1: read file with FileReader (reliable cross-browser)
     const reader = new FileReader();
-
     reader.onerror = () => {
       setUploading(false);
-      setUploadError("Could not read file — please try a different image.");
+      setUploadError("Could not read file — try a JPEG or PNG.");
       toast.error("Could not read file.");
     };
+    reader.onload = (ev) => {
+      const rawDataUrl = ev.target.result;
 
-    reader.onload = async (ev) => {
-      try {
-        const dataUrl = ev.target.result; // e.g. "data:image/jpeg;base64,..."
-
-        if (!dataUrl || !dataUrl.startsWith("data:image/")) {
-          throw new Error("File does not appear to be a valid image.");
-        }
-
-        const res = await fetch("/api/user/update-image", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image: dataUrl }),
-        });
-
-        let data = {};
-        try { data = await res.json(); } catch { /* non-JSON body */ }
-
-        if (res.ok) {
-          setImageUrl(dataUrl);  // use local copy — no need to re-parse from server
-          toast.success("Profile photo updated!");
-        } else {
-          const msg = data.error || `Upload failed (HTTP ${res.status}) — please try again.`;
-          setUploadError(msg);
-          toast.error(msg);
-        }
-      } catch (err) {
-        const msg = err?.message || "Network error — please try again.";
-        setUploadError(msg);
-        toast.error(msg);
-      } finally {
+      // Step 2: compress to max 300×300 JPEG using canvas
+      const img = new Image();
+      img.onerror = () => {
         setUploading(false);
-      }
-    };
+        setUploadError("Could not decode image — try a different file.");
+        toast.error("Could not decode image.");
+      };
+      img.onload = async () => {
+        try {
+          const MAX = 300;
+          let { width, height } = img;
+          if (width > MAX || height > MAX) {
+            if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+            else { width = Math.round(width * MAX / height); height = MAX; }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL("image/jpeg", 0.75); // ~20-50 KB
 
+          // Step 3: upload compressed image
+          const res = await fetch("/api/user/update-image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: compressed }),
+          });
+
+          let data = {};
+          try { data = await res.json(); } catch { /* non-JSON */ }
+
+          if (res.ok) {
+            setImageUrl(compressed);
+            toast.success("Profile photo updated!");
+          } else {
+            const msg = data.error || `Upload failed (HTTP ${res.status})`;
+            setUploadError(msg);
+            toast.error(msg);
+          }
+        } catch (err) {
+          setUploadError(err?.message || "Upload error — please try again.");
+          toast.error(err?.message || "Upload error — please try again.");
+        } finally {
+          setUploading(false);
+        }
+      };
+      img.src = rawDataUrl; // load from data URL — much more reliable than blob URL
+    };
     reader.readAsDataURL(file);
   };
 
