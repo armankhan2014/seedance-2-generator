@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaExpandAlt, FaCalendarAlt } from "react-icons/fa";
@@ -9,6 +9,25 @@ import { downloadMedia } from "@/lib/utils";
 const ADMIN_EMAIL = "armankhan0826@gmail.com";
 
 function GalleryCard({ video, onClick, isAdmin, onToggle, toggling }) {
+  const videoRef = useRef(null);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          el.play().catch(() => {});
+        } else {
+          el.pause();
+        }
+      },
+      { threshold: 0.25 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -17,12 +36,13 @@ function GalleryCard({ video, onClick, isAdmin, onToggle, toggling }) {
       onClick={() => onClick(video)}
     >
       <video
+        ref={videoRef}
         src={video.imageUrl}
         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
         muted
-        autoPlay
         loop
         playsInline
+        preload="metadata"
       />
 
       {/* Hover overlay */}
