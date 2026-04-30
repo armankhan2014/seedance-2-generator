@@ -41,6 +41,7 @@ model User {
   emailVerified DateTime?
   image         String?
   credits       Int        @default(10)
+  verified      Boolean    @default(false)
   accounts      Account[]
   creations     Creation[]
   sessions      Session[]

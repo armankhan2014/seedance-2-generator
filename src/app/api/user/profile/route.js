@@ -47,6 +47,7 @@ export async function GET() {
         email: true,
         image: true,
         credits: true,
+        verified: true,
         // createdAt doesn't exist on User model — emailVerified is used as join date
         emailVerified: true,
       },
@@ -93,6 +94,7 @@ export async function GET() {
         email: user.email,
         image: user.image,
         credits: user.credits,
+        verified: user.verified ?? false,
         createdAt: joinDate ? joinDate.toISOString() : null,
         videosGenerated,
         totalCreditsSpent,

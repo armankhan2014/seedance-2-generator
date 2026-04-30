@@ -24,7 +24,7 @@ export async function POST(req) {
       try {
         await prisma.user.update({
           where: { email },
-          data: { credits: { increment: credits } }
+          data: { credits: { increment: credits }, verified: true }
         });
         console.log("Credits awarded:", credits, "to", email);
       } catch (err) {
