@@ -18,19 +18,22 @@ export default function Navbar() {
   const [liveCredits, setLiveCredits] = useState(null);
   const [liveImage, setLiveImage] = useState(null);
   const [contactOpen, setContactOpen] = useState(false);
+  const [creditsRefreshing, setCreditsRefreshing] = useState(false);
   const dropdownRef = useRef(null);
 
   // Fetch fresh credits AND profile image from DB in one call
   const refreshUserData = async () => {
-    if (!session?.user) return;
+    if (!session?.user) return null;
     try {
       const res = await fetch("/api/user/profile", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (data.credits !== undefined) setLiveCredits(data.credits);
         if (data.image) setLiveImage(data.image);
+        return data.credits;
       }
     } catch (e) {}
+    return null;
   };
 
   // Refresh on mount when logged in
@@ -39,15 +42,27 @@ export default function Navbar() {
   }, [session?.user?.id]);
 
   // Refresh when returning from Stripe (success=true in URL)
+  // Polls up to 15× every 2s (30s total) — stops early once credits have increased
   useEffect(() => {
     if (searchParams?.get("success") === "true" && session?.user) {
+      const baseCredits = session?.user?.credits ?? 0;
       let attempts = 0;
+      setCreditsRefreshing(true);
       const poll = setInterval(async () => {
-        await refreshUserData();
+        const fresh = await refreshUserData();
         attempts++;
-        if (attempts >= 5) clearInterval(poll);
+        // Stop early if credits have gone up from what they were at login time
+        if (fresh !== null && fresh > baseCredits) {
+          clearInterval(poll);
+          setCreditsRefreshing(false);
+          return;
+        }
+        if (attempts >= 15) {
+          clearInterval(poll);
+          setCreditsRefreshing(false);
+        }
       }, 2000);
-      return () => clearInterval(poll);
+      return () => { clearInterval(poll); setCreditsRefreshing(false); };
     }
   }, [searchParams, session?.user?.id]);
 
@@ -161,8 +176,10 @@ export default function Navbar() {
                   fontWeight: 700,
                   fontFamily: "inherit",
                   whiteSpace: "nowrap",
+                  opacity: creditsRefreshing ? 0.6 : 1,
+                  transition: "opacity 0.4s",
                 }}>
-                  ⚡ {displayCredits.toLocaleString()} credits
+                  {creditsRefreshing ? "⏳" : "⚡"} {displayCredits.toLocaleString()} credits
                 </span>
 
                 {/* Avatar dropdown trigger */}
