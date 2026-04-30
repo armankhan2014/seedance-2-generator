@@ -45,6 +45,7 @@ model User {
   accounts      Account[]
   creations     Creation[]
   sessions      Session[]
+  payments      Payment[]
 }
 
 model Creation {
@@ -72,4 +73,15 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+// Tracks fulfilled Stripe checkout sessions — prevents double-crediting
+// when both the webhook and the success-page verify endpoint run.
+model Payment {
+  id              String   @id @default(cuid())
+  stripeSessionId String   @unique
+  userId          String
+  credits         Int
+  createdAt       DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
