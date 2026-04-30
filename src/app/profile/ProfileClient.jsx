@@ -49,7 +49,35 @@ export default function ProfilePage() {
   const [uploadError, setUploadError] = useState("");
   const [uploadStatus, setUploadStatus] = useState("");
   const fileRef = useRef(null);
+  const [connectStatus, setConnectStatus] = useState("");
+  const [connecting, setConnecting] = useState(false);
   const elapsed = useLiveSince(session?.user?.createdAt);
+
+  
+  const handleTestConnect = async () => {
+    setConnecting(true);
+    setConnectStatus("🔄 Testing…");
+    try {
+      const res = await fetch("/api/user/update-image", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: "__ping__" }),
+      });
+      if (res.status === 400 || res.ok) {
+        setConnectStatus("✅ API reachable");
+      } else if (res.status === 401) {
+        setConnectStatus("⚠️ Not authenticated");
+      } else {
+        setConnectStatus(`⚠️ HTTP ${res.status}`);
+      }
+    } catch {
+      setConnectStatus("❌ Network error");
+    } finally {
+      setConnecting(false);
+      setTimeout(() => setConnectStatus(""), 4000);
+    }
+  };
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
@@ -234,7 +262,28 @@ export default function ProfilePage() {
               {uploadError && (
                 <p style={{ margin: "6px 0 0", fontSize: "0.75rem", color: "#f87171" }}>{uploadError}</p>
               )}
-              {/* Test connection button — helps diagnose upload issues */}
+              {/* Test connection */}
+              {connectStatus && (
+                <p style={{ margin: "4px 0 0", fontSize: "0.72rem", color: connectStatus.startsWith("✅") ? "#4ade80" : connectStatus.startsWith("❌") ? "#f87171" : "#fbbf24" }}>{connectStatus}</p>
+              )}
+              <button
+                onClick={handleTestConnect}
+                disabled={connecting}
+                style={{
+                  marginTop: "8px",
+                  background: "transparent",
+                  border: "1px solid rgba(139,92,246,0.4)",
+                  borderRadius: "6px",
+                  color: "#a78bfa",
+                  padding: "4px 10px",
+                  fontSize: "0.72rem",
+                  fontWeight: 600,
+                  cursor: connecting ? "wait" : "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                {connecting ? "Testing…" : "Test Connection"}
+              </button>
             </div>
           </div>
 
