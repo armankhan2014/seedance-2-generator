@@ -30,7 +30,7 @@ export default async function AdminDashboard() {
   });
 
   // Slim user list for the widget dropdown
-  const userList = users.map(u => ({ email: u.email, name: u.name }));
+  const userList = users.map(u => ({ email: u.email, name: u.name, credits: u.credits ?? 0 }));
 
   return (
     <div style={{ minHeight: "100vh", background: "#0f0f1a", color: "#f0f0f0", fontFamily: "system-ui, sans-serif", padding: "32px 24px" }}>
