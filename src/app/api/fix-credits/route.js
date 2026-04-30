@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { revalidateTag } from "next/cache";
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
-  const secret = searchParams.get("secret");
-  const email = searchParams.get("email");
+  const secret  = searchParams.get("secret");
+  const email   = searchParams.get("email");
   const credits = parseInt(searchParams.get("credits") || "3000");
 
   if (secret !== "seedance2024") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-
   if (!email) {
     return NextResponse.json({ error: "Email required" }, { status: 400 });
   }
@@ -25,6 +25,10 @@ export async function GET(request) {
       where: { email },
       data: { credits: { increment: credits } },
     });
+
+    // ── Bust the cache for this user so next request gets fresh data ──
+    revalidateTag(`user-${user.id}`);
+    revalidateTag("credits");
 
     return NextResponse.json({
       success: true,
