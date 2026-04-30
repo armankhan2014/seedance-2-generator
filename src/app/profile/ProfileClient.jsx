@@ -51,7 +51,10 @@ export default function ProfilePage() {
   const fileRef = useRef(null);
   const [connectStatus, setConnectStatus] = useState("");
   const [connecting, setConnecting] = useState(false);
-  const elapsed = useLiveSince(session?.user?.createdAt);
+  const elapsed = useLiveSince(session?.user?.createdAt)
+  const memberSince = profile?.createdAt
+    ? new Date(profile.createdAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    : '';
 
   
   const handleTestConnect = async () => {
@@ -299,7 +302,7 @@ export default function ProfilePage() {
               <p style={{ margin: 0, fontSize: "0.7rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>Member Since</p>
               <p style={{ margin: 0, fontSize: "0.82rem", fontWeight: 600, color: "#e2e8f0", marginBottom: "4px" }}>{joinDate}</p>
               <p style={{ margin: 0, fontSize: "0.72rem", color: "#a78bfa", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
-                {elapsed ? `🕐 ${elapsed}` : ""}
+                {memberSince || "—"}
               </p>
             </div>
             {/* Videos generated */}
