@@ -15,7 +15,7 @@ export default async function AdminDashboard() {
 
   const users = await prisma.user.findMany({
     include: { _count: { select: { creations: true } } },
-    orderBy: { createdAt: "desc" },
+    orderBy: { id: "desc" },
   });
 
   const totalCreations = users.reduce((s, u) => s + u._count.creations, 0);
@@ -68,7 +68,7 @@ export default async function AdminDashboard() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ background: "#12122a" }}>
-                  {["User", "Email", "Credits Left", "Videos Made", "Verified", "Joined"].map(h => (
+                  {["User", "Email", "Credits Left", "Videos Made", "Verified"].map(h => (
                     <th key={h} style={{ padding: "10px 18px", textAlign: "left", color: "#888", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -99,9 +99,6 @@ export default async function AdminDashboard() {
                         ? <span style={{ color: "#fbbf24", fontSize: 16 }}>✅</span>
                         : <span style={{ color: "#444", fontSize: 13 }}>—</span>
                       }
-                    </td>
-                    <td style={{ padding: "12px 18px", color: "#666", fontSize: 12, whiteSpace: "nowrap" }}>
-                      {user.createdAt ? new Date(user.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
                     </td>
                   </tr>
                 ))}
