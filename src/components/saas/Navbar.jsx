@@ -16,6 +16,7 @@ export default function Navbar() {
   // Close mobile menu on route change
   useEffect(() => { setMenuOpen(false); }, [pathname]);
   const [liveCredits, setLiveCredits] = useState(null);
+  const [optimisticCredits, setOptimisticCredits] = useState(null);
   const [liveImage, setLiveImage] = useState(null);
   const [contactOpen, setContactOpen] = useState(false);
   const [creditsRefreshing, setCreditsRefreshing] = useState(false);
@@ -41,20 +42,33 @@ export default function Navbar() {
     if (session?.user) refreshUserData();
   }, [session?.user?.id]);
 
-  // Refresh when returning from Stripe (success=true in URL)
-  // Polls up to 15× every 2s (30s total) — stops early once credits have increased
+  // Instant optimistic display + background confirmation polling
+  // When Stripe redirects back with ?success=true&credits=N:
+  //   1. Immediately show current + purchased (optimistic) — feels instant
+  //   2. Poll DB in background until webhook confirms the real value
+  //   3. Once DB matches or exceeds optimistic, swap to real value & stop polling
   useEffect(() => {
     if (searchParams?.get("success") === "true" && session?.user) {
+      const purchased = parseInt(searchParams.get("credits") || "0");
       const baseCredits = session?.user?.credits ?? 0;
+
+      // Step 1: show optimistic balance right away
+      if (purchased > 0) {
+        setOptimisticCredits(baseCredits + purchased);
+      }
+
+      // Step 2: poll in background to confirm webhook has fired
+      const target = baseCredits + purchased;
       let attempts = 0;
       setCreditsRefreshing(true);
       const poll = setInterval(async () => {
         const fresh = await refreshUserData();
         attempts++;
-        // Stop early if credits have gone up from what they were at login time
-        if (fresh !== null && fresh > baseCredits) {
+        // Stop once DB value reaches expected total (webhook confirmed)
+        if (fresh !== null && fresh >= target) {
           clearInterval(poll);
           setCreditsRefreshing(false);
+          setOptimisticCredits(null); // hand off to liveCredits
           return;
         }
         if (attempts >= 15) {
@@ -77,7 +91,8 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [dropdownOpen]);
 
-  const displayCredits = liveCredits ?? session?.user?.credits ?? 0;
+  // Priority: confirmed DB value → optimistic (post-purchase instant) → stale session
+  const displayCredits = liveCredits ?? optimisticCredits ?? session?.user?.credits ?? 0;
   const displayImage = liveImage || session?.user?.image || null;
 
   const links = [
