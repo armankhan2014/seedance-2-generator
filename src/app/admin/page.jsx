@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
+import AddCreditsWidget from "./AddCreditsWidget";
 
 const OWNER_EMAIL = "armankhan0826@gmail.com";
 
@@ -20,7 +21,7 @@ export default async function AdminDashboard() {
 
   const totalCreations = users.reduce((s, u) => s + u._count.creations, 0);
   const totalCreditsLeft = users.reduce((s, u) => s + (u.credits ?? 0), 0);
-  const totalCreditsUsed = users.reduce((s, u) => s + u._count.creations, 0); // 1 credit = 1 video
+  const totalCreditsUsed = users.reduce((s, u) => s + u._count.creations, 0);
 
   const recentCreations = await prisma.creation.findMany({
     take: 8,
@@ -28,9 +29,11 @@ export default async function AdminDashboard() {
     include: { user: { select: { name: true, email: true } } },
   });
 
+  // Slim user list for the widget dropdown
+  const userList = users.map(u => ({ email: u.email, name: u.name }));
+
   return (
     <div style={{ minHeight: "100vh", background: "#0f0f1a", color: "#f0f0f0", fontFamily: "system-ui, sans-serif", padding: "32px 24px" }}>
-      {/* Header */}
       <div style={{ maxWidth: 1100, margin: "0 auto" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 32 }}>
           <div>
@@ -57,6 +60,9 @@ export default async function AdminDashboard() {
             </div>
           ))}
         </div>
+
+        {/* ── Add Credits Widget ── */}
+        <AddCreditsWidget users={userList} />
 
         {/* Users Table */}
         <div style={{ background: "#1a1a2e", borderRadius: 14, border: "1px solid #2a2a40", marginBottom: 32, overflow: "hidden" }}>
