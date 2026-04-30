@@ -67,6 +67,7 @@ model Creation {
   audioFiles  String[]
   videoFiles  String[]
   inputImages String[]
+  featured    Boolean  @default(false)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])

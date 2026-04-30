@@ -41,6 +41,7 @@ export const getCachedPublicGallery = () =>
         where: {
           userId: owner.id,
           status: "completed",
+          featured: true,
           NOT: [{ imageUrl: null }, { imageUrl: "" }],
         },
         orderBy: { createdAt: "desc" },
