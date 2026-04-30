@@ -67,7 +67,9 @@ export async function GET() {
         videoFiles: true,
         audioFiles: true,
         inputImages: true,
+        createdAt: true,
       },
+      orderBy: { createdAt: 'asc' },
     });
 
     // Videos generated = completed jobs only (user received a video)
@@ -81,7 +83,8 @@ export async function GET() {
     }, 0);
 
     // Resolve the best available join date — explicitly toISOString() for safe serialization
-    const joinDate = user.emailVerified ?? null;
+    const earliestCreation = creations.length > 0 ? creations[0].createdAt : null;
+    const joinDate = user.emailVerified ?? earliestCreation ?? null;
 
     return NextResponse.json(
       {
