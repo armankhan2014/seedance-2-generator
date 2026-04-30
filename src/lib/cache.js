@@ -41,7 +41,6 @@ export const getCachedPublicGallery = () =>
         where: {
           userId: owner.id,
           status: "completed",
-          featured: true,
           NOT: [{ imageUrl: null }, { imageUrl: "" }],
         },
         orderBy: { createdAt: "desc" },
@@ -53,26 +52,6 @@ export const getCachedPublicGallery = () =>
     { tags: ["public-gallery"], revalidate: 60 }
   )();
 
-export const getAdminGalleryAll = () =>
-  unstable_cache(
-    async () => {
-      const OWNER = "armankhan0826@gmail.com";
-      const owner = await prisma.user.findUnique({ where: { email: OWNER } });
-      if (!owner) return [];
-      return prisma.creation.findMany({
-        where: {
-          userId: owner.id,
-          status: "completed",
-          NOT: [{ imageUrl: null }, { imageUrl: "" }],
-        },
-        orderBy: { createdAt: "desc" },
-        take: 48,
-        select: { id: true, imageUrl: true, prompt: true, aspectRatio: true, resolution: true, duration: true, createdAt: true, featured: true },
-      });
-    },
-    ["admin-gallery-all"],
-    { tags: ["public-gallery", "admin-gallery"], revalidate: 30 }
-  )();
 
 /** User creations — cached 30s per user, tag: creations-{id} */
 export const getCachedUserCreations = (userId) =>
