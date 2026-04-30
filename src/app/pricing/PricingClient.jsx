@@ -18,9 +18,11 @@ export default function PricingClient() {
   const [message, setMessage] = useState("");
   const [customDollars, setCustomDollars] = useState("");
   const [liveCredits, setLiveCredits] = useState(null);
+  const [verifying, setVerifying] = useState(false);
   const searchParams = useSearchParams();
   const success = searchParams?.get("success") === "true";
   const successCredits = searchParams?.get("credits");
+  const successSessionId = searchParams?.get("session_id");
 
   // Fetch live credit balance from DB — bypasses stale JWT
   const fetchLiveCredits = async () => {
@@ -29,8 +31,10 @@ export default function PricingClient() {
       if (r.ok) {
         const d = await r.json();
         setLiveCredits(d.credits);
+        return d.credits;
       }
     } catch {}
+    return null;
   };
 
   useEffect(() => {
@@ -38,14 +42,32 @@ export default function PricingClient() {
   }, [session]);
 
   useEffect(() => {
-    if (success && successCredits) {
-      const added = parseInt(successCredits).toLocaleString();
-      setMessage(`✅ Payment successful! ${added} credits added to your account.`);
-      toast.success(`${added} credits added to your account!`);
-      // Re-fetch so the balance shown reflects the just-completed purchase
-      fetchLiveCredits();
+    if (!success || !session) return;
+
+    const purchased = parseInt(successCredits || "0");
+    const added = purchased.toLocaleString();
+    setMessage(`✅ Payment successful! ${added} credits added to your account.`);
+    toast.success(`${added} credits added to your account!`);
+
+    // Immediately show optimistic balance (session credits + purchased)
+    // so the user sees the right number right away
+    const optimistic = (session?.user?.credits ?? 0) + purchased;
+    setLiveCredits(prev => Math.max(prev ?? 0, optimistic));
+
+    if (successSessionId) {
+      // Call verify endpoint — awards credits if webhook hasn't fired yet, idempotent
+      setVerifying(true);
+      fetch(`/api/stripe/verify?session_id=${successSessionId}`, { cache: "no-store" })
+        .then(r => r.json())
+        .then(data => {
+          if (data.credits !== undefined) {
+            setLiveCredits(data.credits);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setVerifying(false));
     }
-  }, []);
+  }, [success, session?.user?.id]);
 
   // Credits the user will get for their custom dollar input
   const customAmount = parseInt(customDollars) || 0;
@@ -84,8 +106,8 @@ export default function PricingClient() {
         )}
 
         {session && liveCredits !== null && (
-          <p style={{ textAlign: "center", color: "#8b5cf6", fontSize: ".85rem", marginBottom: 24, fontWeight: 600 }}>
-            ⚡ Your current balance: {liveCredits.toLocaleString()} credits
+          <p style={{ textAlign: "center", color: "#8b5cf6", fontSize: ".85rem", marginBottom: 24, fontWeight: 600, opacity: verifying ? 0.7 : 1, transition: "opacity 0.3s" }}>
+            {verifying ? "⏳" : "⚡"} Your current balance: {liveCredits.toLocaleString()} credits
           </p>
         )}
 

@@ -66,7 +66,7 @@ export async function POST(req) {
         credits: String(planData.credits),
         plan: plan
       },
-      success_url: baseUrl + "/pricing?success=true&credits=" + planData.credits,
+      success_url: baseUrl + "/pricing?success=true&credits=" + planData.credits + "&session_id={CHECKOUT_SESSION_ID}",
       cancel_url:  baseUrl + "/pricing?cancelled=true"
     });
 

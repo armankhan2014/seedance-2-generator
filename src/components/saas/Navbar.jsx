@@ -91,8 +91,11 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [dropdownOpen]);
 
-  // Priority: confirmed DB value → optimistic (post-purchase instant) → stale session
-  const displayCredits = liveCredits ?? optimisticCredits ?? session?.user?.credits ?? 0;
+  // Priority: when optimistic is set (post-purchase), never show LESS than that amount.
+  // liveCredits only wins once it meets or exceeds optimistic (i.e. webhook confirmed).
+  const displayCredits = optimisticCredits !== null
+    ? Math.max(liveCredits ?? 0, optimisticCredits)
+    : (liveCredits ?? session?.user?.credits ?? 0);
   const displayImage = liveImage || session?.user?.image || null;
 
   const links = [
