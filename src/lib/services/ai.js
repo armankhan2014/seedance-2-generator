@@ -13,14 +13,15 @@ export const AIService = {
     const BASE = { 5: 120, 10: 200, 15: 320 };
     const base = BASE[duration] ?? Math.ceil((duration / 15) * 320);
 
-    // Resolution multiplier
-    const resMult = resolution === "1080p" ? 1.5 : resolution === "480p" ? 0.7 : 1.0;
-    // Quality multiplier
-    const qualMult = quality === "high" ? 1.5 : 1.0;
-    // Mode multiplier
-    const modeMult = mode === "reference-to-video" ? 1.2 : 1.0;
+    // 1080p + high = 450cr for 15s, scales proportionally for other durations
+    let mult = 1.0;
+    if (resolution === "480p") mult = 0.7;
+    else if (resolution === "1080p" && quality === "high") mult = 1.40625;
+    else if (resolution === "1080p") mult = 1.2;
+    else if (quality === "high") mult = 1.15;
+    if (mode === "reference-to-video") mult *= 1.1;
 
-    return Math.ceil(base * resMult * qualMult * modeMult);
+    return Math.ceil(base * mult);
   },
 
   async generate(userId, { mode, prompt, aspect_ratio = "16:9", resolution = "720p", duration = 5, quality = "basic", images_list = [], video_files = [], audio_files = [] }) {
