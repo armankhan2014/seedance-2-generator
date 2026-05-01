@@ -1,7 +1,7 @@
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import GoogleProvider from "next-auth/providers/google";
 import { prisma } from "./prisma";
-import { sendSignupNotification } from "./email";
+import { sendSignupNotification, sendWelcomeEmail } from "./email";
 
 export const authOptions = {
   adapter: PrismaAdapter(prisma),
@@ -25,21 +25,21 @@ export const authOptions = {
     error: "/",
   },
 
-  // ─── Notify Arman whenever a brand-new user signs up ───────────────────────
   events: {
+    /**
+     * Fires once per brand-new user (not on repeat sign-ins).
+     * Sends two emails in parallel:
+     *   1. Admin notification  → armankhan0826@gmail.com
+     *   2. Welcome email       → the new user
+     * Both are fire-and-forget — failures are logged but never throw.
+     */
     async createUser({ user }) {
-      try {
-        await sendSignupNotification({
-          name: user.name,
-          email: user.email,
-          image: user.image,
-        });
-      } catch (err) {
-        console.error("[AUTH_EVENT] createUser notification failed:", err.message);
-      }
+      await Promise.allSettled([
+        sendSignupNotification({ name: user.name, email: user.email, image: user.image }),
+        sendWelcomeEmail({ name: user.name, email: user.email }),
+      ]);
     },
   },
-  // ───────────────────────────────────────────────────────────────────────────
 
   callbacks: {
     async jwt({ token, user }) {
@@ -51,9 +51,7 @@ export const authOptions = {
       if (token.id) {
         try {
           const dbUser = await prisma.user.findUnique({ where: { id: token.id } });
-          if (dbUser) {
-            token.credits = dbUser.credits;
-          }
+          if (dbUser) token.credits = dbUser.credits;
         } catch (e) {
           console.error("JWT credits refresh failed:", e.message);
         }
@@ -79,6 +77,7 @@ export const authOptions = {
       }
       return token;
     },
+
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id;
@@ -87,5 +86,6 @@ export const authOptions = {
       return session;
     },
   },
+
   secret: process.env.NEXTAUTH_SECRET,
 };
