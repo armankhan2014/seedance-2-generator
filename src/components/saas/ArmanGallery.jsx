@@ -7,43 +7,66 @@ import { FiDownload, FiPlus, FiMinus } from "react-icons/fi";
 import { downloadMedia } from "@/lib/utils";
 
 const ADMIN_EMAIL = "armankhan0826@gmail.com";
+// First N cards preload metadata eagerly; the rest defer until in-view
+const EAGER_COUNT = 4;
 
-function GalleryCard({ video, onClick, isAdmin, onToggle, toggling }) {
+function GalleryCard({ video, index, onClick, isAdmin, onToggle, toggling }) {
   const videoRef = useRef(null);
+  const eager = index < EAGER_COUNT;
 
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
+
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
+          // Lazy-load: set src only when card enters view
+          if (!eager && el.getAttribute("data-src") && !el.src) {
+            el.src = el.getAttribute("data-src");
+            el.load();
+          }
           el.play().catch(() => {});
         } else {
           el.pause();
         }
       },
-      { threshold: 0.25 }
+      { threshold: 0.25, rootMargin: "200px" }
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [eager]);
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: Math.min(index * 0.03, 0.3) }}
       className="group relative rounded-xl bg-glass-bg backdrop-blur-3xl border border-glass-border aspect-square cursor-pointer overflow-hidden shadow-sm hover:shadow-md transition-all"
       onClick={() => onClick(video)}
     >
-      <video
-        ref={videoRef}
-        src={video.imageUrl}
-        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-        muted
-        loop
-        playsInline
-        preload="metadata"
-      />
+      {eager ? (
+        <video
+          ref={videoRef}
+          src={video.imageUrl}
+          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+          muted
+          loop
+          playsInline
+          preload="metadata"
+        />
+      ) : (
+        // Non-eager: no src until IntersectionObserver fires
+        <video
+          ref={videoRef}
+          data-src={video.imageUrl}
+          className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+          muted
+          loop
+          playsInline
+          preload="none"
+        />
+      )}
 
       {/* Hover overlay */}
       <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500 p-4 flex flex-col justify-end">
@@ -217,26 +240,30 @@ function VideoModal({ video, onClose }) {
   );
 }
 
-export default function ArmanGallery() {
-  const { data: session } = useSession();
+export default function ArmanGallery({ initialVideos = [] }) {
+  const { data: session, status: sessionStatus } = useSession();
   const isAdmin = session?.user?.email === ADMIN_EMAIL;
 
-  const [videos, setVideos] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Public visitors see initialVideos immediately (server-pre-fetched, no wait)
+  // Admin users re-fetch from the admin endpoint to get toggle controls
+  const [videos, setVideos] = useState(
+    initialVideos.map(v => ({ ...v, featured: true }))
+  );
+  const [adminLoading, setAdminLoading] = useState(false);
   const [selected, setSelected] = useState(null);
-  const [toggling, setToggling] = useState(null); // id of video being toggled
+  const [toggling, setToggling] = useState(null);
 
-  const fetchVideos = useCallback(() => {
-    const url = isAdmin ? "/api/admin/gallery/list" : "/api/public/gallery";
-    fetch(url)
-      .then(r => r.json())
-      .then(d => { setVideos(d.videos || []); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [isAdmin]);
-
+  // Once session resolves and user is admin, fetch admin view
   useEffect(() => {
-    if (session !== undefined) fetchVideos();
-  }, [fetchVideos, session]);
+    if (sessionStatus === "loading") return;
+    if (!isAdmin) return; // public visitors already have initialVideos
+    setAdminLoading(true);
+    fetch("/api/admin/gallery/list")
+      .then(r => r.json())
+      .then(d => { setVideos(d.videos || []); })
+      .catch(() => {})
+      .finally(() => setAdminLoading(false));
+  }, [isAdmin, sessionStatus]);
 
   const handleToggle = async (video) => {
     setToggling(video.id);
@@ -255,6 +282,7 @@ export default function ArmanGallery() {
   };
 
   const displayVideos = isAdmin ? videos : videos.filter(v => v.featured !== false);
+  const isLoading = adminLoading && videos.length === 0;
 
   return (
     <section style={{ maxWidth: 1280, width: "100%", margin: "80px auto 48px", padding: "0 16px" }}>
@@ -282,7 +310,7 @@ export default function ArmanGallery() {
         </div>
       </div>
 
-      {loading ? (
+      {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} style={{ aspectRatio: "1/1", borderRadius: 12, background: "rgba(255,255,255,.05)", animation: "pulse 1.5s infinite", animationDelay: `${i * 80}ms` }} />
@@ -306,15 +334,15 @@ export default function ArmanGallery() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           <AnimatePresence>
             {displayVideos.map((v, i) => (
-              <motion.div key={v.id} transition={{ delay: i * 0.04 }}>
-                <GalleryCard
-                  video={v}
-                  onClick={setSelected}
-                  isAdmin={isAdmin}
-                  onToggle={handleToggle}
-                  toggling={toggling === v.id}
-                />
-              </motion.div>
+              <GalleryCard
+                key={v.id}
+                video={v}
+                index={i}
+                onClick={setSelected}
+                isAdmin={isAdmin}
+                onToggle={handleToggle}
+                toggling={toggling === v.id}
+              />
             ))}
           </AnimatePresence>
         </div>

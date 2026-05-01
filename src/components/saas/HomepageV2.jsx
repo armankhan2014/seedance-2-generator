@@ -1,27 +1,8 @@
 "use client";
-/**
- * HomepageV2.jsx
- * ─────────────────────────────────────────────────────────────────────────────
- * NEW homepage — safe backup. The current page is untouched.
- *
- * HOW TO SWAP IN:
- *   1. Copy this file to  src/components/saas/HomepageV2.jsx
- *   2. Open  src/app/page.js  (or wherever your current homepage lives)
- *   3. Replace whatever is currently imported/rendered with:
- *        import HomepageV2 from "@/components/saas/HomepageV2";
- *        export default function Page() { return <HomepageV2 />; }
- *
- * HOW TO SWAP BACK:
- *   Just revert those two lines in page.js — HomepageV2.jsx stays untouched.
- * ─────────────────────────────────────────────────────────────────────────────
- */
-
 
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import ArmanGallery from "@/components/saas/ArmanGallery";
-
-// ── Data ─────────────────────────────────────────────────────────────────────
 
 const STATS = [
   { num: "12,847+", label: "Videos Generated" },
@@ -62,9 +43,7 @@ const EXAMPLE_PROMPTS = [
   },
 ];
 
-// ── Component ─────────────────────────────────────────────────────────────────
-
-export default function HomepageV2() {
+export default function HomepageV2({ initialVideos = [] }) {
   const router = useRouter();
 
   return (
@@ -156,9 +135,8 @@ export default function HomepageV2() {
       </div>
 
       {/* ── Gallery ───────────────────────────────────────────────────────── */}
-      {/* ArmanGallery already handles its own header, fetching, and modal */}
       <div id="gallery">
-        <ArmanGallery />
+        <ArmanGallery initialVideos={initialVideos} />
       </div>
 
       {/* ── How it works ──────────────────────────────────────────────────── */}
