@@ -382,23 +382,12 @@ export default function Home() {
   }, [loading, mode, prompt, imagesList]);
 
   const creditCost = (() => {
-    const isReference = mode === "reference-to-video";
-    const is720p = resolution === "720p";
-    let rate;
-    if (isReference) {
-      if (is720p) {
-        rate = quality === "high" ? 60 : 42;
-      } else {
-        rate = quality === "high" ? 48 : 36;
-      }
-    } else {
-      if (is720p) {
-        rate = quality === "high" ? 50 : 30;
-      } else {
-        rate = quality === "high" ? 30 : 24;
-      }
-    }
-    return Math.ceil(duration * rate);
+    const BASE = { 5: 120, 10: 200, 15: 320 };
+    const base = BASE[duration] ?? Math.ceil((duration / 15) * 320);
+    const resMult = resolution === "1080p" ? 1.5 : resolution === "480p" ? 0.7 : 1.0;
+    const qualMult = quality === "high" ? 1.5 : 1.0;
+    const modeMult = mode === "reference-to-video" ? 1.2 : 1.0;
+    return Math.ceil(base * resMult * qualMult * modeMult);
   })();
 
   return (

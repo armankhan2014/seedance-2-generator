@@ -6,20 +6,21 @@ const MUAPI_RESULT_URL = "https://api.muapi.ai/api/v1/predictions";
 
 export const AIService = {
   getCreditCost(mode, duration, quality, resolution) {
-    const isReference = mode === "reference-to-video";
-    const is1080p = resolution === "1080p";
-    const is720p = resolution === "720p";
-    let rate;
-    if (isReference) {
-      if (is1080p) rate = quality === "high" ? 80 : 56;
-      else if (is720p) rate = quality === "high" ? 60 : 42;
-      else rate = quality === "high" ? 48 : 36;
-    } else {
-      if (is1080p) rate = quality === "high" ? 70 : 45;
-      else if (is720p) rate = quality === "high" ? 50 : 30;
-      else rate = quality === "high" ? 30 : 24;
-    }
-    return Math.ceil(duration * rate);
+    // Base credits for 720p basic quality (at 80 credits per $1):
+    //   5s  = 120 credits = $1.50
+    //   10s = 200 credits = $2.50
+    //   15s = 320 credits = $4.00
+    const BASE = { 5: 120, 10: 200, 15: 320 };
+    const base = BASE[duration] ?? Math.ceil((duration / 15) * 320);
+
+    // Resolution multiplier
+    const resMult = resolution === "1080p" ? 1.5 : resolution === "480p" ? 0.7 : 1.0;
+    // Quality multiplier
+    const qualMult = quality === "high" ? 1.5 : 1.0;
+    // Mode multiplier
+    const modeMult = mode === "reference-to-video" ? 1.2 : 1.0;
+
+    return Math.ceil(base * resMult * qualMult * modeMult);
   },
 
   async generate(userId, { mode, prompt, aspect_ratio = "16:9", resolution = "720p", duration = 5, quality = "basic", images_list = [], video_files = [], audio_files = [] }) {
