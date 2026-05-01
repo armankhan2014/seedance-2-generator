@@ -7,9 +7,9 @@ import toast from "@/lib/toast";
 const CREDITS_PER_DOLLAR = 80;
 
 const PLANS = [
-  { id: "starter",  n: "Starter",      c: 3000,  p: 37.50 },
-  { id: "power",    n: "Power Engine", c: 7000,  p: 87.50, hot: true },
-  { id: "quantum",  n: "Quantum Flow", c: 24000, p: 300 }
+  { id: "starter",  n: "Starter",      c: 3000,  p: 37.50, v15: 9,  v10: 15, v5: 25 },
+  { id: "power",    n: "Power Engine", c: 7000,  p: 87.50, v15: 21, v10: 35, v5: 58, hot: true },
+  { id: "quantum",  n: "Quantum Flow", c: 24000, p: 300,   v15: 75, v10: 120, v5: 200 }
 ];
 
 export default function PricingClient() {
@@ -124,7 +124,20 @@ export default function PricingClient() {
               <div style={{ fontSize: "2.4rem", fontWeight: 900, color: "#fff", marginBottom: 4 }}>
                 <sup style={{ fontSize: "1.1rem", verticalAlign: "top", marginTop: 6 }}>$</sup>{plan.p}
               </div>
-              <div style={{ fontSize: ".82rem", color: "#8b5cf6", fontWeight: 600, marginBottom: 24 }}>{plan.c.toLocaleString()} Credits</div>
+              <div style={{ fontSize: ".82rem", color: "#8b5cf6", fontWeight: 600, marginBottom: 8 }}>{plan.c.toLocaleString()} Credits</div>
+
+              {/* Video count hook */}
+              <div style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)", borderRadius: 10, padding: "10px 12px", marginBottom: 16 }}>
+                <div style={{ fontSize: ".78rem", fontWeight: 800, color: "#e2e8f0", marginBottom: 4 }}>
+                  🎬 Up to <span style={{ color: "#a78bfa" }}>{plan.v15} full videos</span> (15s each)
+                </div>
+                <div style={{ fontSize: ".7rem", color: "#64748b", lineHeight: 1.5 }}>
+                  Or <strong style={{ color: "#94a3b8" }}>{plan.v10} videos</strong> at 10s · <strong style={{ color: "#94a3b8" }}>{plan.v5} clips</strong> at 5s
+                </div>
+                <div style={{ fontSize: ".65rem", color: "#475569", marginTop: 4, fontStyle: "italic" }}>
+                  Shorter videos = more content from your credits
+                </div>
+              </div>
               <button
                 onClick={() => buy(plan.id)}
                 disabled={loading === plan.id}
