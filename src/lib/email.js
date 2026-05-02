@@ -220,3 +220,73 @@ export async function sendWelcomeEmail({ name, email }) {
     html: baseWrapper(inner),
   });
 }
+
+// ── 3. Admin payment notification ─────────────────────────────────────────────
+const PLAN_NAMES = {
+  starter: "Starter Manifest",
+  power:   "Power Engine",
+  quantum: "Quantum Flow",
+};
+
+export async function sendPaymentNotification({ customerEmail, customerName, plan, credits, amountCents }) {
+  const planLabel = PLAN_NAMES[plan] || `Custom (${(credits || 0).toLocaleString()} credits)`;
+  const amountUSD = amountCents ? (amountCents / 100).toFixed(2) : "—";
+
+  const time = new Date().toLocaleString("en-GB", {
+    timeZone: "Europe/London",
+    dateStyle: "full",
+    timeStyle: "short",
+  });
+
+  const inner = `
+    <!-- Green top bar -->
+    <tr><td style="background:linear-gradient(135deg,#15803d,#166534);padding:28px 32px 24px">
+      <p style="margin:0;font-size:11px;font-weight:700;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.12em">Payment Received</p>
+      <h1 style="margin:6px 0 0;font-size:22px;font-weight:700;color:#ffffff;line-height:1.2">&#128181; New purchase!</h1>
+    </td></tr>
+
+    <!-- Amount badge -->
+    <tr><td style="padding:24px 32px 0;text-align:center">
+      <div style="display:inline-block;background:rgba(22,163,74,0.1);border:1px solid rgba(22,163,74,0.3);border-radius:12px;padding:14px 32px">
+        <p style="margin:0 0 2px;font-size:11px;font-weight:700;color:#4ade80;text-transform:uppercase;letter-spacing:0.1em">Amount Paid</p>
+        <p style="margin:0;font-size:32px;font-weight:900;color:#ffffff">$${amountUSD}</p>
+        <p style="margin:4px 0 0;font-size:11px;color:#9ca3af">${(credits || 0).toLocaleString()} credits added</p>
+      </div>
+    </td></tr>
+
+    <!-- Details table -->
+    <tr><td style="padding:24px 32px 28px">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#9ca3af;font-size:12px;width:80px;vertical-align:top">Package</td>
+          <td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#e5e7eb;font-size:13px;font-weight:700">${planLabel}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#9ca3af;font-size:12px;vertical-align:top">Customer</td>
+          <td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:13px">
+            <span style="color:#e5e7eb;font-weight:600">${customerName || "—"}</span><br/>
+            <a href="mailto:${customerEmail}" style="color:#a78bfa;text-decoration:none;font-size:12px">${customerEmail}</a>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:10px 0;color:#9ca3af;font-size:12px;vertical-align:top">Time</td>
+          <td style="padding:10px 0;color:#e5e7eb;font-size:13px">${time}</td>
+        </tr>
+      </table>
+    </td></tr>
+
+    <!-- CTA -->
+    <tr><td style="padding:0 32px 32px">
+      <a href="https://seedance.visualseffect.com/admin"
+        style="display:inline-block;padding:12px 24px;background:linear-gradient(135deg,#16a34a,#15803d);color:#ffffff;font-size:13px;font-weight:700;text-decoration:none;border-radius:8px;letter-spacing:0.02em">
+        View Admin Dashboard &#8594;
+      </a>
+    </td></tr>
+  `;
+
+  await send({
+    to: ADMIN_EMAIL,
+    subject: `Payment received: $${amountUSD} — ${planLabel} (${customerEmail})`,
+    html: baseWrapper(inner),
+  });
+}

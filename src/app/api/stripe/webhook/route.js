@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
+import { sendPaymentNotification } from "@/lib/email";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2023-10-16" });
 
@@ -17,29 +18,35 @@ export async function POST(req) {
 
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
-    const email = session.customer_email || session.metadata?.userEmail;
-    const credits = parseInt(session.metadata?.credits || "0");
+    const email     = session.customer_email || session.metadata?.userEmail;
+    const credits   = parseInt(session.metadata?.credits || "0");
+    const plan      = session.metadata?.plan || "custom";
+    const name      = session.customer_details?.name || null;
+    const amountCents = session.amount_total || 0;
     const stripeSessionId = session.id;
 
     if (email && credits > 0) {
       try {
-        // Check if already processed (e.g. by the verify endpoint on success page)
         const existing = await prisma.payment.findUnique({ where: { stripeSessionId } });
         if (existing) {
           console.log("[WEBHOOK] Already processed session:", stripeSessionId);
         } else {
-          // Award credits + record payment atomically
           const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
           if (!user) throw new Error("User not found for email: " + email);
+
           await prisma.$transaction([
             prisma.payment.create({ data: { stripeSessionId, userId: user.id, credits } }),
             prisma.user.update({ where: { email }, data: { credits: { increment: credits }, verified: true } }),
           ]);
+
           console.log("[WEBHOOK] Credits awarded:", credits, "to", email);
+
+          // Notify admin — fire-and-forget, never block the webhook response
+          sendPaymentNotification({ customerEmail: email, customerName: name, plan, credits, amountCents })
+            .catch(err => console.error("[WEBHOOK] Payment email failed:", err.message));
         }
       } catch (err) {
         console.error("[WEBHOOK] Failed to award credits:", err.message);
-        // Re-throw so Stripe sees a 500 and retries — don't silently swallow failures
         throw err;
       }
     }
