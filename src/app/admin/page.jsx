@@ -20,7 +20,6 @@ function centsFromCredits(credits) {
 }
 
 export default async function AdminDashboard() {
-  // ── Auth check ──
   let session;
   try {
     session = await getServerSession(authOptions);
@@ -32,10 +31,11 @@ export default async function AdminDashboard() {
     redirect("/");
   }
 
-  // ── DB queries ──
   let users = [], recentCreations = [], payments = [];
+  let paymentTableMissing = false;
+
   try {
-    [users, recentCreations, payments] = await Promise.all([
+    [users, recentCreations] = await Promise.all([
       prisma.user.findMany({
         include: { _count: { select: { creations: true } } },
         orderBy: { id: "desc" },
@@ -45,20 +45,42 @@ export default async function AdminDashboard() {
         orderBy: { createdAt: "desc" },
         include: { user: { select: { name: true, email: true } } },
       }),
-      prisma.payment.findMany({
-        orderBy: { createdAt: "desc" },
-        include: { user: { select: { name: true, email: true, image: true } } },
-      }),
     ]);
   } catch (err) {
     return <ErrorPage msg={"Database error: " + err.message} />;
   }
 
-  const totalCreations   = users.reduce((s, u) => s + u._count.creations, 0);
-  const totalCreditsLeft = users.reduce((s, u) => s + (u.credits ?? 0), 0);
+  try {
+    payments = await prisma.payment.findMany({
+      orderBy: { createdAt: "desc" },
+      include: { user: { select: { name: true, email: true, image: true } } },
+    });
+  } catch (err) {
+    if (err.message.includes("does not exist")) {
+      paymentTableMissing = true;
+    } else {
+      return <ErrorPage msg={"Payment query error: " + err.message} />;
+    }
+  }
+
+  const totalCreations    = users.reduce((s, u) => s + u._count.creations, 0);
+  const totalCreditsLeft  = users.reduce((s, u) => s + (u.credits ?? 0), 0);
   const totalRevenueCents = payments.reduce((s, p) => s + centsFromCredits(p.credits), 0);
-  const uniquePayerIds   = new Set(payments.map(p => p.userId));
+  const uniquePayerIds    = new Set(payments.map(p => p.userId));
   const userList = users.map(u => ({ email: u.email, name: u.name, credits: u.credits ?? 0 }));
+
+  const SQL = `CREATE TABLE IF NOT EXISTS "Payment" (
+  id TEXT NOT NULL,
+  "stripeSessionId" TEXT NOT NULL,
+  "userId" TEXT NOT NULL,
+  credits INTEGER NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT "Payment_pkey" PRIMARY KEY (id),
+  CONSTRAINT "Payment_stripeSessionId_key" UNIQUE ("stripeSessionId"),
+  CONSTRAINT "Payment_userId_fkey" FOREIGN KEY ("userId")
+    REFERENCES "User"(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS "Payment_userId_idx" ON "Payment"("userId");`;
 
   return (
     <div style={{ minHeight: "100vh", background: "#0f0f1a", color: "#f0f0f0", fontFamily: "system-ui, sans-serif", padding: "32px 24px" }}>
@@ -70,10 +92,27 @@ export default async function AdminDashboard() {
             <h1 style={{ fontSize: 26, fontWeight: 700, margin: 0, color: "#fff" }}>
               <span style={{ color: "#ec4899" }}>⚡</span> Admin Dashboard
             </h1>
-            <p style={{ color: "#888", margin: "4px 0 0", fontSize: 13 }}>Seedance Studio · {new Date().toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+            <p style={{ color: "#888", margin: "4px 0 0", fontSize: 13 }}>
+              Seedance Studio · {new Date().toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+            </p>
           </div>
           <a href="/" style={{ color: "#ec4899", fontSize: 13, textDecoration: "none" }}>← Back to site</a>
         </div>
+
+        {/* Payment table missing banner */}
+        {paymentTableMissing && (
+          <div style={{ background: "#1a1200", border: "1px solid #5a3a00", borderRadius: 12, padding: "20px 24px", marginBottom: 28 }}>
+            <div style={{ fontWeight: 700, color: "#fbbf24", marginBottom: 8, fontSize: 15 }}>
+              ⚠️ Payment table not found in database
+            </div>
+            <p style={{ color: "#aaa", fontSize: 13, margin: "0 0 12px" }}>
+              Run this SQL once in your <strong style={{ color: "#fff" }}>Neon console → SQL Editor</strong>, then reload:
+            </p>
+            <pre style={{ background: "#0a0a0a", color: "#34d399", padding: "14px 16px", borderRadius: 8, fontSize: 12, overflowX: "auto", margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+              {SQL}
+            </pre>
+          </div>
+        )}
 
         {/* Stat Cards — Row 1 */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 16 }}>
@@ -90,11 +129,11 @@ export default async function AdminDashboard() {
           ))}
         </div>
 
-        {/* Stat Cards — Row 2 (Revenue) */}
+        {/* Stat Cards — Row 2 */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 36 }}>
           {[
-            { label: "Paid Users",    value: uniquePayerIds.size,                         icon: "💳", color: "#f59e0b" },
-            { label: "Total Orders",  value: payments.length,                             icon: "🧾", color: "#a78bfa" },
+            { label: "Paid Users",    value: uniquePayerIds.size,                        icon: "💳", color: "#f59e0b" },
+            { label: "Total Orders",  value: payments.length,                            icon: "🧾", color: "#a78bfa" },
             { label: "Total Revenue", value: "$" + (totalRevenueCents / 100).toFixed(2), icon: "💰", color: "#34d399" },
           ].map(card => (
             <div key={card.label} style={{ background: "#1a1a2e", borderRadius: 12, padding: "20px 22px", border: "1px solid #2a2a40" }}>
@@ -113,10 +152,18 @@ export default async function AdminDashboard() {
             <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>💳 Purchases</h2>
             <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
               <span style={{ fontSize: 12, color: "#888" }}>{payments.length} order{payments.length !== 1 ? "s" : ""}</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#34d399" }}>Total: ${(totalRevenueCents / 100).toFixed(2)} USD</span>
+              {payments.length > 0 && (
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#34d399" }}>
+                  Total: ${(totalRevenueCents / 100).toFixed(2)} USD
+                </span>
+              )}
             </div>
           </div>
-          {payments.length === 0 ? (
+          {paymentTableMissing ? (
+            <div style={{ padding: "32px 22px", textAlign: "center", color: "#fbbf24", fontSize: 13 }}>
+              Run the SQL above to enable this section
+            </div>
+          ) : payments.length === 0 ? (
             <div style={{ padding: "40px 22px", textAlign: "center", color: "#555", fontSize: 14 }}>No purchases yet</div>
           ) : (
             <div style={{ overflowX: "auto" }}>
