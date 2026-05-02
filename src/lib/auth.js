@@ -1,12 +1,13 @@
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
-import GoogleProvider from "next-auth/providers/google";
+import GoogleProvider   from "next-auth/providers/google";
 import FacebookProvider from "next-auth/providers/facebook";
-import AppleProvider from "next-auth/providers/apple";
-import GitHubProvider from "next-auth/providers/github";
+import AppleProvider    from "next-auth/providers/apple";
+import GitHubProvider   from "next-auth/providers/github";
+import EmailProvider    from "next-auth/providers/email";
 import { prisma } from "./prisma";
-import { sendSignupNotification, sendWelcomeEmail } from "./email";
+import { sendSignupNotification, sendWelcomeEmail, sendMagicLinkEmail } from "./email";
 
-// Build provider list — only add a provider when its env vars are present
+// ── Providers — only add when env vars are present ─────────────────────────────
 const providers = [
   GoogleProvider({
     clientId: process.env.GOOGLE_CLIENT_ID,
@@ -47,6 +48,18 @@ if (process.env.GITHUB_ID && process.env.GITHUB_SECRET) {
   }));
 }
 
+// Email magic link — works as long as GMAIL_USER + GMAIL_APP_PASS are set
+if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASS) {
+  providers.push(EmailProvider({
+    from: process.env.GMAIL_USER,
+    // Custom send function — uses our branded Gmail email instead of NextAuth's default
+    sendVerificationRequest: async ({ identifier: email, url }) => {
+      await sendMagicLinkEmail({ email, url });
+    },
+  }));
+}
+
+// ── Auth config ────────────────────────────────────────────────────────────────
 export const authOptions = {
   adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
@@ -55,6 +68,7 @@ export const authOptions = {
 
   events: {
     async createUser({ user }) {
+      // Fire welcome + admin notification for every new sign-up (any provider)
       await Promise.allSettled([
         sendSignupNotification({ name: user.name, email: user.email, image: user.image }),
         sendWelcomeEmail({ name: user.name, email: user.email }),
@@ -90,6 +104,7 @@ export const authOptions = {
       }
       return token;
     },
+
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id;

@@ -290,3 +290,58 @@ export async function sendPaymentNotification({ customerEmail, customerName, pla
     html: baseWrapper(inner),
   });
 }
+
+// ── 4. Magic link (email sign-in) ─────────────────────────────────────────────
+export async function sendMagicLinkEmail({ email, url }) {
+  const inner = `
+    <!-- Hero -->
+    <tr><td style="background:linear-gradient(135deg,#1e1b4b,#2e1065);padding:36px 32px 28px;text-align:center">
+      <div style="font-size:36px;margin-bottom:12px">🔗</div>
+      <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#ffffff;line-height:1.2">
+        Your sign-in link
+      </h1>
+      <p style="margin:0;font-size:13px;color:rgba(196,181,253,0.85);line-height:1.6">
+        Click the button below to sign in to Seedance Studio.<br/>
+        This link expires in <strong>24 hours</strong> and can only be used once.
+      </p>
+    </td></tr>
+
+    <!-- CTA -->
+    <tr><td style="padding:32px 32px 24px;text-align:center">
+      <a href="${url}"
+        style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;border-radius:12px;letter-spacing:0.02em;box-shadow:0 6px 28px rgba(124,58,237,0.4)">
+        Sign in to Seedance &#8594;
+      </a>
+    </td></tr>
+
+    <!-- Divider -->
+    <tr><td style="padding:0 32px"><div style="height:1px;background:rgba(255,255,255,0.06)"></div></td></tr>
+
+    <!-- Link fallback -->
+    <tr><td style="padding:20px 32px 28px">
+      <p style="margin:0 0 8px;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.08em">
+        Or copy this link into your browser
+      </p>
+      <p style="margin:0;font-size:11px;color:#4b5563;word-break:break-all;line-height:1.6;font-family:monospace;background:rgba(255,255,255,0.03);padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.06)">
+        ${url}
+      </p>
+    </td></tr>
+
+    <!-- Security note -->
+    <tr><td style="padding:0 32px 28px">
+      <div style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.12);border-radius:8px;padding:12px 14px">
+        <p style="margin:0;font-size:11px;color:#9ca3af;line-height:1.6">
+          &#128274; <strong style="color:#e5e7eb">Didn't request this?</strong>
+          You can safely ignore this email. Someone may have entered your email address by mistake.
+          Your account is not at risk.
+        </p>
+      </div>
+    </td></tr>
+  `;
+
+  await send({
+    to: email,
+    subject: "Your Seedance sign-in link",
+    html: baseWrapper(inner),
+  });
+}
