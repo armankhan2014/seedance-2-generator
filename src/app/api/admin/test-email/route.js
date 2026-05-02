@@ -1,12 +1,12 @@
 /**
  * GET /api/admin/test-email
- * Sends a test email via the same Gmail SMTP used for sign-up emails.
- * Admin-only. Remove or protect this route after debugging.
+ * Sends test emails to verify Gmail SMTP + all email types.
+ * Admin-only.
  */
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { sendWelcomeEmail, sendSignupNotification } from "@/lib/email";
+import { sendWelcomeEmail, sendSignupNotification, sendPaymentNotification } from "@/lib/email";
 
 const ADMIN_EMAIL = "armankhan0826@gmail.com";
 
@@ -16,7 +16,6 @@ export async function GET(req) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Check env vars first
   const gmailUser = process.env.GMAIL_USER;
   const gmailPass = process.env.GMAIL_APP_PASS;
 
@@ -29,36 +28,45 @@ export async function GET(req) {
     }, { status: 500 });
   }
 
-  const errors = [];
+  const results = [];
 
-  // Test 1: admin notification to armankhan0826@gmail.com
+  // Test 1: admin signup notification
   try {
-    await sendSignupNotification({
-      name: "Test User",
-      email: "test@example.com",
-      image: null,
-    });
+    await sendSignupNotification({ name: "Test User", email: "testuser@example.com", image: null });
+    results.push({ type: "signup_notification", ok: true });
   } catch (err) {
-    errors.push({ email: "admin_notification", error: err.message });
+    results.push({ type: "signup_notification", ok: false, error: err.message });
   }
 
-  // Test 2: welcome email to admin (so you can see what users receive)
+  // Test 2: welcome email (sent to admin so you can see what users receive)
   try {
-    await sendWelcomeEmail({
-      name: "Arman Khan",
-      email: ADMIN_EMAIL,
-    });
+    await sendWelcomeEmail({ name: "Arman Khan", email: ADMIN_EMAIL });
+    results.push({ type: "welcome_email", ok: true });
   } catch (err) {
-    errors.push({ email: "welcome_email", error: err.message });
+    results.push({ type: "welcome_email", ok: false, error: err.message });
   }
 
+  // Test 3: payment notification
+  try {
+    await sendPaymentNotification({
+      customerEmail: "testbuyer@example.com",
+      customerName: "Test Buyer",
+      plan: "power",
+      credits: 7000,
+      amountCents: 8750,
+    });
+    results.push({ type: "payment_notification", ok: true });
+  } catch (err) {
+    results.push({ type: "payment_notification", ok: false, error: err.message });
+  }
+
+  const allOk = results.every(r => r.ok);
   return NextResponse.json({
-    ok: errors.length === 0,
+    ok: allOk,
     GMAIL_USER: gmailUser,
-    GMAIL_APP_PASS: "SET (hidden)",
-    errors: errors.length ? errors : null,
-    message: errors.length === 0
-      ? "Both emails sent! Check armankhan0826@gmail.com inbox."
-      : "Some emails failed — see errors above.",
+    results,
+    message: allOk
+      ? "All 3 emails sent! Check armankhan0826@gmail.com inbox."
+      : "Some emails failed — check results above.",
   });
 }
