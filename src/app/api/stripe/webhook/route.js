@@ -18,11 +18,11 @@ export async function POST(req) {
 
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
-    const email     = session.customer_email || session.metadata?.userEmail;
-    const credits   = parseInt(session.metadata?.credits || "0");
-    const plan      = session.metadata?.plan || "custom";
-    const name      = session.customer_details?.name || null;
-    const amountCents = session.amount_total || 0;
+    const email         = session.customer_email || session.metadata?.userEmail;
+    const credits       = parseInt(session.metadata?.credits || "0");
+    const plan          = session.metadata?.plan || "custom";
+    const name          = session.customer_details?.name || null;
+    const amountCents   = session.amount_total || 0;
     const stripeSessionId = session.id;
 
     if (email && credits > 0) {
@@ -35,13 +35,12 @@ export async function POST(req) {
           if (!user) throw new Error("User not found for email: " + email);
 
           await prisma.$transaction([
-            prisma.payment.create({ data: { stripeSessionId, userId: user.id, credits } }),
+            prisma.payment.create({ data: { stripeSessionId, userId: user.id, credits, amountCents, plan } }),
             prisma.user.update({ where: { email }, data: { credits: { increment: credits }, verified: true } }),
           ]);
 
           console.log("[WEBHOOK] Credits awarded:", credits, "to", email);
 
-          // Notify admin — fire-and-forget, never block the webhook response
           sendPaymentNotification({ customerEmail: email, customerName: name, plan, credits, amountCents })
             .catch(err => console.error("[WEBHOOK] Payment email failed:", err.message));
         }

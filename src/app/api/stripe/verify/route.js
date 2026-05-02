@@ -23,7 +23,6 @@ export async function GET(req) {
   }
 
   try {
-    // Already processed? Return current credits — no double-credit.
     const existing = await prisma.payment.findUnique({ where: { stripeSessionId } });
     if (existing) {
       const user = await prisma.user.findUnique({
@@ -33,7 +32,6 @@ export async function GET(req) {
       return NextResponse.json({ credited: false, alreadyProcessed: true, credits: user?.credits ?? 0 });
     }
 
-    // Retrieve Stripe session to confirm payment
     const stripeSession = await stripe.checkout.sessions.retrieve(stripeSessionId);
     if (stripeSession.payment_status !== "paid") {
       const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { credits: true } });
@@ -50,9 +48,8 @@ export async function GET(req) {
       return NextResponse.json({ error: "Invalid payment metadata" }, { status: 400 });
     }
 
-    // Award credits + record payment atomically
     const [, updatedUser] = await prisma.$transaction([
-      prisma.payment.create({ data: { stripeSessionId, userId: session.user.id, credits } }),
+      prisma.payment.create({ data: { stripeSessionId, userId: session.user.id, credits, amountCents, plan } }),
       prisma.user.update({
         where: { email },
         data: { credits: { increment: credits }, verified: true },
@@ -62,7 +59,6 @@ export async function GET(req) {
 
     console.log("[VERIFY] Credits awarded:", credits, "to", email, "| new total:", updatedUser.credits);
 
-    // Notify admin — fire-and-forget
     sendPaymentNotification({ customerEmail: email, customerName: name, plan, credits, amountCents })
       .catch(err => console.error("[VERIFY] Payment email failed:", err.message));
 
