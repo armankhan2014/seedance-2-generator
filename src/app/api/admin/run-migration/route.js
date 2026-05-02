@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-const OWNER_EMAIL = "armankhan0826@gmail.com";
+// One-time migration — protected by secret token, delete after use
+const SECRET = "seedance-migrate-2026";
 
 export async function GET(req) {
-  // Only owner can run this
-  const session = await getServerSession(authOptions);
-  if (!session || session.user.email !== OWNER_EMAIL) {
+  const { searchParams } = new URL(req.url);
+  if (searchParams.get("secret") !== SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -27,17 +25,16 @@ export async function GET(req) {
       )
     `);
 
-    await prisma.$executeRawUnsafe(`
-      CREATE INDEX IF NOT EXISTS "Payment_userId_idx" ON "Payment"("userId")
-    `);
+    await prisma.$executeRawUnsafe(
+      `CREATE INDEX IF NOT EXISTS "Payment_userId_idx" ON "Payment"("userId")`
+    );
 
-    // Verify the table exists
     const check = await prisma.$queryRawUnsafe(`
-      SELECT COUNT(*) as count FROM information_schema.tables
+      SELECT table_name FROM information_schema.tables
       WHERE table_schema = 'public' AND table_name = 'Payment'
     `);
 
-    return NextResponse.json({ success: true, message: "Payment table created successfully", check });
+    return NextResponse.json({ success: true, message: "Payment table ready", tables: check });
   } catch (err) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
