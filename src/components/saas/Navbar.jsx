@@ -104,7 +104,7 @@ export default function Navbar() {
     { href: "/pricing", label: "Pricing" },
   ];
 
-  const handleSignIn = () => signIn("google", { callbackUrl: "/" });
+  const handleSignIn = () => window.dispatchEvent(new CustomEvent("openSignIn"));
 
   const firstName = session?.user?.name?.split(" ")[0] || "";
   const initials = session?.user?.name
@@ -370,7 +370,7 @@ export default function Navbar() {
                 <button
                   onClick={() => { handleSignIn(); setMenuOpen(false); }}
                   style={{ width: "100%", background: "linear-gradient(135deg,#8b5cf6,#7c3aed)", border: "none", borderRadius: "8px", color: "#fff", padding: "12px", fontSize: "0.9rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
-                  Sign in with Google
+                  Sign in
                 </button>
               )}
             </div>

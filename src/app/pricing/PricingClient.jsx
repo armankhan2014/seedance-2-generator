@@ -158,7 +158,7 @@ export default function PricingClient() {
   const customCredits = customAmount * CREDITS_PER_DOLLAR;
 
   async function buy(id) {
-    if (!session) { signIn("google"); return; }
+    if (!session) { window.dispatchEvent(new CustomEvent("openSignIn")); return; }
     setLoading(id);
     setMessage("");
     try {

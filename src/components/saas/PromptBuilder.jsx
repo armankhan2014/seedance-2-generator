@@ -594,7 +594,7 @@ export default function PromptBuilder({ onUse, onClose }) {
                   Describe your idea in plain English and AI will write a full cinematic Seedance prompt for you.
                 </p>
                 <button
-                  onClick={() => signIn("google")}
+                  onClick={() => window.dispatchEvent(new CustomEvent("openSignIn"))}
                   style={{
                     marginTop: "8px", padding: "10px 24px",
                     background: "linear-gradient(135deg,#8b5cf6,#7c3aed)",
