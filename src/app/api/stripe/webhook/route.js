@@ -35,7 +35,7 @@ export async function POST(req) {
           if (!user) throw new Error("User not found for email: " + email);
 
           await prisma.$transaction([
-            prisma.payment.create({ data: { stripeSessionId, userId: user.id, credits, amountCents, plan } }),
+            prisma.payment.create({ data: { stripeSessionId, userId: user.id, credits } }),
             prisma.user.update({ where: { email }, data: { credits: { increment: credits }, verified: true } }),
           ]);
 

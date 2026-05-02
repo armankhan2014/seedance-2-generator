@@ -8,16 +8,17 @@ const OWNER_EMAIL = "armankhan0826@gmail.com";
 
 export const dynamic = "force-dynamic";
 
-const PLAN_LABELS = {
-  starter: "Starter Manifest",
-  power:   "Power Engine",
-  quantum: "Quantum Flow",
-  custom:  "Custom",
-};
+// Derive plan label from credit amount
+function planLabel(credits) {
+  if (credits >= 24000) return { label: "Quantum Flow",     color: "#a78bfa", bg: "#2a1a40" };
+  if (credits >= 7000)  return { label: "Power Engine",     color: "#818cf8", bg: "#1a2040" };
+  if (credits >= 3000)  return { label: "Starter Manifest", color: "#34d399", bg: "#1a3028" };
+  return                        { label: "Custom",           color: "#f59e0b", bg: "#2a2010" };
+}
 
-function formatMoney(cents) {
-  if (!cents) return "—";
-  return "$" + (cents / 100).toFixed(2);
+// 80 credits = $1 USD
+function centsFromCredits(credits) {
+  return Math.round((credits / 80) * 100);
 }
 
 export default async function AdminDashboard() {
@@ -31,7 +32,7 @@ export default async function AdminDashboard() {
     orderBy: { id: "desc" },
   });
 
-  const totalCreations = users.reduce((s, u) => s + u._count.creations, 0);
+  const totalCreations  = users.reduce((s, u) => s + u._count.creations, 0);
   const totalCreditsLeft = users.reduce((s, u) => s + (u.credits ?? 0), 0);
 
   const recentCreations = await prisma.creation.findMany({
@@ -40,19 +41,13 @@ export default async function AdminDashboard() {
     include: { user: { select: { name: true, email: true } } },
   });
 
-  // Payments — all, newest first, with user info
   const payments = await prisma.payment.findMany({
     orderBy: { createdAt: "desc" },
     include: { user: { select: { name: true, email: true, image: true } } },
   });
 
-  // Revenue: use amountCents if stored, else derive from credits (100 credits = $1.25)
-  const totalRevenueCents = payments.reduce((s, p) => {
-    const cents = p.amountCents ?? Math.round((p.credits / 80) * 100);
-    return s + cents;
-  }, 0);
-
-  const uniquePayerIds = new Set(payments.map(p => p.userId));
+  const totalRevenueCents = payments.reduce((s, p) => s + centsFromCredits(p.credits), 0);
+  const uniquePayerIds    = new Set(payments.map(p => p.userId));
 
   const userList = users.map(u => ({ email: u.email, name: u.name, credits: u.credits ?? 0 }));
 
@@ -71,12 +66,12 @@ export default async function AdminDashboard() {
           <a href="/" style={{ color: "#ec4899", fontSize: 13, textDecoration: "none" }}>← Back to site</a>
         </div>
 
-        {/* Stat Cards */}
+        {/* Stat Cards — Row 1 */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 16 }}>
           {[
-            { label: "Total Users",      value: users.length,                          icon: "👥", color: "#818cf8" },
-            { label: "Total Videos",     value: totalCreations,                        icon: "🎬", color: "#ec4899" },
-            { label: "Credits Remaining",value: totalCreditsLeft.toLocaleString(),     icon: "💎", color: "#34d399" },
+            { label: "Total Users",       value: users.length,                      icon: "👥", color: "#818cf8" },
+            { label: "Total Videos",      value: totalCreations,                    icon: "🎬", color: "#ec4899" },
+            { label: "Credits Remaining", value: totalCreditsLeft.toLocaleString(), icon: "💎", color: "#34d399" },
           ].map(card => (
             <div key={card.label} style={{ background: "#1a1a2e", borderRadius: 12, padding: "20px 22px", border: "1px solid #2a2a40" }}>
               <div style={{ fontSize: 28, marginBottom: 8 }}>{card.icon}</div>
@@ -86,12 +81,12 @@ export default async function AdminDashboard() {
           ))}
         </div>
 
-        {/* Revenue Row */}
+        {/* Stat Cards — Row 2 (Revenue) */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 36 }}>
           {[
-            { label: "Paid Users",   value: uniquePayerIds.size,             icon: "💳", color: "#f59e0b" },
-            { label: "Total Orders", value: payments.length,                 icon: "🧾", color: "#a78bfa" },
-            { label: "Total Revenue",value: "$" + (totalRevenueCents / 100).toFixed(2), icon: "💰", color: "#34d399" },
+            { label: "Paid Users",    value: uniquePayerIds.size,                          icon: "💳", color: "#f59e0b" },
+            { label: "Total Orders",  value: payments.length,                              icon: "🧾", color: "#a78bfa" },
+            { label: "Total Revenue", value: "$" + (totalRevenueCents / 100).toFixed(2),  icon: "💰", color: "#34d399" },
           ].map(card => (
             <div key={card.label} style={{ background: "#1a1a2e", borderRadius: 12, padding: "20px 22px", border: "1px solid #2a2a40" }}>
               <div style={{ fontSize: 28, marginBottom: 8 }}>{card.icon}</div>
@@ -101,15 +96,13 @@ export default async function AdminDashboard() {
           ))}
         </div>
 
-        {/* ── Add Credits Widget ── */}
+        {/* Add Credits Widget */}
         <AddCreditsWidget users={userList} />
 
-        {/* ── Paid Users / Purchases Table ── */}
+        {/* Purchases Table */}
         <div style={{ background: "#1a1a2e", borderRadius: 14, border: "1px solid #2a2a40", marginBottom: 32, overflow: "hidden" }}>
           <div style={{ padding: "18px 22px", borderBottom: "1px solid #2a2a40", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
-              💳 Purchases
-            </h2>
+            <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>💳 Purchases</h2>
             <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
               <span style={{ fontSize: 12, color: "#888" }}>{payments.length} order{payments.length !== 1 ? "s" : ""}</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: "#34d399" }}>
@@ -134,8 +127,8 @@ export default async function AdminDashboard() {
                 </thead>
                 <tbody>
                   {payments.map((p, i) => {
-                    const displayCents = p.amountCents ?? Math.round((p.credits / 80) * 100);
-                    const planLabel = p.plan ? (PLAN_LABELS[p.plan] || p.plan) : "—";
+                    const { label, color, bg } = planLabel(p.credits);
+                    const amountStr = "$" + (centsFromCredits(p.credits) / 100).toFixed(2);
                     return (
                       <tr key={p.id} style={{ borderTop: "1px solid #2a2a40", background: i % 2 === 0 ? "transparent" : "#12122080" }}>
                         <td style={{ padding: "12px 18px" }}>
@@ -151,12 +144,8 @@ export default async function AdminDashboard() {
                         </td>
                         <td style={{ padding: "12px 18px", color: "#aaa" }}>{p.user?.email || "—"}</td>
                         <td style={{ padding: "12px 18px" }}>
-                          <span style={{
-                            background: p.plan === "quantum" ? "#2a1a40" : p.plan === "power" ? "#1a2a40" : "#1a2a1a",
-                            color: p.plan === "quantum" ? "#a78bfa" : p.plan === "power" ? "#818cf8" : "#34d399",
-                            padding: "3px 10px", borderRadius: 20, fontWeight: 600, fontSize: 11
-                          }}>
-                            {planLabel}
+                          <span style={{ background: bg, color, padding: "3px 10px", borderRadius: 20, fontWeight: 600, fontSize: 11 }}>
+                            {label}
                           </span>
                         </td>
                         <td style={{ padding: "12px 18px" }}>
@@ -165,7 +154,7 @@ export default async function AdminDashboard() {
                           </span>
                         </td>
                         <td style={{ padding: "12px 18px", color: "#fbbf24", fontWeight: 700, fontSize: 14 }}>
-                          {formatMoney(displayCents)}
+                          {amountStr}
                         </td>
                         <td style={{ padding: "12px 18px", color: "#666", fontSize: 12, whiteSpace: "nowrap" }}>
                           {p.createdAt ? new Date(p.createdAt).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
@@ -201,7 +190,9 @@ export default async function AdminDashboard() {
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         {user.image
                           ? <img src={user.image} alt="" width={30} height={30} style={{ borderRadius: "50%", objectFit: "cover" }} />
-                          : <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#ec4899", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#fff" }}>{(user.name || user.email || "?")[0].toUpperCase()}</div>
+                          : <div style={{ width: 30, height: 30, borderRadius: "50%", background: "#ec4899", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "#fff" }}>
+                              {(user.name || user.email || "?")[0].toUpperCase()}
+                            </div>
                         }
                         <span style={{ fontWeight: 500, color: "#e0e0e0" }}>{user.name || "—"}</span>
                       </div>

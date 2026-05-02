@@ -7,9 +7,6 @@ import { sendPaymentNotification } from "@/lib/email";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2023-10-16" });
 
-// GET /api/stripe/verify?session_id=cs_xxx
-// Called from the success page. Awards credits if not already done by webhook.
-// Idempotent — Payment table prevents double-crediting.
 export async function GET(req) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
@@ -25,10 +22,7 @@ export async function GET(req) {
   try {
     const existing = await prisma.payment.findUnique({ where: { stripeSessionId } });
     if (existing) {
-      const user = await prisma.user.findUnique({
-        where: { id: session.user.id },
-        select: { credits: true },
-      });
+      const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { credits: true } });
       return NextResponse.json({ credited: false, alreadyProcessed: true, credits: user?.credits ?? 0 });
     }
 
@@ -49,7 +43,7 @@ export async function GET(req) {
     }
 
     const [, updatedUser] = await prisma.$transaction([
-      prisma.payment.create({ data: { stripeSessionId, userId: session.user.id, credits, amountCents, plan } }),
+      prisma.payment.create({ data: { stripeSessionId, userId: session.user.id, credits } }),
       prisma.user.update({
         where: { email },
         data: { credits: { increment: credits }, verified: true },
