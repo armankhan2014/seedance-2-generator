@@ -253,7 +253,7 @@ export default function ProfilePage() {
               {uploadError && (
                 <p style={{ margin: "6px 0 0", fontSize: "0.75rem", color: "#f87171" }}>{uploadError}</p>
               )}
-              {/* Test connection */}
+
             </div>
           </div>
 
