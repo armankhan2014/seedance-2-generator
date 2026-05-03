@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-const ADMIN_SECRET = 'seedance2024';
+const ADMIN_SECRET = process.env.ADMIN_SECRET;
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);

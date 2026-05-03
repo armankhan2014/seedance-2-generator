@@ -45,7 +45,7 @@ export const AIService = {
       console.log("[AI_DEBUG] Submitting to:", endpoint);
       console.log("[AI_DEBUG] mode:", mode, "resolution:", resolution, "quality:", quality, "duration:", duration);
 
-      const webhookUrl = `${config.auth.webhook_url}/api/webhook/muapi`;
+      const webhookUrl = `${config.auth.webhook_url}/api/webhook/muapi?secret=${process.env.WEBHOOK_SECRET}`;
       const payload = {
         prompt,
         aspect_ratio,

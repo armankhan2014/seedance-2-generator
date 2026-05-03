@@ -3,6 +3,14 @@ import { prisma } from "@/lib/prisma";
 
 export async function POST(req) {
   try {
+    // Verify webhook secret to prevent fake webhook injection
+    const url = new URL(req.url);
+    const webhookSecret = url.searchParams.get("secret");
+    if (!process.env.WEBHOOK_SECRET || webhookSecret !== process.env.WEBHOOK_SECRET) {
+      console.warn("[MUAPI_WEBHOOK] Rejected — invalid or missing webhook secret");
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const data = await req.json();
     console.log("[MUAPI_WEBHOOK] received:", JSON.stringify(data).slice(0, 500));
 

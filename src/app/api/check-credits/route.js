@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
-  if (searchParams.get("secret") !== "seedance2024") {
+  if (searchParams.get("secret") !== process.env.ADMIN_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const email = searchParams.get("email") || "armankhan0826@gmail.com";
