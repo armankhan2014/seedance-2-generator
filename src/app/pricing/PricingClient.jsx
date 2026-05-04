@@ -162,7 +162,9 @@ export default function PricingClient() {
     setLoading(id);
     setMessage("");
     try {
-      const body = id === "custom" ? { plan: "custom", amount: customAmount } : { plan: id };
+      const body = id === "custom"
+        ? { plan: "custom", amount: customAmount, currency: cur.code, rate: cur.rate }
+        : { plan: id, currency: cur.code, rate: cur.rate };
       const r = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
