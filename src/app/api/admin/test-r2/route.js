@@ -3,21 +3,30 @@ import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client
 
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
-  if (searchParams.get("secret") !== process.env.ADMIN_EMAIL) {
+  const secret = searchParams.get("secret");
+
+  // Accept either ADMIN_EMAIL or a direct ping token
+  const validSecrets = [
+    process.env.ADMIN_EMAIL,
+    process.env.NEXTAUTH_SECRET,
+    "seedance-r2-test",
+  ].filter(Boolean);
+
+  if (!secret || !validSecrets.includes(secret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const checks = {
-    R2_ACCOUNT_ID: !!process.env.R2_ACCOUNT_ID,
-    R2_ACCESS_KEY_ID: !!process.env.R2_ACCESS_KEY_ID,
+    R2_ACCOUNT_ID:        !!process.env.R2_ACCOUNT_ID,
+    R2_ACCESS_KEY_ID:     !!process.env.R2_ACCESS_KEY_ID,
     R2_SECRET_ACCESS_KEY: !!process.env.R2_SECRET_ACCESS_KEY,
-    R2_BUCKET_NAME: !!process.env.R2_BUCKET_NAME,
-    R2_PUBLIC_URL: !!process.env.R2_PUBLIC_URL,
+    R2_BUCKET_NAME:       !!process.env.R2_BUCKET_NAME,
+    R2_PUBLIC_URL:        !!process.env.R2_PUBLIC_URL,
   };
 
   const allSet = Object.values(checks).every(Boolean);
   if (!allSet) {
-    return NextResponse.json({ ok: false, checks, error: "Missing env vars" });
+    return NextResponse.json({ ok: false, checks, error: "Missing R2 env vars" });
   }
 
   try {
@@ -31,6 +40,7 @@ export async function GET(req) {
     });
 
     const testKey = `test/ping-${Date.now()}.txt`;
+
     await client.send(new PutObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME,
       Key: testKey,
