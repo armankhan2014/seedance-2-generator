@@ -9,7 +9,7 @@ const CREDITS_PER_DOLLAR = 80;
 const PLANS = [
   { id: "starter",  n: "Starter",      c: 3000,  p: 37.50, v15: 9,  v10: 15, v5: 25 },
   { id: "power",    n: "Power Engine", c: 7000,  p: 87.50, v15: 21, v10: 35, v5: 58, hot: true },
-  { id: "quantum",  n: "Quantum Flow", c: 24000, p: 300,   v15: 75, v10: 120, v5: 200 },
+  { id: "quantum",  n: "Quantum Flow", c: 24000, p: 121,   v15: 75, v10: 120, v5: 200 },
 ];
 
 // ── Currency detection + live exchange rates ───────────────────────────────────
