@@ -244,11 +244,13 @@ export default function PricingClient() {
                 {!isUSD && !cur.loading && (
                   <div style={{ fontSize: ".72rem", color: "#475569", marginBottom: 8 }}>
                     {(() => {
-                      const perUnit = CREDITS_PER_DOLLAR / (cur.rate || 1);
-                      if (perUnit >= 5) {
-                        return `${cur.symbol}1 ≈ ${Math.floor(perUnit / 5) * 5} credits`;
+                      // credits per 1 local unit, calculated from this plan's actual local price
+                      const localPrice = plan.p * (cur.rate || 1);
+                      const perUnit = plan.c / localPrice;
+                      if (perUnit >= 1) {
+                        return `${cur.symbol}1 ≈ ${Math.floor(perUnit)} credits`;
                       }
-                      return `100 credits ≈ ${cur.symbol}${Math.round(1.25 * (cur.rate || 1))}`;
+                      return `${plan.c.toLocaleString()} credits ≈ ${cur.symbol}${Math.round(localPrice)}`;
                     })()}
                   </div>
                 )}
@@ -287,9 +289,8 @@ export default function PricingClient() {
                 ? `$1 = ${CREDITS_PER_DOLLAR} credits`
                 : (() => {
                     const perUnit = CREDITS_PER_DOLLAR / (cur.rate || 1);
-                    if (perUnit >= 5) {
-                      // Round DOWN to nearest 5 for a clean number (e.g. 101 → 100)
-                      return `${cur.symbol}1 = ${Math.floor(perUnit / 5) * 5} credits`;
+                    if (perUnit >= 1) {
+                      return `${cur.symbol}1 ≈ ${Math.floor(perUnit)} credits`;
                     }
                     // High-value currencies (PKR, INR, NGN…) — flip the display
                     return `100 credits ≈ ${cur.symbol}${Math.round(1.25 * (cur.rate || 1))}`;
