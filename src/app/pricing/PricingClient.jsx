@@ -192,8 +192,7 @@ export default function PricingClient() {
               borderRadius: 50, padding: "5px 14px", fontSize: ".75rem", color: "#a78bfa", fontWeight: 600,
             }}>
               <span style={{ fontSize: "1em" }}>🌍</span>
-              Prices shown in <strong style={{ color: "#c4b5fd" }}>{cur.code}</strong> &nbsp;·&nbsp;
-              <span style={{ color: "#64748b", fontWeight: 400 }}>Charged in USD at checkout</span>
+              Prices &amp; checkout in <strong style={{ color: "#c4b5fd" }}>{cur.code}</strong>
             </span>
           </div>
         )}
@@ -327,7 +326,7 @@ export default function PricingClient() {
         </div>
 
         <p style={{ textAlign: "center", color: "#475569", fontSize: ".75rem", marginTop: 28 }}>
-          Secure payments via Stripe · Credits never expire{!isUSD && !cur.loading ? ` · Prices shown in ${cur.code} for reference` : ""}
+          Secure payments via Stripe · Credits never expire{!isUSD && !cur.loading ? ` · Charged in ${cur.code}` : ""}
         </p>
 
         {/* FAQ */}
