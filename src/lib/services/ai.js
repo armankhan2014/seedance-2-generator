@@ -1,6 +1,7 @@
 import config from "@/lib/config";
 import { UserService } from "./user";
 import { prisma } from "@/lib/prisma";
+import { uploadVideoFromUrl, isR2Configured } from "@/lib/storage";
 
 const MUAPI_RESULT_URL = "https://api.muapi.ai/api/v1/predictions";
 
@@ -187,11 +188,28 @@ export const AIService = {
         console.log("[AI_POLL_PARSED] id:", requestId, "status:", statusStr, "outputs:", outputArr.length, "imageUrl:", imageUrl);
 
         if (result && isCompleted && imageUrl) {
+          // Upload to R2 if configured — fall back to MuAPI URL on failure
+          let finalUrl = imageUrl;
+          if (isR2Configured()) {
+            try {
+              const creation = await creationModel.findUnique({ where: { requestId } });
+              if (creation) {
+                const ext = imageUrl.includes(".webm") ? "webm" : "mp4";
+                const key = `videos/${creation.id}.${ext}`;
+                console.log("[AI_POLL] Uploading to R2:", key);
+                finalUrl = await uploadVideoFromUrl(imageUrl, key);
+                console.log("[AI_POLL] R2 upload done:", finalUrl);
+              }
+            } catch (e) {
+              console.error("[AI_POLL] R2 upload failed, using MuAPI URL:", e.message);
+              finalUrl = imageUrl;
+            }
+          }
           await creationModel.update({
             where: { requestId },
-            data: { status: "completed", imageUrl },
+            data: { status: "completed", imageUrl: finalUrl },
           });
-          return { status: "completed", imageUrl };
+          return { status: "completed", imageUrl: finalUrl };
         }
         if (result && isFailed) {
           const errMsg = result.error || result.detail || "Generation failed";
