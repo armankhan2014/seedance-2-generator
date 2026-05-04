@@ -1,21 +1,7 @@
 import { NextResponse } from "next/server";
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
-export async function GET(req) {
-  const { searchParams } = new URL(req.url);
-  const secret = searchParams.get("secret");
-
-  // Accept either ADMIN_EMAIL or a direct ping token
-  const validSecrets = [
-    process.env.ADMIN_EMAIL,
-    process.env.NEXTAUTH_SECRET,
-    "seedance-r2-test",
-  ].filter(Boolean);
-
-  if (!secret || !validSecrets.includes(secret)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
+export async function GET() {
   const checks = {
     R2_ACCOUNT_ID:        !!process.env.R2_ACCOUNT_ID,
     R2_ACCESS_KEY_ID:     !!process.env.R2_ACCESS_KEY_ID,
@@ -40,22 +26,19 @@ export async function GET(req) {
     });
 
     const testKey = `test/ping-${Date.now()}.txt`;
-
     await client.send(new PutObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME,
       Key: testKey,
       Body: Buffer.from("ping"),
       ContentType: "text/plain",
     }));
-
     await client.send(new DeleteObjectCommand({
       Bucket: process.env.R2_BUCKET_NAME,
       Key: testKey,
     }));
 
     return NextResponse.json({
-      ok: true,
-      checks,
+      ok: true, checks,
       bucket: process.env.R2_BUCKET_NAME,
       publicUrl: process.env.R2_PUBLIC_URL,
       message: "R2 connection successful ✅",
