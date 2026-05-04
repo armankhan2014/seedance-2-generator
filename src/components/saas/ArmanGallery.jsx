@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FaExpandAlt, FaCalendarAlt } from "react-icons/fa";
-import { FiDownload, FiPlus, FiMinus } from "react-icons/fi";
+import { FiDownload, FiPlus, FiMinus, FiClipboard, FiCheck, FiChevronDown, FiChevronUp } from "react-icons/fi";
 import { downloadMedia } from "@/lib/utils";
 
 const ADMIN_EMAIL = "armankhan0826@gmail.com";
@@ -151,6 +151,8 @@ function GalleryCard({ video, index, onClick, isAdmin, onToggle, toggling }) {
 
 function VideoModal({ video, onClose }) {
   const [downloading, setDownloading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     const fn = (e) => { if (e.key === "Escape") onClose(); };
@@ -179,8 +181,31 @@ function VideoModal({ video, onClose }) {
         <div className="flex w-full md:w-[45%] h-[50%] md:h-full p-6 flex-col bg-glass-bg backdrop-blur-3xl overflow-y-auto custom-scrollbar">
           <div className="flex flex-col space-y-4">
             <div className="space-y-2">
-              <div className="text-xs text-muted uppercase tracking-widest">Prompt</div>
-              <p className="text-sm font-normal text-foreground leading-relaxed">{video.prompt}</p>
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-muted uppercase tracking-widest">Prompt</div>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(video.prompt); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all border"
+                  style={copied ? { background: "rgba(34,197,94,0.15)", borderColor: "rgba(34,197,94,0.4)", color: "#22c55e" } : { background: "rgba(139,92,246,0.1)", borderColor: "rgba(139,92,246,0.25)", color: "#a78bfa" }}
+                >
+                  {copied ? <FiCheck size={11} /> : <FiClipboard size={11} />}
+                  {copied ? "Copied!" : "Copy Prompt"}
+                </button>
+              </div>
+              <p
+                className="text-sm font-normal text-foreground leading-relaxed transition-all"
+                style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: expanded ? "unset" : 3, overflow: "hidden" }}
+              >
+                {video.prompt}
+              </p>
+              {video.prompt && video.prompt.length > 180 && (
+                <button
+                  onClick={() => setExpanded(e => !e)}
+                  className="flex items-center gap-1 text-[10px] text-primary-400 hover:text-primary-300 transition-colors mt-0.5"
+                >
+                  {expanded ? <><FiChevronUp size={11} /> Show less</> : <><FiChevronDown size={11} /> Show more</>}
+                </button>
+              )}
             </div>
             <div className="space-y-6 border-t border-white/5 pt-6">
               <div className="grid grid-cols-2 gap-6">

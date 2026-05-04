@@ -13,8 +13,46 @@ import {
 } from "react-icons/fa";
 import { useRouter } from "next/navigation";
 import { downloadMedia } from "@/lib/utils";
-import { FiDownload, FiTrash2 } from "react-icons/fi";
+import { FiDownload, FiTrash2, FiClipboard, FiCheck, FiChevronDown, FiChevronUp } from "react-icons/fi";
 import toast from "@/lib/toast";
+
+// ── Collapsible prompt with copy button ──────────────────────────────────────
+function PromptBlock({ prompt }) {
+  const [copied, setCopied] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  if (!prompt) return null;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="text-[9px] font-semibold text-muted uppercase tracking-widest">Prompt</div>
+        <button
+          onClick={() => { navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all border"
+          style={copied
+            ? { background: "rgba(34,197,94,0.15)", borderColor: "rgba(34,197,94,0.4)", color: "#22c55e" }
+            : { background: "rgba(139,92,246,0.1)", borderColor: "rgba(139,92,246,0.25)", color: "#a78bfa" }}
+        >
+          {copied ? <FiCheck size={11} /> : <FiClipboard size={11} />}
+          <span className="ml-1">{copied ? "Copied!" : "Copy Prompt"}</span>
+        </button>
+      </div>
+      <p
+        className="text-sm font-normal text-foreground leading-relaxed transition-all"
+        style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: expanded ? "unset" : 3, overflow: "hidden" }}
+      >
+        {prompt}
+      </p>
+      {prompt.length > 180 && (
+        <button
+          onClick={() => setExpanded(e => !e)}
+          className="flex items-center gap-1 text-[10px] text-primary-400 hover:text-primary-300 transition-colors mt-0.5"
+        >
+          {expanded ? <><FiChevronUp size={11} /><span className="ml-1">Show less</span></> : <><FiChevronDown size={11} /><span className="ml-1">Show more</span></>}
+        </button>
+      )}
+    </div>
+  );
+}
 
 export default function CreationsPage() {
   const { data: session, status } = useSession();
@@ -367,14 +405,7 @@ export default function CreationsPage() {
               {/* Details Side */}
               <div className="flex w-full md:w-[50%] h-[50%] md:h-full p-6 flex flex-col bg-glass-bg backdrop-blur-3xl overflow-y-auto custom-scrollbar">
                 <div className="flex flex-col justify-center space-y-4">
-                  <div className="space-y-2">
-                    <div className="text-xs text-muted">
-                      Prompt
-                    </div>
-                    <p className="text-sm font-normal text-foreground leading-relaxed">
-                      {selectedImage.prompt}
-                    </p>
-                  </div>
+                  <PromptBlock prompt={selectedImage.prompt} />
 
                   <div className="space-y-6 border-t border-white/5 pt-10">
                     <div className="grid grid-cols-2 gap-8">
