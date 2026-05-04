@@ -11,7 +11,7 @@ const CREDITS_PER_DOLLAR = 80;
 const PLANS = {
   starter: { name: "Starter Manifest", credits: 3000,  usdCents: 3750  },
   power:   { name: "Power Engine",     credits: 7000,  usdCents: 8750  },
-  quantum: { name: "Quantum Flow",     credits: 24000, usdCents: 12100 },
+  quantum: { name: "Quantum Flow",     credits: 18000, usdCents: 12100 },
 };
 
 // Stripe zero-decimal currencies (amount = whole units, not cents)

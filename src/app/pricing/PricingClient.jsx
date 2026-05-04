@@ -12,7 +12,7 @@ const CREDIT_COST = { s5: 120, s10: 200, s15: 320 };
 const PLANS = [
   { id: "starter",  n: "Starter",      c: 3000,  p: 37.50 },
   { id: "power",    n: "Power Engine", c: 7000,  p: 87.50, hot: true },
-  { id: "quantum",  n: "Quantum Flow", c: 24000, p: 121 },
+  { id: "quantum",  n: "Quantum Flow", c: 18000, p: 121 },
 ];
 
 // Dynamically calculate video counts from credits
