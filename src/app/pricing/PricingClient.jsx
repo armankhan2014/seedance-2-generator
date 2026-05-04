@@ -155,7 +155,9 @@ export default function PricingClient() {
   }, [success, session?.user?.id]);
 
   const customAmount = parseInt(customDollars) || 0;
-  const customCredits = customAmount * CREDITS_PER_DOLLAR;
+  // Credits based on USD equivalent (1 USD = 80 credits regardless of display currency)
+  const customUsdEquivalent = isUSD ? customAmount : customAmount / (cur.rate || 1);
+  const customCredits = Math.floor(customUsdEquivalent * CREDITS_PER_DOLLAR);
 
   async function buy(id) {
     if (!session) { window.dispatchEvent(new CustomEvent("openSignIn")); return; }
@@ -270,21 +272,21 @@ export default function PricingClient() {
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
             <div style={{ fontSize: ".75rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "1px" }}>Custom Amount</div>
             <div style={{ fontSize: ".68rem", fontWeight: 600, color: "#a78bfa", background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.25)", borderRadius: 50, padding: "2px 10px" }}>
-              $1 = {CREDITS_PER_DOLLAR} credits
+              {isUSD ? `$1 = ${CREDITS_PER_DOLLAR} credits` : `${cur.symbol}1 ≈ ${Math.round(CREDITS_PER_DOLLAR / (cur.rate || 1))} credits`}
             </div>
           </div>
           <p style={{ fontSize: ".82rem", color: "#475569", marginBottom: 20, marginTop: 0 }}>
-            Need an exact amount? Enter any dollar value and get exactly {CREDITS_PER_DOLLAR} credits per dollar.
+            {isUSD ? `Need an exact amount? Enter any dollar value and get exactly ${CREDITS_PER_DOLLAR} credits per dollar.` : `Enter any amount in ${cur.code} and get the equivalent credits at today's rate.`}
           </p>
 
           <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
             {/* Dollar input */}
             <div style={{ flex: "1 1 180px" }}>
               <label style={{ display: "block", fontSize: ".72rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
-                Amount (USD)
+                Amount ({isUSD ? "USD" : cur.code})
               </label>
               <div style={{ position: "relative" }}>
-                <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#8b5cf6", fontWeight: 700, fontSize: "1rem", pointerEvents: "none" }}>$</span>
+                <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#8b5cf6", fontWeight: 700, fontSize: "1rem", pointerEvents: "none" }}>{cur.symbol}</span>
                 <input
                   type="number" min="1" step="1" placeholder="e.g. 5"
                   value={customDollars}
@@ -292,9 +294,9 @@ export default function PricingClient() {
                   style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px 10px 28px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 9, color: "#fff", fontSize: "1rem", fontWeight: 700, fontFamily: "inherit", outline: "none" }}
                 />
               </div>
-              {!isUSD && customAmount >= 1 && !cur.loading && (
+              {!isUSD && customCredits > 0 && !cur.loading && (
                 <div style={{ fontSize: ".7rem", color: "#475569", marginTop: 5 }}>
-                  ≈ {cur.symbol}{Math.round(customAmount * cur.rate).toLocaleString()} {cur.code}
+                  ≈ ${customUsdEquivalent.toFixed(2)} USD equivalent
                 </div>
               )}
             </div>
@@ -319,7 +321,7 @@ export default function PricingClient() {
                 disabled={customAmount < 1 || loading === "custom"}
                 style={{ padding: "11px 20px", borderRadius: 9, fontSize: ".88rem", fontWeight: 700, cursor: customAmount < 1 || loading === "custom" ? "not-allowed" : "pointer", border: "none", background: customAmount >= 1 ? "linear-gradient(135deg,#8b5cf6,#7c3aed)" : "rgba(255,255,255,0.06)", color: customAmount >= 1 ? "#fff" : "#475569", fontFamily: "inherit", opacity: loading === "custom" ? 0.5 : 1, whiteSpace: "nowrap", width: "100%" }}
               >
-                {loading === "custom" ? "Redirecting…" : customAmount >= 1 ? `Pay $${customAmount}` : session ? "Enter Amount" : "Sign in to Buy"}
+                {loading === "custom" ? "Redirecting…" : customAmount >= 1 ? `Pay ${cur.symbol}${customAmount}` : session ? "Enter Amount" : "Sign in to Buy"}
               </button>
             </div>
           </div>
@@ -340,7 +342,7 @@ export default function PricingClient() {
               { q: "What is your refund policy?", a: "We offer refunds on unused credit purchases within 7 days of the transaction, provided no credits from that purchase have been spent. If you've already used credits or it's been more than 7 days, we're unable to issue a refund. To request one, reach out to us and we'll sort it out." },
               { q: "How many credits does a video cost?", a: "The cost depends on duration, resolution, and quality. A standard 5-second 720p video costs 120 credits. Higher resolution (1080p) and quality (High) settings use more credits. You can see the exact cost before you generate." },
               { q: "Can I top up anytime?", a: "Yes — there are no subscriptions or lock-ins. You can buy more credits at any time, in any amount, and they stack with your existing balance." },
-              { q: "Why is the checkout in USD?", a: "All payments are processed in USD via Stripe. The prices shown on this page in your local currency are for reference only, so you can easily compare. Your card or bank will handle the currency conversion at the current market rate." },
+              { q: "What currency will I be charged in?", a: "You'll be charged in your local currency — we automatically detect your location and present prices and checkout in your currency. USD is used as the base for credit pricing, but you pay in your local currency with no conversion surprises." },
             ].map(({ q, a }) => <FaqItem key={q} q={q} a={a} />)}
           </div>
         </div>

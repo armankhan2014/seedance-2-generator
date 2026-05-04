@@ -82,15 +82,20 @@ export async function POST(req) {
     let planData;
 
     if (plan === "custom") {
-      const dollars = parseInt(customDollars);
-      if (!dollars || dollars < 1) {
-        return NextResponse.json({ error: "Minimum custom amount is $1" }, { status: 400 });
+      const localAmount = parseFloat(customDollars);
+      if (!localAmount || localAmount <= 0) {
+        return NextResponse.json({ error: "Please enter a valid amount" }, { status: 400 });
       }
-      const credits = dollars * CREDITS_PER_DOLLAR;
+      // Convert local amount to USD to calculate credits (1 USD = 80 credits)
+      const usdEquivalent = chargeCurrency === "usd" ? localAmount : localAmount / exchangeRate;
+      if (usdEquivalent < 0.5) {
+        return NextResponse.json({ error: "Minimum amount is too small" }, { status: 400 });
+      }
+      const credits = Math.floor(usdEquivalent * CREDITS_PER_DOLLAR);
       planData = {
         name: `Custom — ${credits.toLocaleString()} Credits`,
         credits,
-        usdCents: dollars * 100,
+        usdCents: Math.round(usdEquivalent * 100),
       };
     } else {
       planData = PLANS[plan];
