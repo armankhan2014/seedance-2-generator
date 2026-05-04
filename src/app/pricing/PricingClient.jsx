@@ -272,7 +272,18 @@ export default function PricingClient() {
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
             <div style={{ fontSize: ".75rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "1px" }}>Custom Amount</div>
             <div style={{ fontSize: ".68rem", fontWeight: 600, color: "#a78bfa", background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.25)", borderRadius: 50, padding: "2px 10px" }}>
-              {isUSD ? `$1 = ${CREDITS_PER_DOLLAR} credits` : `${cur.symbol}1 ≈ ${Math.round(CREDITS_PER_DOLLAR / (cur.rate || 1))} credits`}
+              {isUSD
+                ? `$1 = ${CREDITS_PER_DOLLAR} credits`
+                : (() => {
+                    const perUnit = CREDITS_PER_DOLLAR / (cur.rate || 1);
+                    if (perUnit >= 5) {
+                      // Round DOWN to nearest 5 for a clean number (e.g. 101 → 100)
+                      return `${cur.symbol}1 = ${Math.floor(perUnit / 5) * 5} credits`;
+                    }
+                    // High-value currencies (PKR, INR, NGN…) — flip the display
+                    return `100 credits ≈ ${cur.symbol}${Math.round(1.25 * (cur.rate || 1))}`;
+                  })()
+              }
             </div>
           </div>
           <p style={{ fontSize: ".82rem", color: "#475569", marginBottom: 20, marginTop: 0 }}>
