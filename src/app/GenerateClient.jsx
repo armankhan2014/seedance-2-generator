@@ -132,10 +132,10 @@ export default function Home() {
   const [mode, setMode] = useState("text-to-video");
   // Form State
   const [prompt, setPrompt] = useState("");
-  // Pre-fill prompt from ?prompt= query param (sent by "Use This Prompt" button)
+  // Pre-fill prompt from sessionStorage (set by "Use This Prompt" button)
   useEffect(() => {
-    const p = new URLSearchParams(window.location.search).get("prompt");
-    if (p) setPrompt(decodeURIComponent(p));
+    const p = sessionStorage.getItem("pendingPrompt");
+    if (p) { setPrompt(p); sessionStorage.removeItem("pendingPrompt"); }
   }, []);
   const [showBuilder, setShowBuilder] = useState(false);
   const [aspectRatio, setAspectRatio] = useState(ASPECT_RATIOS[0].value);

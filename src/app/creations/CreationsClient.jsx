@@ -65,7 +65,7 @@ function PromptBlock({ prompt }) {
             <span className="ml-1">{copied ? "Copied!" : "Copy Prompt"}</span>
           </button>
           <button
-            onClick={() => router.push(`/generate?prompt=${encodeURIComponent(prompt)}`)}
+            onClick={() => { sessionStorage.setItem("pendingPrompt", prompt); router.push("/generate"); }}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all border"
             style={{ background: "rgba(139,92,246,0.18)", borderColor: "rgba(139,92,246,0.4)", color: "#c4b5fd" }}
           >

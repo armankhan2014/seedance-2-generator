@@ -222,7 +222,7 @@ function VideoModal({ video, onClose }) {
                     {copied ? "Copied!" : "Copy Prompt"}
                   </button>
                   <button
-                    onClick={() => { onClose(); router.push(`/generate?prompt=${encodeURIComponent(video.prompt)}`); }}
+                    onClick={() => { sessionStorage.setItem("pendingPrompt", video.prompt); onClose(); router.push("/generate"); }}
                     className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all border"
                     style={{ background: "rgba(139,92,246,0.18)", borderColor: "rgba(139,92,246,0.4)", color: "#c4b5fd" }}
                   >
