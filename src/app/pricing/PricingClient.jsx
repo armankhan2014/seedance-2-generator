@@ -240,7 +240,18 @@ export default function PricingClient() {
                   )}
                 </div>
 
-                <div style={{ fontSize: ".82rem", color: "#8b5cf6", fontWeight: 600, marginBottom: 8 }}>{plan.c.toLocaleString()} Credits</div>
+                <div style={{ fontSize: ".82rem", color: "#8b5cf6", fontWeight: 600, marginBottom: !isUSD && !cur.loading ? 4 : 8 }}>{plan.c.toLocaleString()} Credits</div>
+                {!isUSD && !cur.loading && (
+                  <div style={{ fontSize: ".72rem", color: "#475569", marginBottom: 8 }}>
+                    {(() => {
+                      const perUnit = CREDITS_PER_DOLLAR / (cur.rate || 1);
+                      if (perUnit >= 5) {
+                        return `${cur.symbol}1 ≈ ${Math.floor(perUnit / 5) * 5} credits`;
+                      }
+                      return `100 credits ≈ ${cur.symbol}${Math.round(1.25 * (cur.rate || 1))}`;
+                    })()}
+                  </div>
+                )}
 
                 {/* Video count hook */}
                 <div style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)", borderRadius: 10, padding: "10px 12px", marginBottom: 16 }}>
