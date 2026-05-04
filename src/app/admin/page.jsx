@@ -63,6 +63,19 @@ export default async function AdminDashboard() {
     }
   }
 
+  // Visitor log
+  let visits = [], totalVisits = 0, uniqueVisitors = 0, visitsMissing = false;
+  try {
+    [visits, totalVisits] = await Promise.all([
+      prisma.visit.findMany({ orderBy: { createdAt: "desc" }, take: 50 }),
+      prisma.visit.count(),
+    ]);
+    const uv = await prisma.visit.groupBy({ by: ["ip"], _count: true });
+    uniqueVisitors = uv.length;
+  } catch (err) {
+    visitsMissing = true;
+  }
+
   const totalCreations    = users.reduce((s, u) => s + u._count.creations, 0);
   const totalCreditsLeft  = users.reduce((s, u) => s + (u.credits ?? 0), 0);
   const totalRevenueCents = payments.reduce((s, p) => s + centsFromCredits(p.credits), 0);
@@ -143,6 +156,23 @@ CREATE INDEX IF NOT EXISTS "Payment_userId_idx" ON "Payment"("userId");`;
             </div>
           ))}
         </div>
+
+        {/* Stat Cards — Row 3: Visitors */}
+        {!visitsMissing && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 36 }}>
+            {[
+              { label: "Total Visits",      value: totalVisits,      icon: "🌐", color: "#38bdf8" },
+              { label: "Unique Visitors",   value: uniqueVisitors,   icon: "📍", color: "#f472b6" },
+              { label: "Today's Visitors",  value: visits.filter(v => new Date(v.createdAt) > new Date(Date.now() - 86400000)).length, icon: "👁️", color: "#fb923c" },
+            ].map(card => (
+              <div key={card.label} style={{ background: "#1a1a2e", borderRadius: 12, padding: "20px 22px", border: "1px solid #2a2a40" }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>{card.icon}</div>
+                <div style={{ fontSize: 30, fontWeight: 700, color: card.color }}>{card.value}</div>
+                <div style={{ fontSize: 12, color: "#888", marginTop: 4 }}>{card.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
 
         <AddCreditsWidget users={userList} />
 
@@ -300,6 +330,48 @@ CREATE INDEX IF NOT EXISTS "Payment_userId_idx" ON "Payment"("userId");`;
             </tbody>
           </table>
         </div>
+
+        {/* Visitor Log */}
+        {!visitsMissing && (
+          <div style={{ background: "#1a1a2e", borderRadius: 14, border: "1px solid #2a2a40", marginTop: 32, overflow: "hidden" }}>
+            <div style={{ padding: "18px 22px", borderBottom: "1px solid #2a2a40", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>🌐 Visitor Log</h2>
+              <span style={{ fontSize: 12, color: "#888" }}>{totalVisits} visit{totalVisits !== 1 ? "s" : ""} · {uniqueVisitors} unique IPs</span>
+            </div>
+            {visits.length === 0 ? (
+              <div style={{ padding: "40px 22px", textAlign: "center", color: "#555", fontSize: 14 }}>No visitors yet</div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: "#12122a" }}>
+                      {["IP", "Location", "ISP", "Page", "When"].map(h => (
+                        <th key={h} style={{ padding: "10px 18px", textAlign: "left", color: "#888", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em", whiteSpace: "nowrap" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visits.map((v, i) => (
+                      <tr key={v.id} style={{ borderTop: "1px solid #2a2a40", background: i % 2 === 0 ? "transparent" : "#12122080" }}>
+                        <td style={{ padding: "11px 18px", fontFamily: "monospace", color: "#38bdf8", fontSize: 12, whiteSpace: "nowrap" }}>{v.ip}</td>
+                        <td style={{ padding: "11px 18px", color: "#e0e0e0", whiteSpace: "nowrap" }}>
+                          {[v.city, v.region, v.country].filter(Boolean).join(", ") || <span style={{ color: "#444" }}>—</span>}
+                        </td>
+                        <td style={{ padding: "11px 18px", color: "#888", maxWidth: 200 }}>
+                          <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.isp || <span style={{ color: "#444" }}>—</span>}</span>
+                        </td>
+                        <td style={{ padding: "11px 18px", fontFamily: "monospace", color: "#a78bfa", fontSize: 12 }}>{v.page || "/"}</td>
+                        <td style={{ padding: "11px 18px", color: "#666", fontSize: 12, whiteSpace: "nowrap" }}>
+                          {new Date(v.createdAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
         <p style={{ textAlign: "center", color: "#444", fontSize: 11, marginTop: 24 }}>
           Seedance Studio Admin · Only visible to {OWNER_EMAIL}

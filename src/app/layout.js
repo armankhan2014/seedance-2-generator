@@ -5,6 +5,7 @@ import { Providers } from "@/components/Providers";
 import Navbar from "@/components/saas/Navbar";
 import SignInModal from "@/components/saas/SignInModal";
 import TawkTo from "@/components/TawkTo";
+import VisitorTracker from "@/components/VisitorTracker";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -37,6 +38,7 @@ export default function RootLayout({ children }) {
           <SignInModal />
           {/* Tawk.to live chat */}
           <TawkTo />
+          <VisitorTracker />
         </Providers>
       </body>
     </html>

@@ -345,3 +345,63 @@ export async function sendMagicLinkEmail({ email, url }) {
     html: baseWrapper(inner),
   });
 }
+
+// ── 5. Visitor notification ────────────────────────────────────────────────────
+export async function sendVisitNotification({ ip, country, region, city, isp, page }) {
+  const time = new Date().toLocaleString("en-GB", {
+    timeZone: "Europe/London",
+    dateStyle: "full",
+    timeStyle: "short",
+  });
+
+  const flag = country ? `&#127758;` : "🌐";
+  const location = [city, region, country].filter(Boolean).join(", ") || "Unknown location";
+
+  const inner = `
+    <!-- Purple top bar -->
+    <tr><td style="background:linear-gradient(135deg,#1e1b4b,#2e1065);padding:24px 32px 20px">
+      <p style="margin:0;font-size:11px;font-weight:700;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.12em">New Visitor</p>
+      <h1 style="margin:6px 0 0;font-size:20px;font-weight:700;color:#ffffff;line-height:1.2">${flag} Someone visited your site</h1>
+    </td></tr>
+
+    <!-- Details -->
+    <tr><td style="padding:24px 32px 28px">
+      <table width="100%" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#9ca3af;font-size:11px;width:72px;vertical-align:top;text-transform:uppercase;letter-spacing:0.06em">IP</td>
+          <td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#e5e7eb;font-size:13px;font-family:monospace;font-weight:600">${ip}</td>
+        </tr>
+        <tr>
+          <td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;vertical-align:top">Location</td>
+          <td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#e5e7eb;font-size:13px;font-weight:600">${location}</td>
+        </tr>
+        ${isp ? `<tr>
+          <td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;vertical-align:top">ISP</td>
+          <td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#e5e7eb;font-size:13px">${isp}</td>
+        </tr>` : ""}
+        <tr>
+          <td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;vertical-align:top">Page</td>
+          <td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#a78bfa;font-size:13px;font-family:monospace">${page}</td>
+        </tr>
+        <tr>
+          <td style="padding:9px 0;color:#9ca3af;font-size:11px;text-transform:uppercase;letter-spacing:0.06em;vertical-align:top">Time</td>
+          <td style="padding:9px 0;color:#e5e7eb;font-size:13px">${time}</td>
+        </tr>
+      </table>
+    </td></tr>
+
+    <!-- CTA -->
+    <tr><td style="padding:0 32px 28px">
+      <a href="https://seedance.visualseffect.com/admin"
+        style="display:inline-block;padding:11px 22px;background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#ffffff;font-size:12px;font-weight:700;text-decoration:none;border-radius:8px;letter-spacing:0.02em">
+        View All Visitors &#8594;
+      </a>
+    </td></tr>
+  `;
+
+  await send({
+    to: ADMIN_EMAIL,
+    subject: `&#127758; New visitor: ${location} — ${ip}`,
+    html: baseWrapper(inner),
+  });
+}

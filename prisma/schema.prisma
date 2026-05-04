@@ -95,3 +95,19 @@ model Payment {
 
   @@index([userId])
 }
+
+// Tracks site visitors — IP, geolocation, page, user agent
+model Visit {
+  id        String   @id @default(cuid())
+  ip        String
+  country   String?
+  city      String?
+  region    String?
+  isp       String?
+  page      String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([ip])
+  @@index([createdAt])
+}
