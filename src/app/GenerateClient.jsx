@@ -1,6 +1,7 @@
 "use client";
 import { useSession, signIn } from "next-auth/react";
 import { useState, useRef, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   FaBolt,
   FaMagic,
@@ -132,6 +133,12 @@ export default function Home() {
   const [mode, setMode] = useState("text-to-video");
   // Form State
   const [prompt, setPrompt] = useState("");
+  const searchParams = useSearchParams();
+  // Pre-fill prompt from ?prompt= query param (sent by "Use This Prompt" button)
+  useEffect(() => {
+    const p = searchParams.get("prompt");
+    if (p) setPrompt(decodeURIComponent(p));
+  }, []);
   const [showBuilder, setShowBuilder] = useState(false);
   const [aspectRatio, setAspectRatio] = useState(ASPECT_RATIOS[0].value);
   const [resolution, setResolution] = useState(RESOLUTIONS[1].value); // 720p default

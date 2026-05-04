@@ -47,21 +47,32 @@ function ModalVideo({ src }) {
 function PromptBlock({ prompt }) {
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const router = useRouter();
   if (!prompt) return null;
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <div className="text-[9px] font-semibold text-muted uppercase tracking-widest">Prompt</div>
-        <button
-          onClick={() => { navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all border"
-          style={copied
-            ? { background: "rgba(34,197,94,0.15)", borderColor: "rgba(34,197,94,0.4)", color: "#22c55e" }
-            : { background: "rgba(139,92,246,0.1)", borderColor: "rgba(139,92,246,0.25)", color: "#a78bfa" }}
-        >
-          {copied ? <FiCheck size={11} /> : <FiClipboard size={11} />}
-          <span className="ml-1">{copied ? "Copied!" : "Copy Prompt"}</span>
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => { navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all border"
+            style={copied
+              ? { background: "rgba(34,197,94,0.15)", borderColor: "rgba(34,197,94,0.4)", color: "#22c55e" }
+              : { background: "rgba(139,92,246,0.1)", borderColor: "rgba(139,92,246,0.25)", color: "#a78bfa" }}
+          >
+            {copied ? <FiCheck size={11} /> : <FiClipboard size={11} />}
+            <span className="ml-1">{copied ? "Copied!" : "Copy Prompt"}</span>
+          </button>
+          <button
+            onClick={() => router.push(`/generate?prompt=${encodeURIComponent(prompt)}`)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all border"
+            style={{ background: "rgba(139,92,246,0.18)", borderColor: "rgba(139,92,246,0.4)", color: "#c4b5fd" }}
+          >
+            <FiArrowRight size={11} />
+            <span className="ml-1">Use This Prompt</span>
+          </button>
+        </div>
       </div>
       <p
         className="text-sm font-normal text-foreground leading-relaxed transition-all"
