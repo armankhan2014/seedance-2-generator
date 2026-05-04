@@ -16,6 +16,33 @@ import { downloadMedia } from "@/lib/utils";
 import { FiDownload, FiTrash2, FiClipboard, FiCheck, FiChevronDown, FiChevronUp } from "react-icons/fi";
 import toast from "@/lib/toast";
 
+// ── Buffering-aware modal video ───────────────────────────────────────────────
+function ModalVideo({ src }) {
+  const [buffering, setBuffering] = useState(true);
+  return (
+    <div className="relative h-full w-full">
+      <video
+        key={src}
+        src={src}
+        className="h-full w-full object-contain"
+        controls
+        autoPlay
+        loop
+        playsInline
+        preload="auto"
+        onCanPlay={() => setBuffering(false)}
+        onPlaying={() => setBuffering(false)}
+        onWaiting={() => setBuffering(true)}
+      />
+      {buffering && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none">
+          <div className="w-10 h-10 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Collapsible prompt with copy button ──────────────────────────────────────
 function PromptBlock({ prompt }) {
   const [copied, setCopied] = useState(false);
@@ -368,14 +395,7 @@ export default function CreationsPage() {
               {/* Image Side */}
               <div className="flex w-full md:w-[50%] h-[50%] md:h-full p-2 bg-glass-bg backdrop-blur-3xl flex border-b md:border-b-0 md:border-r border-glass-border">
                 {selectedImage.status === "completed" ? (
-                  <video
-                    src={selectedImage.imageUrl}
-                    className="h-full w-full object-contain"
-                    controls
-                    autoPlay
-                    loop
-                    playsInline
-                  />
+                  <ModalVideo src={selectedImage.imageUrl} />
                 ) : selectedImage.status === "failed" ? (
                   <div className="w-full h-full flex flex-col items-center justify-center bg-red-500/5 gap-4">
                     <div className="w-16 h-16 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-500 text-3xl">

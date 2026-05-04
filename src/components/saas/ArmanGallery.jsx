@@ -149,6 +149,33 @@ function GalleryCard({ video, index, onClick, isAdmin, onToggle, toggling }) {
   );
 }
 
+// ── Buffering-aware modal video ───────────────────────────────────────────────
+function ModalVideo({ src }) {
+  const [buffering, setBuffering] = useState(true);
+  return (
+    <div className="relative h-full w-full">
+      <video
+        key={src}
+        src={src}
+        className="h-full w-full object-contain"
+        controls
+        autoPlay
+        loop
+        playsInline
+        preload="auto"
+        onCanPlay={() => setBuffering(false)}
+        onPlaying={() => setBuffering(false)}
+        onWaiting={() => setBuffering(true)}
+      />
+      {buffering && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none">
+          <div className="w-10 h-10 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function VideoModal({ video, onClose }) {
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -175,7 +202,7 @@ function VideoModal({ video, onClose }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex w-full md:w-[55%] h-[50%] md:h-full p-2 bg-glass-bg backdrop-blur-3xl border-b md:border-b-0 md:border-r border-glass-border">
-          <video src={video.imageUrl} className="h-full w-full object-contain" controls autoPlay loop playsInline />
+          <ModalVideo src={video.imageUrl} />
         </div>
 
         <div className="flex w-full md:w-[45%] h-[50%] md:h-full p-6 flex-col bg-glass-bg backdrop-blur-3xl overflow-y-auto custom-scrollbar">
