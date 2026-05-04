@@ -13,7 +13,7 @@
  *   sendVisitNotification({ ip, country, region, city, isp, page })
  */
 
-const ADMIN_EMAIL = "armankhan0826@gmail.com";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "picturental@gmail.com";
 const FROM        = "Seedance Studio <onboarding@resend.dev>";
 
 async function send({ to, subject, html }) {
