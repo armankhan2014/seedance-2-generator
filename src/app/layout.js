@@ -1,10 +1,10 @@
 import { Suspense } from "react";
-import Script from "next/script";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 import Navbar from "@/components/saas/Navbar";
 import SignInModal from "@/components/saas/SignInModal";
+import TawkTo from "@/components/TawkTo";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -36,23 +36,7 @@ export default function RootLayout({ children }) {
           {/* Global sign-in modal — triggered via window.dispatchEvent(new CustomEvent("openSignIn")) */}
           <SignInModal />
           {/* Tawk.to live chat */}
-          <Script
-            id="tawkto"
-            strategy="afterInteractive"
-            dangerouslySetInnerHTML={{
-              __html: `
-                var Tawk_API=Tawk_API||{}, Tawk_LoadStart=new Date();
-                (function(){
-                  var s1=document.createElement("script"),s0=document.getElementsByTagName("script")[0];
-                  s1.async=true;
-                  s1.src='https://embed.tawk.to/69f87996986f9c1c33e853ff/1jnp9lsvt';
-                  s1.charset='UTF-8';
-                  s1.setAttribute('crossorigin','*');
-                  s0.parentNode.insertBefore(s1,s0);
-                })();
-              `,
-            }}
-          />
+          <TawkTo />
         </Providers>
       </body>
     </html>
