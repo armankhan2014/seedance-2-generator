@@ -12,9 +12,11 @@ const FROM        = "Seedance Studio <noreply@visualseffect.com>";
 async function send({ to, subject, html }) {
   const key = process.env.RESEND_API_KEY;
   if (!key) {
-    console.log("[EMAIL] RESEND_API_KEY not set — skipping:", subject);
+    console.error("[EMAIL] RESEND_API_KEY not set — skipping:", subject);
     return;
   }
+  const recipient = Array.isArray(to) ? to : [to];
+  console.log("[EMAIL] Attempting send:", subject, "→", recipient);
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -22,16 +24,16 @@ async function send({ to, subject, html }) {
         "Authorization": `Bearer ${key}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ from: FROM, to: Array.isArray(to) ? to : [to], subject, html }),
+      body: JSON.stringify({ from: FROM, to: recipient, subject, html }),
     });
+    const body = await res.text();
     if (res.ok) {
-      console.log("[EMAIL] Sent:", subject, "→", to);
+      console.log("[EMAIL] Sent OK:", subject, "→", recipient, "| id:", JSON.parse(body)?.id);
     } else {
-      const body = await res.text();
-      console.error("[EMAIL] Resend error:", res.status, body);
+      console.error("[EMAIL] Resend error", res.status, "for", subject, "→", recipient, ":", body);
     }
   } catch (err) {
-    console.error("[EMAIL] send() failed:", err.message);
+    console.error("[EMAIL] send() threw for", subject, "→", recipient, ":", err.message);
   }
 }
 
