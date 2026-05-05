@@ -7,7 +7,7 @@
  */
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "armankhan0826@gmail.com";
-const FROM        = "Seedance Studio <noreply@send.visualseffect.com>";
+const FROM        = "Seedance Studio <noreply@visualseffect.com>";
 
 async function send({ to, subject, html }) {
   const key = process.env.RESEND_API_KEY;
