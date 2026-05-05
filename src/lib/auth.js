@@ -67,6 +67,18 @@ export const authOptions = {
   pages: { signIn: "/", error: "/" },
 
   events: {
+    async signIn({ user, isNewUser }) {
+      // Notify on every login (new and returning users)
+      if (!isNewUser) {
+        const { sendSignupNotification } = await import("@/lib/email");
+        await sendSignupNotification({
+          name: user.name,
+          email: user.email,
+          image: user.image,
+          isReturning: true,
+        }).catch(() => {});
+      }
+    },
     async createUser({ user }) {
       // Fire welcome + admin notification for every new sign-up (any provider)
       await Promise.allSettled([
