@@ -13,7 +13,7 @@ import {
 } from "react-icons/fa";
 import { useRouter } from "next/navigation";
 import { downloadMedia } from "@/lib/utils";
-import { FiDownload, FiTrash2, FiClipboard, FiCheck, FiChevronDown, FiChevronUp } from "react-icons/fi";
+import { FiDownload, FiTrash2, FiClipboard, FiCheck, FiChevronDown, FiChevronUp, FiArrowRight } from "react-icons/fi";
 import toast from "@/lib/toast";
 
 // ── Buffering-aware modal video ───────────────────────────────────────────────
@@ -280,8 +280,7 @@ export default function CreationsPage() {
                 >
                   {item.status === "completed" ? (
                     <video
-                       src={item.videoFiles?.[0]}
-                       poster={item.imageUrl}
+                       src={item.imageUrl}
                       className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                       muted
                       autoPlay

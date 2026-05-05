@@ -43,8 +43,6 @@ export const AIService = {
       const endpoint = config.ai.seedance.endpoints[type][resolution];
       if (!endpoint) throw new Error(`Endpoint not found for mode: ${mode} and resolution: ${resolution}`);
 
-      console.log("[AI_DEBUG] Submitting to:", endpoint);
-      console.log("[AI_DEBUG] mode:", mode, "resolution:", resolution, "quality:", quality, "duration:", duration);
 
       const webhookUrl = `${config.auth.webhook_url}/api/webhook/muapi?secret=${process.env.WEBHOOK_SECRET}`;
       const payload = {
@@ -63,7 +61,6 @@ export const AIService = {
         payload.audio_files = audio_files.slice(0, 3);
       }
 
-      console.log("[AI_DEBUG] payload:", JSON.stringify(payload));
 
       const submitRes = await fetch(endpoint, {
         method: "POST",
@@ -72,10 +69,10 @@ export const AIService = {
           "x-api-key": apiKey,
         },
         body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(30000),
       });
 
       const responseText = await submitRes.text();
-      console.log("[AI_DEBUG] response status:", submitRes.status, "body:", responseText);
 
       if (!submitRes.ok) {
         // API rejected the request — refund happens in catch block below
@@ -92,9 +89,7 @@ export const AIService = {
       const request_id = responseData.id || responseData.request_id;
       if (!request_id) throw new Error(`No request_id in response: ${responseText}`);
 
-      const creationModel = prisma.creation || prisma.Creation;
-      if (creationModel) {
-        await creationModel.create({
+      await prisma.creation.create({
           data: {
             userId,
             prompt,
@@ -109,7 +104,6 @@ export const AIService = {
             status: "processing",
           }
         });
-      }
 
       return { request_id };
 
@@ -120,7 +114,6 @@ export const AIService = {
       console.error("[AI_REFUND] Generation failed — refunding", cost, "credits to user", userId, "| reason:", error.message);
       try {
         await UserService.addCredits(userId, cost);
-        console.log("[AI_REFUND] Successfully refunded", cost, "credits to user", userId);
       } catch (refundErr) {
         // Log refund failure but don't hide the original error
         console.error("[AI_REFUND_FAILED] Could not refund credits for user", userId, refundErr.message);
@@ -145,7 +138,6 @@ export const AIService = {
           headers: { "x-api-key": apiKey },
         });
         const text = await res.text();
-        console.log("[AI_POLL_RAW] URL:", url, "status:", res.status, "body:", text.slice(0, 500));
         if (res.ok) {
           return JSON.parse(text);
         }
@@ -157,10 +149,7 @@ export const AIService = {
   },
 
   async checkStatus(requestId, userId) {
-    const creationModel = prisma.creation || prisma.Creation;
-    if (!creationModel) return { status: "processing" };
-
-    const creation = await creationModel.findUnique({ where: { requestId } });
+    const creation = await prisma.creation.findUnique({ where: { requestId } });
     if (!creation) return { status: "processing" };
 
     if (creation.status === "completed") {
@@ -174,7 +163,6 @@ export const AIService = {
     if (apiKey) {
       try {
         const result = await this.pollMuAPI(requestId, apiKey);
-        console.log("[AI_POLL_PARSED]", requestId, JSON.stringify(result));
 
         const outputs = result?.outputs || result?.output || [];
         const outputArr = Array.isArray(outputs) ? outputs : (outputs ? [outputs] : []);
@@ -185,27 +173,24 @@ export const AIService = {
         const isCompleted = outputArr.length > 0 || statusStr === "succeeded" || statusStr === "completed" || statusStr === "success";
         const isFailed = hasError || statusStr === "failed" || statusStr === "error";
 
-        console.log("[AI_POLL_PARSED] id:", requestId, "status:", statusStr, "outputs:", outputArr.length, "imageUrl:", imageUrl);
 
         if (result && isCompleted && imageUrl) {
           // Upload to R2 if configured — fall back to MuAPI URL on failure
           let finalUrl = imageUrl;
           if (isR2Configured()) {
             try {
-              const creation = await creationModel.findUnique({ where: { requestId } });
+              const creation = await prisma.creation.findUnique({ where: { requestId } });
               if (creation) {
                 const ext = imageUrl.includes(".webm") ? "webm" : "mp4";
                 const key = `videos/${creation.id}.${ext}`;
-                console.log("[AI_POLL] Uploading to R2:", key);
                 finalUrl = await uploadVideoFromUrl(imageUrl, key);
-                console.log("[AI_POLL] R2 upload done:", finalUrl);
               }
             } catch (e) {
               console.error("[AI_POLL] R2 upload failed, using MuAPI URL:", e.message);
               finalUrl = imageUrl;
             }
           }
-          await creationModel.update({
+          await prisma.creation.update({
             where: { requestId },
             data: { status: "completed", imageUrl: finalUrl },
           });
@@ -213,7 +198,7 @@ export const AIService = {
         }
         if (result && isFailed) {
           const errMsg = result.error || result.detail || "Generation failed";
-          await creationModel.update({
+          await prisma.creation.update({
             where: { requestId },
             data: { status: "failed", error: errMsg },
           });
