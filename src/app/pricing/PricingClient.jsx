@@ -6,8 +6,13 @@ import toast from "@/lib/toast";
 
 const CREDITS_PER_DOLLAR = 80;
 
-// Credit costs per video (720p basic quality)
-const CREDIT_COST = { s5: 120, s10: 200, s15: 320 };
+// Credit costs per video at 1080p + High quality (the most realistic
+// price point for serious creators — matches what users see in the
+// generator). Source of truth lives in src/lib/services/ai.js.
+//   5s  = ceil(120 * 1.40625) = 169
+//   10s = ceil(200 * 1.40625) = 282
+//   15s = ceil(320 * 1.40625) = 450
+const CREDIT_COST = { s5: 169, s10: 282, s15: 450 };
 
 const PLANS = [
   { id: "starter",  n: "Starter",      c: 3000,  p: 37.50 },
@@ -273,7 +278,7 @@ export default function PricingClient() {
                   return (
                     <div style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)", borderRadius: 10, padding: "10px 12px", marginBottom: 16 }}>
                       <div style={{ fontSize: ".78rem", fontWeight: 800, color: "#e2e8f0", marginBottom: 4 }}>
-                        🎬 Up to <span style={{ color: "#a78bfa" }}>{vc.v15} full videos</span> (15s each)
+                        🎬 <span style={{ color: "#a78bfa" }}>{vc.v15} full videos</span> (15s, 1080p high)
                       </div>
                       <div style={{ fontSize: ".7rem", color: "#64748b", lineHeight: 1.5 }}>
                         Or <strong style={{ color: "#94a3b8" }}>{vc.v10} videos</strong> at 10s · <strong style={{ color: "#94a3b8" }}>{vc.v5} clips</strong> at 5s
@@ -380,7 +385,7 @@ export default function PricingClient() {
               { q: "Do credits expire?", a: "No. Credits never expire — they stay in your account until you use them. Buy once and generate videos whenever you're ready." },
               { q: "What payment methods are accepted?", a: "We accept all major credit and debit cards (Visa, Mastercard, American Express, Discover) as well as Apple Pay and Google Pay, processed securely through Stripe." },
               { q: "What is your refund policy?", a: "We offer refunds on unused credit purchases within 7 days of the transaction, provided no credits from that purchase have been spent. If you've already used credits or it's been more than 7 days, we're unable to issue a refund. To request one, reach out to us and we'll sort it out." },
-              { q: "How many credits does a video cost?", a: "The cost depends on duration, resolution, and quality. A standard 5-second 720p video costs 120 credits. Higher resolution (1080p) and quality (High) settings use more credits. You can see the exact cost before you generate." },
+              { q: "How many credits does a video cost?", a: "The cost depends on duration, resolution, and quality. The video counts shown above assume 1080p + High quality (the best output): 169 credits for 5s, 282 for 10s, 450 for 15s. Choosing 720p or Basic quality reduces the cost so your credits go further. You can see the exact cost in the generator before you click Generate." },
               { q: "Can I top up anytime?", a: "Yes — there are no subscriptions or lock-ins. You can buy more credits at any time, in any amount, and they stack with your existing balance." },
               { q: "What currency will I be charged in?", a: "You'll be charged in your local currency — we automatically detect your location and present prices and checkout in your currency. USD is used as the base for credit pricing, but you pay in your local currency with no conversion surprises." },
             ].map(({ q, a }) => <FaqItem key={q} q={q} a={a} />)}
