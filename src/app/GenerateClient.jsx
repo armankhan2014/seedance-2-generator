@@ -49,6 +49,41 @@ function removeRecentImage(url) {
   } catch { return []; }
 }
 
+// Resize/re-encode an image in the browser before uploading.
+// Phone photos are typically 5–12 MB, which exceeds Vercel's 4.5 MB body limit.
+// Targeting 2048px on the long edge at JPEG-0.85 produces ~0.5–1.5 MB while
+// keeping plenty of detail for AI video reference.
+async function compressImage(file, { maxDim = 2048, quality = 0.85 } = {}) {
+  const dataUrl = await new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error("Could not read file"));
+    r.readAsDataURL(file);
+  });
+  const img = await new Promise((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = () => reject(new Error("Could not decode image"));
+    i.src = dataUrl;
+  });
+  let { width, height } = img;
+  if (width > maxDim || height > maxDim) {
+    const ratio = width > height ? maxDim / width : maxDim / height;
+    width = Math.round(width * ratio);
+    height = Math.round(height * ratio);
+  }
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(img, 0, 0, width, height);
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+  if (!blob) throw new Error("Could not encode image");
+  if (blob.size >= file.size) return file;
+  const baseName = file.name.replace(/\.[^.]+$/, "");
+  return new File([blob], baseName + ".jpg", { type: "image/jpeg" });
+}
+
 const ASPECT_RATIOS = [
   { label: "16:9", value: "16:9" },
   { label: "9:16", value: "9:16" },
@@ -193,8 +228,13 @@ export default function Home() {
     try {
       setIsUploading(true);
       setError(null);
+      let uploadFile = file;
+      try { uploadFile = await compressImage(file); } catch {}
+      if (uploadFile.size > 4_000_000) {
+        throw new Error("Image is too large even after compression. Please pick a smaller photo.");
+      }
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", uploadFile);
       const res = await fetch("/api/upload", {
         method: "POST",
         body: formData,
