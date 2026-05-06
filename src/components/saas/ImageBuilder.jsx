@@ -145,9 +145,9 @@ export default function ImageBuilder({ onUse, onClose }) {
       background: "#111118",
       border: "1px solid rgba(139,92,246,0.25)",
       borderRadius: "20px",
-      // Wider so 1536x1024 result images render at a useful size on desktops.
-      // Caps at 92vw so it still fits gracefully on narrow screens.
-      width: "100%", maxWidth: "min(1100px, 92vw)", maxHeight: "92vh",
+      // Wide enough to show the 1536x1024 result without cropping.
+      // 96vw on smaller screens, 1400px max on desktop.
+      width: "100%", maxWidth: "min(1400px, 96vw)", maxHeight: "94vh",
       overflowY: "auto",
       boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(139,92,246,0.1)",
       fontFamily: "Inter, sans-serif",
