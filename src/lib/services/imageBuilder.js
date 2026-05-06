@@ -4,7 +4,10 @@
 
 const OPENAI_EDITS_URL = "https://api.openai.com/v1/images/edits";
 
-export async function buildReferenceImage({ referenceFiles, prompt, size = "1024x1024", quality = "high" }) {
+// Landscape canvas gives the model room for 4 horizontal panels instead of
+// stacking them. input_fidelity:"high" tells gpt-image-1 to weight the
+// reference photos heavily for identity — without it the model drifts.
+export async function buildReferenceImage({ referenceFiles, prompt, size = "1536x1024", quality = "high", inputFidelity = "high" }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     const err = new Error("Image builder is not configured.");
@@ -28,6 +31,7 @@ export async function buildReferenceImage({ referenceFiles, prompt, size = "1024
   fd.append("prompt", prompt.slice(0, 4000));
   fd.append("size", size);
   fd.append("quality", quality);
+  fd.append("input_fidelity", inputFidelity);
   fd.append("n", "1");
   for (const f of referenceFiles) {
     fd.append("image[]", f, f.name || "ref.jpg");

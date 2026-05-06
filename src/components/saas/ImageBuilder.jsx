@@ -240,8 +240,8 @@ export default function ImageBuilder({ onUse, onClose }) {
             <div>
               <p style={S.title}>🎨 Build my reference</p>
               <p style={S.subtitle}>
-                Upload 1–3 photos of yourself, describe the look, and AI generates a turnaround
-                sheet you can use as a reference for video generation. <b>2 credits per image.</b>
+                Upload <b>1–3 photos of yourself</b> (front + side + back works best for identity match),
+                describe the look, and AI generates a turnaround sheet. <b>2 credits per image.</b>
               </p>
             </div>
             <button onClick={onClose} style={{

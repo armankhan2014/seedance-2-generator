@@ -12,15 +12,27 @@ const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8MB after client-side compression
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 // The "recipe" — hidden from users, wraps every request to enforce
-// identity preservation, four-view layout, and editorial quality.
+// identity preservation, four-panel layout, and editorial quality.
 function buildPrompt(userLook) {
-  return `Full body character turnaround sheet of the SAME person from the reference photos. Preserve exact facial identity — same face structure, eyes, nose, hairstyle, no face change.
+  return `Generate ONE horizontal model sheet image showing the SAME person from the reference photos in a new outfit.
 
-Look: ${userLook}
+ABSOLUTE RULE — IDENTITY MUST BE IDENTICAL TO THE REFERENCE:
+- The face in EVERY panel must be 100% the same as the reference photo.
+- Match exactly: face shape, jawline, eyes, eyebrows, nose, mouth, ears, skin tone, age, facial hair pattern, hairstyle, hair color, hair texture.
+- DO NOT beautify, idealize, age, de-age, slim, restyle, or otherwise alter the face. Treat this as a costume/wardrobe edit on the EXACT SAME PERSON, not a new character that looks similar.
+- If you cannot preserve the face, return the reference face unchanged rather than inventing one.
 
-Four views, side by side: 1) Front profile, arms relaxed. 2) Side profile. 3) Back profile. 4) Face close-up at high detail.
+LAYOUT — exactly 4 panels in ONE horizontal row, left to right, evenly spaced with thin gaps between them:
+- Panel 1: Front view, full body from head to feet, arms relaxed at sides, looking at camera.
+- Panel 2: Right-side profile, full body from head to feet, looking forward (90° from panel 1).
+- Panel 3: Back view, full body from head to feet.
+- Panel 4: A SINGLE close-up portrait of the face from the front — head and shoulders only.
 
-Clean white studio background, soft even lighting, no harsh shadows. Professional fashion model sheet style, symmetrical layout, evenly spaced. Ultra realistic skin texture, sharp focus, natural hair detail. 8k editorial photography, highly detailed, no distortion, no stylization.`;
+DO NOT duplicate the close-up. DO NOT add a 5th panel. DO NOT stack panels vertically. Output is ONE wide image, one row, four panels total.
+
+OUTFIT / LOOK: ${userLook}
+
+STYLE: Professional fashion model sheet on a clean white studio background. Soft, even, shadowless lighting. Ultra-realistic skin texture, sharp focus, natural hair detail. 8k editorial photography. No text, no logos, no watermarks, no captions.`;
 }
 
 async function uploadToR2(buffer, userId) {
