@@ -172,6 +172,14 @@ export default function ImageBuilder({ onUse, onClose }) {
       border: "1px solid rgba(139,92,246,0.25)",
     },
     refImg: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
+    refLabel: {
+      position: "absolute", bottom: 0, left: 0, right: 0,
+      background: "linear-gradient(to top, rgba(0,0,0,0.85), transparent)",
+      color: "#fff", fontSize: "0.6rem", fontWeight: 700,
+      padding: "10px 4px 3px",
+      textAlign: "center", textTransform: "uppercase",
+      letterSpacing: "0.05em", pointerEvents: "none",
+    },
     refRemove: {
       position: "absolute", top: 3, right: 3, width: 18, height: 18,
       borderRadius: "50%", background: "rgba(0,0,0,0.7)",
@@ -242,8 +250,8 @@ export default function ImageBuilder({ onUse, onClose }) {
             <div>
               <p style={S.title}>🎨 Build my reference</p>
               <p style={S.subtitle}>
-                Upload <b>1–3 photos of yourself</b> (front + side + back works best for identity match),
-                describe the look, and AI generates a turnaround sheet. <b>2 credits per image.</b>
+                Upload <b>1–3 photos of yourself in this order: front, side, back</b> for the best identity match.
+                A single front photo also works — AI will infer the side and back. <b>2 credits per image.</b>
               </p>
             </div>
             <button onClick={onClose} style={{
@@ -292,20 +300,24 @@ export default function ImageBuilder({ onUse, onClose }) {
             <>
               <label style={S.label}>Reference photos ({refs.length}/{MAX_REFERENCES})</label>
               <div style={S.refRow}>
-                {refs.map((r, idx) => (
-                  <div key={idx} style={S.refTile}>
-                    <img src={r.previewUrl} alt={`Reference ${idx + 1}`} style={S.refImg} />
-                    <button
-                      type="button"
-                      onClick={() => removeRef(idx)}
-                      style={S.refRemove}
-                      title="Remove"
-                      aria-label="Remove reference"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
+                {refs.map((r, idx) => {
+                  const label = ["Front", "Side", "Back"][idx] || `Ref ${idx + 1}`;
+                  return (
+                    <div key={idx} style={S.refTile}>
+                      <img src={r.previewUrl} alt={label} style={S.refImg} />
+                      <div style={S.refLabel}>{label}</div>
+                      <button
+                        type="button"
+                        onClick={() => removeRef(idx)}
+                        style={S.refRemove}
+                        title="Remove"
+                        aria-label="Remove reference"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
                 {refs.length < MAX_REFERENCES && (
                   <button
                     type="button"

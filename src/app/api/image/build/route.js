@@ -13,10 +13,29 @@ const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 // The "recipe" — hidden from users, wraps every request to enforce
 // identity preservation, four-panel layout, and editorial quality.
-function buildPrompt(userLook) {
+// The reference-handling guidance adapts based on how many photos
+// the user uploaded.
+function buildReferenceGuidance(refCount) {
+  if (refCount >= 3) {
+    return `The user uploaded ${refCount} reference photos showing the SAME person from multiple angles — likely front, side, and back, in that order. Use each photo to inform its corresponding panel:
+- Reference photo 1 → use it to draw Panel 1 (front view) exactly. Match the face, body proportions, and visible details.
+- Reference photo 2 → use it to draw Panel 2 (side profile) exactly. Match the side-on facial features (nose profile, ear shape, jaw line) precisely.
+- Reference photo 3 → use it to draw Panel 3 (back view) exactly. Match the hairline, head shape from behind, neck, and shoulders precisely.
+- For Panel 4 (face close-up), use whichever reference photo shows the face most clearly (typically photo 1).`;
+  }
+  if (refCount === 2) {
+    return `The user uploaded 2 reference photos of the SAME person from different angles. Use them together to lock identity. For the views the references cover, match exactly. For the missing view (likely back), INFER realistically — keep the same face, same hair, same skin tone, same body shape, same outfit drape. The inferred view must be unmistakably the same person.`;
+  }
+  // refCount === 1 (or fallback)
+  return `The user uploaded ONE reference photo (likely a front-facing photo). Use it to LOCK the person's identity completely. For the side profile and back view panels, you must INFER realistically from what you can see in the front photo — keep the same face, same hair color and length and texture, same skin tone, same age, same body proportions, same height, same weight. The person in the side and back panels MUST be unmistakably the same person as the front reference. Do not invent different features for the unseen views.`;
+}
+
+function buildPrompt(userLook, refCount = 1) {
   return `ABSOLUTE RULE — THIS IS NOT IMAGE GENERATION, THIS IS WARDROBE EDITING ON A FIXED PERSON.
 
-The reference photos define ONE specific person. Every panel of the output must show THAT EXACT person — same face, no exceptions.
+${buildReferenceGuidance(refCount)}
+
+Every panel of the output must show THAT EXACT person — same face, no exceptions.
 
 The face must be PIXEL-IDENTICAL across all four panels, INCLUDING the smaller full-body panels. The face in the small full-body panels (1, 2, 3) must be drawn with the same precision and detail as the close-up panel (4). Do NOT save detail for the close-up. Do NOT simplify, smooth, blur, idealize, beautify, age, de-age, slim, or "interpret" the face when it appears small. If you cannot draw the face at full detail in a small panel, you should NOT generate the image at all — but you MUST NOT generate a different face.
 
@@ -72,7 +91,7 @@ export async function POST(req) {
   if (look.length > MAX_LOOK_LENGTH) {
     return NextResponse.json({ error: `Description is too long (max ${MAX_LOOK_LENGTH} characters).` }, { status: 400 });
   }
-  const prompt = buildPrompt(look.trim());
+  const prompt = buildPrompt(look.trim(), files.length);
   if (!files.length) {
     return NextResponse.json({ error: "Upload at least one reference photo." }, { status: 400 });
   }
