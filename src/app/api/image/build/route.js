@@ -10,7 +10,7 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 // Single-pass via Google Gemini 2.5 Flash Image — handles small-face
 // identity preservation in turnaround sheets much better than GPT-image-1.
 // ~$0.04 per image, fast (~30s), single API call.
-const CREDIT_COST = 2;
+const CREDIT_COST = 20;
 const MAX_REFERENCES = 3;
 const MAX_LOOK_LENGTH = 500;
 const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8MB after client-side compression
