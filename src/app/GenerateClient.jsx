@@ -206,6 +206,16 @@ export default function Home() {
   useEffect(() => {
     setRecentImages(loadRecentImages());
   }, []);
+  // Pre-fill reference image from sessionStorage (set by "Use this image to
+  // generate a video" button in /creations). Auto-switches to image-to-video.
+  useEffect(() => {
+    const url = sessionStorage.getItem("pendingReferenceImage");
+    if (!url) return;
+    sessionStorage.removeItem("pendingReferenceImage");
+    setMode("image-to-video");
+    setImagesList((prev) => (prev.includes(url) ? prev : [...prev, url].slice(0, 9)));
+    setRecentImages(saveRecentImage(url));
+  }, []);
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [resultUrl, setResultUrl] = useState(null);

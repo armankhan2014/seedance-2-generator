@@ -597,6 +597,20 @@ export default function CreationsPage() {
                 </div>
 
                 <div className="pt-12 flex flex-col gap-3">
+                  {/* For image creations: primary action is "use as reference for video" */}
+                  {selectedImage.status === "completed" && isImageCreation(selectedImage) && (
+                    <button
+                      onClick={() => {
+                        sessionStorage.setItem("pendingReferenceImage", selectedImage.imageUrl);
+                        setSelectedImage(null);
+                        router.push("/generate");
+                      }}
+                      className="w-full py-3 bg-gradient-to-r from-primary-600 to-primary-500 text-white rounded-lg font-bold tracking-wider uppercase text-xs flex items-center justify-center gap-3 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-primary-500/20 border border-primary-400/50"
+                    >
+                      <FaMagic size={13} />
+                      Use this image to generate a video
+                    </button>
+                  )}
                   <button
                     onClick={async () => {
                       if (selectedImage.status !== "completed") return;
@@ -606,15 +620,21 @@ export default function CreationsPage() {
                       setDownloading(false);
                     }}
                     disabled={downloading || selectedImage.status !== "completed"}
-                    className="w-full py-3 bg-gradient-to-r from-primary-600 to-primary-500 text-white rounded-lg font-bold tracking-wider uppercase text-xs flex items-center justify-center gap-3 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 shadow-xl shadow-primary-500/20 border border-primary-400/50"
+                    className={`w-full py-3 rounded-lg font-bold tracking-wider uppercase text-xs flex items-center justify-center gap-3 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 ${
+                      isImageCreation(selectedImage)
+                        ? "bg-glass-bg border border-glass-border text-foreground hover:bg-glass-hover"
+                        : "bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-xl shadow-primary-500/20 border border-primary-400/50"
+                    }`}
                   >
                     {downloading ? (
-                      <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
                     ) : (
                       <FiDownload size={16} />
                     )}
                     {selectedImage.status === "completed"
-                      ? (downloading ? "Downloading..." : "Download Video")
+                      ? (downloading
+                          ? "Downloading..."
+                          : isImageCreation(selectedImage) ? "Download Image" : "Download Video")
                       : selectedImage.status === "failed"
                         ? "Generation Failed"
                         : "Generating..."}
@@ -627,11 +647,13 @@ export default function CreationsPage() {
                       className="w-full py-2.5 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs font-semibold flex items-center justify-center gap-2 transition-all"
                     >
                       <FiTrash2 size={13} />
-                      Delete Video
+                      Delete {isImageCreation(selectedImage) ? "Image" : "Video"}
                     </button>
                   ) : (
                     <div className="flex flex-col gap-2 p-3 rounded-lg border border-red-500/30 bg-red-500/5">
-                      <p className="text-xs text-red-400 text-center font-semibold">Delete this video permanently?</p>
+                      <p className="text-xs text-red-400 text-center font-semibold">
+                        Delete this {isImageCreation(selectedImage) ? "image" : "video"} permanently?
+                      </p>
                       <div className="flex gap-2">
                         <button
                           onClick={() => setDeletingModal(false)}
