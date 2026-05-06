@@ -246,6 +246,33 @@ function VideoModal({ video, onClose }) {
                 </button>
               )}
             </div>
+            {/* Reference images — visible to everyone */}
+            {Array.isArray(video.inputImages) && video.inputImages.length > 0 && (
+              <div className="space-y-2 border-t border-white/5 pt-4">
+                <div className="text-xs text-muted uppercase tracking-widest">Reference Images</div>
+                <div className="flex flex-wrap gap-2">
+                  {video.inputImages.map((img, i) => (
+                    <a key={i} href={img} target="_blank" rel="noopener noreferrer">
+                      <img
+                        src={img}
+                        alt={`Reference ${i + 1}`}
+                        style={{
+                          width: 64,
+                          height: 64,
+                          objectFit: "cover",
+                          borderRadius: 8,
+                          border: "1px solid rgba(139,92,246,0.25)",
+                          cursor: "pointer",
+                          transition: "transform 0.2s, border-color 0.2s",
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.06)"; e.currentTarget.style.borderColor = "rgba(139,92,246,0.7)"; }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; e.currentTarget.style.borderColor = "rgba(139,92,246,0.25)"; }}
+                      />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="space-y-6 border-t border-white/5 pt-6">
               <div className="grid grid-cols-2 gap-6">
                 {video.aspectRatio && (

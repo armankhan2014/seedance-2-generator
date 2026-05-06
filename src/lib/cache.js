@@ -46,7 +46,7 @@ export const getCachedPublicGallery = () =>
         },
         orderBy: { createdAt: "desc" },
         take: 24,
-        select: { id: true, imageUrl: true, prompt: true, aspectRatio: true, resolution: true, duration: true, createdAt: true },
+        select: { id: true, imageUrl: true, prompt: true, aspectRatio: true, resolution: true, duration: true, quality: true, createdAt: true, inputImages: true },
       });
     },
     ["public-gallery"],
