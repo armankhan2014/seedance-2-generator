@@ -247,32 +247,10 @@ export default function ProfilePage() {
               <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700, color: "#fff", display: "flex", alignItems: "center" }}>
                 {name}
                 {profile?.verified && (
-                  <span title="Verified — Paid Member" style={{ display: "inline-flex", alignItems: "center", marginLeft: "6px" }}>
-                    <svg width="22" height="22" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                      {/* 12 scalloped petals around the perimeter */}
-                      {Array.from({ length: 12 }).map((_, i) => {
-                        const a = (i / 12) * Math.PI * 2;
-                        return (
-                          <circle
-                            key={i}
-                            cx={50 + Math.cos(a) * 36}
-                            cy={50 + Math.sin(a) * 36}
-                            r={13}
-                            fill="#ec4899"
-                          />
-                        );
-                      })}
-                      {/* Central body — covers inner edges of petals for a clean flower shape */}
-                      <circle cx="50" cy="50" r="38" fill="#ec4899" />
-                      {/* White checkmark */}
-                      <path
-                        d="M30 52 L43 65 L70 38"
-                        stroke="white"
-                        strokeWidth="9"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        fill="none"
-                      />
+                  <span title="ID Verified" aria-label="ID Verified" style={{ display: "inline-flex", alignItems: "center", marginLeft: "6px" }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="#e91e8c" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M23 12l-2.44-2.79.34-3.69-3.61-.82-1.89-3.2L12 2.96 8.6 1.5 6.71 4.69 3.1 5.5l.34 3.7L1 12l2.44 2.79-.34 3.7 3.61.82 1.89 3.2L12 21.04l3.4 1.46 1.89-3.19 3.61-.82-.34-3.69z" />
+                      <path d="M10 17l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9z" fill="white" />
                     </svg>
                   </span>
                 )}
