@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { UserService } from "@/lib/services/user";
-import { buildReferenceImage } from "@/lib/services/imageBuilder";
+import { buildReferenceImage } from "@/lib/services/imageBuilderGemini";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
-// Two-pass image build: generate a high-detail close-up first to lock identity,
-// then use it as the canonical face reference for the 4-panel turnaround.
-// Pass 1 (~$0.04) + Pass 2 (~$0.06) ≈ $0.10 per image → 4 credits.
-const CREDIT_COST = 4;
+// Single-pass via Google Gemini 2.5 Flash Image — handles small-face
+// identity preservation in turnaround sheets much better than GPT-image-1.
+// ~$0.04 per image, fast (~30s), single API call.
+const CREDIT_COST = 2;
 const MAX_REFERENCES = 3;
 const MAX_LOOK_LENGTH = 500;
 const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8MB after client-side compression
@@ -33,29 +33,10 @@ function buildReferenceGuidance(refCount) {
   return `The user uploaded ONE reference photo (likely a front-facing photo). Use it to LOCK the person's identity completely. For the side profile and back view panels, you must INFER realistically from what you can see in the front photo — keep the same face, same hair color and length and texture, same skin tone, same age, same body proportions, same height, same weight. The person in the side and back panels MUST be unmistakably the same person as the front reference. Do not invent different features for the unseen views.`;
 }
 
-// Pass 1 prompt — generate a clean, high-detail close-up to use as the
-// canonical face reference for Pass 2. Identity-focused, no outfit detail.
-function buildCloseUpPrompt() {
-  return `Generate ONE high-detail close-up portrait photograph of the SAME person from the reference photos. This is a face-only identity reference.
-
-ABSOLUTE RULE — IDENTITY MUST MATCH THE REFERENCE EXACTLY:
-Match exactly: face shape, jawline, cheekbones, eyes (colour, shape, spacing), eyebrows (shape, thickness), nose (shape, width, bridge), mouth, lips, chin, ears, skin tone, skin texture (pores, fine lines, marks), age, facial hair pattern and density, hairstyle, hair colour, hair texture, hairline. Do NOT beautify, idealize, slim, age, de-age, or stylize the face. This is a documentary-quality face capture, not an artistic interpretation.
-
-COMPOSITION: head and upper shoulders only. Frontal view, looking directly into the camera. Neutral confident expression. Match the facial hair from the reference exactly.
-
-BACKGROUND: clean pure white studio background. LIGHTING: soft, even, shadowless.
-
-STYLE: 8k editorial photography. Ultra-realistic skin texture with visible pores and natural tone variation. Sharp focus on the face. Natural hair detail. Photorealistic. No text, no logos, no watermarks.`;
-}
-
-function buildPrompt(userLook, refCount = 1, hasCanonicalCloseUp = false) {
-  const referenceGuidance = hasCanonicalCloseUp
-    ? `The FIRST reference photo is a high-detail close-up portrait of the canonical face — use it as the MASTER TEMPLATE for the face in every panel of the output. Match it pixel-for-pixel. The other reference photos show the same person from additional angles (front body, side, back) — use them for body shape, hair from other angles, and outfit drape, but ALWAYS defer to the first close-up reference for facial features.`
-    : buildReferenceGuidance(refCount);
-
+function buildPrompt(userLook, refCount = 1) {
   return `ABSOLUTE RULE — THIS IS NOT IMAGE GENERATION, THIS IS WARDROBE EDITING ON A FIXED PERSON.
 
-${referenceGuidance}
+${buildReferenceGuidance(refCount)}
 
 Every panel of the output must show THAT EXACT person — same face, no exceptions.
 
@@ -141,43 +122,25 @@ export async function POST(req) {
     return NextResponse.json({ error: "Could not debit credits." }, { status: 500 });
   }
 
-  // Two-pass generation: lock identity in a close-up first, then build the
-  // turnaround using that close-up as the master face reference.
-  const refundOn = async (err, label) => {
+  // Single-pass generation via Gemini.
+  let buffer;
+  try {
+    buffer = await buildReferenceImage({
+      referenceFiles: files,
+      prompt: buildPrompt(look.trim(), files.length),
+    });
+  } catch (err) {
     const status = err.status ?? 500;
     if (status >= 500 || err.code === "NOT_CONFIGURED") {
       try { await UserService.addCredits(session.user.id, CREDIT_COST); } catch {}
     }
-    console.error(`[IMAGE_BUILD/${label}]`, err.status, err.message);
-  };
-
-  // Pass 1: face close-up
-  let closeUpBuffer;
-  try {
-    closeUpBuffer = await buildReferenceImage({
-      referenceFiles: files,
-      prompt: buildCloseUpPrompt(),
-      size: "1024x1024",
-    });
-  } catch (err) {
-    await refundOn(err, "pass1");
+    console.error("[IMAGE_BUILD]", err.status, err.message);
     if (err.code === "NOT_CONFIGURED") {
       return NextResponse.json({ error: "Image builder is not available right now. Please try again later." }, { status: 503 });
     }
-    return NextResponse.json({ error: "Could not generate image. Please try again." }, { status: 502 });
-  }
-
-  // Pass 2: full 4-panel turnaround, with the generated close-up as the
-  // first reference (canonical face).
-  const closeUpFile = new File([closeUpBuffer], "canonical-closeup.png", { type: "image/png" });
-  let buffer;
-  try {
-    buffer = await buildReferenceImage({
-      referenceFiles: [closeUpFile, ...files],
-      prompt: buildPrompt(look.trim(), files.length, true),
-    });
-  } catch (err) {
-    await refundOn(err, "pass2");
+    if (status === 400) {
+      return NextResponse.json({ error: err.message || "The request was rejected (often a safety filter). Try a different photo or look description." }, { status: 400 });
+    }
     return NextResponse.json({ error: "Could not generate image. Please try again." }, { status: 502 });
   }
 
