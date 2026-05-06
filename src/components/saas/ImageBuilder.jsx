@@ -240,7 +240,7 @@ export default function ImageBuilder({ onUse, onClose }) {
 
   const isLoggedOut = sessionStatus === "unauthenticated";
   const sessionLoading = sessionStatus === "loading" || (session && userCredits === null);
-  const noCredits = session && userCredits !== null && userCredits < 2;
+  const noCredits = session && userCredits !== null && userCredits < 4;
 
   return (
     <div style={S.overlay} ref={overlayRef}>
@@ -251,7 +251,8 @@ export default function ImageBuilder({ onUse, onClose }) {
               <p style={S.title}>🎨 Build my reference</p>
               <p style={S.subtitle}>
                 Upload <b>1–3 photos of yourself in this order: front, side, back</b> for the best identity match.
-                A single front photo also works — AI will infer the side and back. <b>2 credits per image.</b>
+                A single front photo also works — AI will infer the side and back.
+                <br/>Uses two AI passes for maximum face accuracy. <b>4 credits per image, ~60 seconds.</b>
               </p>
             </div>
             <button onClick={onClose} style={{
@@ -287,10 +288,10 @@ export default function ImageBuilder({ onUse, onClose }) {
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", padding: "32px 16px", gap: "12px" }}>
               <div style={{ fontSize: "2rem" }}>⚡</div>
               <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "#e2e8f0", margin: 0 }}>
-                You need at least 2 credits
+                You need at least 4 credits
               </p>
               <p style={{ fontSize: "0.78rem", color: "#475569", margin: 0, lineHeight: 1.6 }}>
-                Build my reference uses 2 credits per image. Buy a credit pack to unlock it.
+                Build my reference uses 4 credits per image (two AI passes for max accuracy). Buy a credit pack to unlock it.
               </p>
               <a href="/pricing" style={{ marginTop: "8px", padding: "10px 24px", background: "linear-gradient(135deg,#8b5cf6,#7c3aed)", borderRadius: "10px", color: "#fff", fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit", textDecoration: "none" }}>
                 View Pricing →
@@ -368,7 +369,7 @@ export default function ImageBuilder({ onUse, onClose }) {
                 disabled={loading || refs.length === 0 || !look.trim()}
                 onClick={handleGenerate}
               >
-                {loading ? "✨ Generating… (~30s)" : `✨ Generate (2 credits)`}
+                {loading ? "✨ Generating… (~60s, two passes)" : `✨ Generate (4 credits)`}
               </button>
 
               {error && <div style={S.errorBox}>{error}</div>}
