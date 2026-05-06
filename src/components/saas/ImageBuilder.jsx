@@ -145,9 +145,9 @@ export default function ImageBuilder({ onUse, onClose }) {
       background: "#111118",
       border: "1px solid rgba(139,92,246,0.25)",
       borderRadius: "20px",
-      // Wide enough to show the 1536x1024 result without cropping.
-      // 96vw on smaller screens, 1400px max on desktop.
-      width: "100%", maxWidth: "min(1400px, 96vw)", maxHeight: "94vh",
+      // Compact: leaves margin around the modal so it doesn't feel full-screen.
+      // The 1536x1024 result image still fits comfortably at this width.
+      width: "100%", maxWidth: "min(960px, 90vw)", maxHeight: "85vh",
       overflowY: "auto",
       boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(139,92,246,0.1)",
       fontFamily: "Inter, sans-serif",
