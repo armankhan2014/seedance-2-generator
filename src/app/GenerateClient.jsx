@@ -40,6 +40,15 @@ function loadRecentImages() {
   } catch { return []; }
 }
 
+function removeRecentImage(url) {
+  try {
+    const existing = JSON.parse(localStorage.getItem(RECENT_IMAGES_KEY) || "[]");
+    const updated = existing.filter(u => u !== url);
+    localStorage.setItem(RECENT_IMAGES_KEY, JSON.stringify(updated));
+    return updated;
+  } catch { return []; }
+}
+
 const ASPECT_RATIOS = [
   { label: "16:9", value: "16:9" },
   { label: "9:16", value: "9:16" },
@@ -584,29 +593,43 @@ export default function Home() {
                       {recentImages.map((url, idx) => {
                         const alreadyAdded = imagesList.includes(url);
                         return (
-                          <button
+                          <div
                             key={idx}
-                            onClick={() => {
-                              if (!alreadyAdded && imagesList.length < 9) {
-                                setImagesList(prev => [...prev, url]);
-                              }
-                            }}
-                            disabled={alreadyAdded || imagesList.length >= 9}
-                            title={alreadyAdded ? "Already added" : "Add to images"}
-                            className="relative flex-shrink-0 w-12 h-12 rounded-md overflow-hidden border border-glass-border hover:border-primary-500/60 transition-all group disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="relative flex-shrink-0 w-12 h-12 rounded-md overflow-hidden border border-glass-border hover:border-primary-500/60 transition-all group"
                           >
-                            <img src={url} className="w-full h-full object-cover" alt="" />
-                            {!alreadyAdded && (
-                              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                <FaPlus className="text-white text-[10px]" />
-                              </div>
-                            )}
-                            {alreadyAdded && (
-                              <div className="absolute inset-0 bg-primary-500/30 flex items-center justify-center">
-                                <span className="text-white text-[10px] font-bold">✓</span>
-                              </div>
-                            )}
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (!alreadyAdded && imagesList.length < 9) {
+                                  setImagesList(prev => [...prev, url]);
+                                }
+                              }}
+                              disabled={alreadyAdded || imagesList.length >= 9}
+                              title={alreadyAdded ? "Already added" : "Add to images"}
+                              className="block w-full h-full disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              <img src={url} className="w-full h-full object-cover" alt="" />
+                              {!alreadyAdded && (
+                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                                  <FaPlus className="text-white text-[10px]" />
+                                </div>
+                              )}
+                              {alreadyAdded && (
+                                <div className="absolute inset-0 bg-primary-500/30 flex items-center justify-center pointer-events-none">
+                                  <span className="text-white text-[10px] font-bold">✓</span>
+                                </div>
+                              )}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRecentImages(removeRecentImage(url))}
+                              title="Remove from recent"
+                              aria-label="Remove from recent"
+                              className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/70 border border-white/20 text-white text-[10px] leading-none flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-red-500 hover:border-red-400 transition-all"
+                            >
+                              ×
+                            </button>
+                          </div>
                         );
                       })}
                     </div>
