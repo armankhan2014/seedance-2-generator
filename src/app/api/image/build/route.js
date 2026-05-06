@@ -14,47 +14,37 @@ const MAX_LOOK_LENGTH = 500;
 const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8MB after client-side compression
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
-// The "recipe" — hidden from users, wraps every request to enforce
-// identity preservation, four-panel layout, and editorial quality.
-// The reference-handling guidance adapts based on how many photos
-// the user uploaded.
+// The "recipe" — hidden from users, mirrors the user's preferred ChatGPT
+// turnaround prompt with their wording and structure. The reference-handling
+// guidance adapts based on how many photos were uploaded.
 function buildReferenceGuidance(refCount) {
   if (refCount >= 3) {
-    return `The user uploaded ${refCount} reference photos showing the SAME person from multiple angles — likely front, side, and back, in that order. Use each photo to inform its corresponding panel:
-- Reference photo 1 → use it to draw Panel 1 (front view) exactly. Match the face, body proportions, and visible details.
-- Reference photo 2 → use it to draw Panel 2 (side profile) exactly. Match the side-on facial features (nose profile, ear shape, jaw line) precisely.
-- Reference photo 3 → use it to draw Panel 3 (back view) exactly. Match the hairline, head shape from behind, neck, and shoulders precisely.
-- For Panel 4 (face close-up), use whichever reference photo shows the face most clearly (typically photo 1).`;
+    return `Reference photos: ${refCount} photos of the SAME person from multiple angles, uploaded in this order — front, side, back. Use photo 1 to inform panel 1 (front), photo 2 for panel 2 (side profile), photo 3 for panel 3 (back). Match each angle precisely.`;
   }
   if (refCount === 2) {
-    return `The user uploaded 2 reference photos of the SAME person from different angles. Use them together to lock identity. For the views the references cover, match exactly. For the missing view (likely back), INFER realistically — keep the same face, same hair, same skin tone, same body shape, same outfit drape. The inferred view must be unmistakably the same person.`;
+    return `Reference photos: 2 photos of the SAME person from different angles. Lock identity from both. For the missing angle, infer realistically — keep the same face, hair, skin tone, body shape.`;
   }
-  // refCount === 1 (or fallback)
-  return `The user uploaded ONE reference photo (likely a front-facing photo). Use it to LOCK the person's identity completely. For the side profile and back view panels, you must INFER realistically from what you can see in the front photo — keep the same face, same hair color and length and texture, same skin tone, same age, same body proportions, same height, same weight. The person in the side and back panels MUST be unmistakably the same person as the front reference. Do not invent different features for the unseen views.`;
+  return `Reference photo: 1 photo of the person. Use it to lock identity completely. Infer the side and back views realistically — keep the same face, hair, skin tone, age, body proportions. The person in every panel must be unmistakably the same person as the reference.`;
 }
 
 function buildPrompt(userLook, refCount = 1) {
-  return `ABSOLUTE RULE — THIS IS NOT IMAGE GENERATION, THIS IS WARDROBE EDITING ON A FIXED PERSON.
+  return `Full body character turnaround sheet of the SAME person from the reference photos. Preserve exact facial identity — same face structure, same eyes, same nose, same hairstyle, no face change. Match the person from the references exactly: their gender, ethnicity, age, skin tone, body type, and physical features. This is a wardrobe edit on that same specific person, not a new character that looks similar.
 
 ${buildReferenceGuidance(refCount)}
 
-Every panel of the output must show THAT EXACT person — same face, no exceptions.
+Outfit: ${userLook}.
 
-The face must be PIXEL-IDENTICAL across all four panels, INCLUDING the smaller full-body panels. The face in the small full-body panels (1, 2, 3) must be drawn with the same precision and detail as the close-up panel (4). Do NOT save detail for the close-up. Do NOT simplify, smooth, blur, idealize, beautify, age, de-age, slim, or "interpret" the face when it appears small. If you cannot draw the face at full detail in a small panel, you should NOT generate the image at all — but you MUST NOT generate a different face.
+Slight stubble beard if the reference shows facial hair (otherwise match the reference). Confident neutral expression.
 
-Match exactly to the reference photos: face shape, jawline, cheekbones, eyes (color, shape, spacing), eyebrows (shape, thickness), nose (shape, width, bridge), mouth, lips, chin, ears, skin tone, skin texture (pores, lines, marks), age, facial hair pattern and density, hairstyle, hair color, hair texture, hairline. Treat this as a costume change on the same person, not the creation of a new character that looks similar.
+Four views layout — exactly 4 panels in ONE horizontal row, left to right, evenly spaced with thin gaps between them:
+1. Front profile (standing straight, arms relaxed, looking at camera)
+2. Side profile (full body, 90° from front)
+3. Back profile (full body)
+4. Face close-up (high detail, head and shoulders only, looking at camera) — THIS PANEL IS MANDATORY. Every output must include a clear face close-up as the rightmost panel. Do not omit it. Do not replace it with another body view. Do not duplicate any other panel.
 
-LAYOUT — exactly 4 panels in ONE horizontal row, left to right, evenly spaced with thin gaps:
-- Panel 1: Front view, full body head-to-feet, arms relaxed at sides, looking at camera.
-- Panel 2: Right-side profile, full body head-to-feet, body rotated 90° from panel 1, looking forward.
-- Panel 3: Back view, full body head-to-feet.
-- Panel 4: A SINGLE close-up portrait of the face from the front — head and shoulders only.
+The face must be identical across all four panels — same precision and detail in the small full-body panels as in the close-up.
 
-DO NOT duplicate the close-up. DO NOT add a 5th panel. DO NOT stack panels vertically. Output is ONE wide image, one row, four panels total.
-
-OUTFIT / LOOK: ${userLook}
-
-STYLE: Professional fashion model sheet on a clean white studio background. Soft, even, shadowless lighting. Ultra-realistic skin texture, sharp focus, natural hair detail. 8k editorial photography. No text, no logos, no watermarks, no captions. The four faces must be indistinguishable from each other when zoomed in — they are the same face.`;
+Clean white studio background, soft even lighting, no harsh shadows. Professional fashion model sheet style, symmetrical layout, evenly spaced. Ultra realistic skin texture, sharp focus, natural hair detail. 8k, editorial photography, highly detailed, no distortion, no stylization. No text, no logos, no watermarks, no captions.`;
 }
 
 async function uploadToR2(buffer, userId) {
