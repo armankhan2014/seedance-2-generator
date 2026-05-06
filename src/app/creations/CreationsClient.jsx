@@ -16,6 +16,13 @@ import { downloadMedia } from "@/lib/utils";
 import { FiDownload, FiTrash2, FiClipboard, FiCheck, FiChevronDown, FiChevronUp, FiArrowRight } from "react-icons/fi";
 import toast from "@/lib/toast";
 
+// Generated images live under R2 prefix 'image-builds/...'.
+// Generated videos live under 'videos/...'. We use the URL to tell them apart
+// without needing a DB schema change.
+function isImageCreation(item) {
+  return typeof item?.imageUrl === "string" && item.imageUrl.includes("/image-builds/");
+}
+
 // ── Buffering-aware modal video ───────────────────────────────────────────────
 function ModalVideo({ src }) {
   const [buffering, setBuffering] = useState(true);
@@ -102,6 +109,7 @@ export default function CreationsPage() {
   const [deletingId, setDeletingId] = useState(null);   // card confirm overlay
   const [deletingModal, setDeletingModal] = useState(false); // modal confirm state
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [filter, setFilter] = useState("all"); // "all" | "videos" | "images"
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -146,14 +154,16 @@ export default function CreationsPage() {
 
   const deleteCreation = async (id) => {
     setDeleteLoading(true);
+    const target = creations.find((c) => c.id === id);
+    const noun = target && isImageCreation(target) ? "Image" : "Video";
     try {
       const res = await fetch(`/api/creations/${id}`, { method: "DELETE" });
       if (res.ok) {
         setCreations(prev => prev.filter(c => c.id !== id));
         if (selectedImage?.id === id) setSelectedImage(null);
-        toast.success("Video deleted");
+        toast.success(`${noun} deleted`);
       } else {
-        toast.error("Failed to delete video.");
+        toast.error(`Failed to delete ${noun.toLowerCase()}.`);
       }
     } catch (e) {
       console.error("Delete failed:", e);
@@ -205,11 +215,41 @@ export default function CreationsPage() {
           My Gallery
         </h1>
         <p className="text-muted text-sm max-w-xl">
-          All the videos you've created, saved in one place.
+          Every video and reference image you've created, saved in one place.
         </p>
       </header>
 
       <div className="max-w-7xl mx-auto">
+        {/* Filter tabs (only shown when there are any creations) */}
+        {creations.length > 0 && (() => {
+          const counts = {
+            all: creations.length,
+            videos: creations.filter((c) => !isImageCreation(c)).length,
+            images: creations.filter((c) => isImageCreation(c)).length,
+          };
+          const tabs = [
+            { id: "all", label: `All (${counts.all})` },
+            { id: "videos", label: `Videos (${counts.videos})` },
+            { id: "images", label: `Images (${counts.images})` },
+          ];
+          return (
+            <div className="flex gap-1 mb-6 p-1 bg-glass-bg border border-glass-border rounded-lg w-fit">
+              {tabs.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setFilter(t.id)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+                    filter === t.id
+                      ? "bg-primary-500 text-white"
+                      : "text-muted hover:text-foreground"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
         {creations.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, y: 16 }}
@@ -269,7 +309,13 @@ export default function CreationsPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             <AnimatePresence>
-              {creations.map((item, index) => (
+              {creations
+                .filter((c) =>
+                  filter === "all" ? true :
+                  filter === "images" ? isImageCreation(c) :
+                  !isImageCreation(c)
+                )
+                .map((item, index) => (
                 <motion.div
                   key={item.id}
                   initial={{ opacity: 0, y: 20 }}
@@ -279,14 +325,22 @@ export default function CreationsPage() {
                   onClick={() => setSelectedImage(item)}
                 >
                   {item.status === "completed" ? (
-                    <video
-                       src={item.imageUrl}
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                      muted
-                      autoPlay
-                      loop
-                      playsInline
-                    />
+                    isImageCreation(item) ? (
+                      <img
+                        src={item.imageUrl}
+                        alt={item.prompt || "Generated image"}
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                      />
+                    ) : (
+                      <video
+                        src={item.imageUrl}
+                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                        muted
+                        autoPlay
+                        loop
+                        playsInline
+                      />
+                    )
                   ) : item.status === "failed" ? (
                     <div className="w-full h-full flex flex-col items-center justify-center bg-red-500/10 gap-3">
                       <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center text-red-500">
@@ -313,7 +367,7 @@ export default function CreationsPage() {
                     <div className="flex justify-end">
                       <button
                         onClick={(e) => { e.stopPropagation(); setDeletingId(item.id); }}
-                        title="Delete video"
+                        title={isImageCreation(item) ? "Delete image" : "Delete video"}
                         className="w-7 h-7 rounded-lg bg-black/40 hover:bg-red-500/80 border border-white/10 hover:border-red-400/50 flex items-center justify-center text-white/60 hover:text-white transition-all"
                       >
                         <FiTrash2 size={11} />
@@ -335,8 +389,13 @@ export default function CreationsPage() {
                         <div className="flex items-center gap-2">
                           {item.status === "completed" && item.imageUrl && (
                             <button
-                              onClick={(e) => { e.stopPropagation(); downloadMedia(item.imageUrl, `seedance-${item.id}.mp4`); toast.info("Download started"); }}
-                              title="Download video"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const ext = isImageCreation(item) ? "png" : "mp4";
+                                downloadMedia(item.imageUrl, `seedance-${item.id}.${ext}`);
+                                toast.info("Download started");
+                              }}
+                              title={isImageCreation(item) ? "Download image" : "Download video"}
                               className="w-8 h-8 rounded-lg bg-primary-600 hover:bg-primary-500 border border-primary-400/50 flex items-center justify-center text-white transition-colors"
                             >
                               <FiDownload size={12} />
@@ -359,7 +418,9 @@ export default function CreationsPage() {
                       <div className="w-10 h-10 rounded-full bg-red-500/20 border border-red-400/40 flex items-center justify-center">
                         <FiTrash2 size={16} className="text-red-400" />
                       </div>
-                      <p className="text-white text-xs font-semibold text-center">Delete this video?</p>
+                      <p className="text-white text-xs font-semibold text-center">
+                        Delete this {isImageCreation(item) ? "image" : "video"}?
+                      </p>
                       <p className="text-white/40 text-[10px] text-center">This can't be undone.</p>
                       <div className="flex gap-2 mt-1">
                         <button
@@ -405,7 +466,15 @@ export default function CreationsPage() {
               {/* Image Side */}
               <div className="flex w-full md:w-[50%] h-[50%] md:h-full p-2 bg-glass-bg backdrop-blur-3xl flex border-b md:border-b-0 md:border-r border-glass-border">
                 {selectedImage.status === "completed" ? (
-                  <ModalVideo src={selectedImage.imageUrl} />
+                  isImageCreation(selectedImage) ? (
+                    <img
+                      src={selectedImage.imageUrl}
+                      alt={selectedImage.prompt || "Generated image"}
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    <ModalVideo src={selectedImage.imageUrl} />
+                  )
                 ) : selectedImage.status === "failed" ? (
                   <div className="w-full h-full flex flex-col items-center justify-center bg-red-500/5 gap-4">
                     <div className="w-16 h-16 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-500 text-3xl">
@@ -532,7 +601,8 @@ export default function CreationsPage() {
                     onClick={async () => {
                       if (selectedImage.status !== "completed") return;
                       setDownloading(true);
-                      await downloadMedia(selectedImage.imageUrl, `seedance-${selectedImage.id}.mp4`);
+                      const ext = isImageCreation(selectedImage) ? "png" : "mp4";
+                      await downloadMedia(selectedImage.imageUrl, `seedance-${selectedImage.id}.${ext}`);
                       setDownloading(false);
                     }}
                     disabled={downloading || selectedImage.status !== "completed"}

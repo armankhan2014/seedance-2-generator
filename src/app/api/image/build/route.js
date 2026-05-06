@@ -3,6 +3,8 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { UserService } from "@/lib/services/user";
 import { buildReferenceImage } from "@/lib/services/imageBuilderGemini";
+import { prisma } from "@/lib/prisma";
+import { revalidateTag } from "next/cache";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 // Single-pass via Google Gemini 2.5 Flash Image — handles small-face
@@ -151,6 +153,27 @@ export async function POST(req) {
     try { await UserService.addCredits(session.user.id, CREDIT_COST); } catch {}
     console.error("[IMAGE_BUILD] R2 upload failed:", err.message);
     return NextResponse.json({ error: "Could not save the generated image. Your credits have been refunded." }, { status: 500 });
+  }
+
+  // Save a Creation row so it appears in the user's gallery (/creations).
+  // Image vs video is detected later by the imageUrl path prefix
+  // ('image-builds/...' for images, 'videos/...' for videos).
+  try {
+    await prisma.creation.create({
+      data: {
+        userId: session.user.id,
+        prompt: look.trim(),
+        imageUrl: url,
+        status: "completed",
+        inputImages: files.map((f) => f.name || "ref").slice(0, 3),
+      },
+    });
+    revalidateTag(`creations-${session.user.id}`);
+    revalidateTag(`user-${session.user.id}`);
+  } catch (err) {
+    // Don't fail the whole request if the gallery write fails — the user
+    // still gets the URL back. They just won't see this entry in /creations.
+    console.error("[IMAGE_BUILD] Gallery save failed:", err.message);
   }
 
   return NextResponse.json({ url, creditsCharged: CREDIT_COST });
