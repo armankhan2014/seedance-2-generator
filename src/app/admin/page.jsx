@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import AddCreditsWidget from "./AddCreditsWidget";
+import VerifyToggle from "./VerifyToggle";
 
 const OWNER_EMAIL = "armankhan0826@gmail.com";
 
@@ -291,9 +292,7 @@ CREATE INDEX IF NOT EXISTS "Payment_userId_idx" ON "Payment"("userId");`;
                         : <span style={{ color: "#444", fontSize: 13 }}>—</span>}
                     </td>
                     <td style={{ padding: "12px 18px" }}>
-                      {user.verified
-                        ? <span style={{ color: "#fbbf24", fontSize: 16 }}>✅</span>
-                        : <span style={{ color: "#444", fontSize: 13 }}>—</span>}
+                      <VerifyToggle email={user.email} initial={user.verified} />
                     </td>
                   </tr>
                 ))}
