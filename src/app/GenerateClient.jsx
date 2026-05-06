@@ -155,7 +155,6 @@ export default function Home() {
   const [recentImages, setRecentImages] = useState([]); // Recently uploaded image URLs
   const [videoFiles, setVideoFiles] = useState([]); // Max 3 URLs for Reference
   const [audioFiles, setAudioFiles] = useState([]); // Max 3 URLs for Reference
-  const [newImageUrl, setNewImageUrl] = useState("");
   const [newVideoUrl, setNewVideoUrl] = useState("");
   const [newAudioUrl, setNewAudioUrl] = useState("");
   // UI State
@@ -180,13 +179,6 @@ export default function Home() {
     { id: "image-to-video", label: "Image", fullLabel: "Image to Video", icon: IoImageOutline },
     { id: "reference-to-video", label: "Reference", fullLabel: "Reference to Video", icon: FaSyncAlt },
   ];
-
-  const addImageToList = () => {
-    if (newImageUrl && imagesList.length < 9) {
-      setImagesList([...imagesList, newImageUrl]);
-      setNewImageUrl("");
-    }
-  };
 
   // FIX 1: Show thumbnail immediately from local file, handle both MuAPI response formats
   const handleFileUpload = async (event) => {
@@ -511,20 +503,12 @@ export default function Home() {
                 </label>
                 <div className="flex gap-2">
                   <input
-                    type="text"
-                    value={newImageUrl}
-                    onChange={(e) => setNewImageUrl(e.target.value)}
-                    placeholder="Image URL..."
-                    className="flex-1 bg-glass-bg border border-glass-border rounded-md px-3 py-2 text-xs outline-none focus:border-primary-500/40"
-                  />
-                  <input
                     type="file"
                     ref={fileInputRef}
                     hidden
                     accept=".png, .jpg, .jpeg"
                     onChange={handleFileUpload}
                   />
-                  {/* FIX 2: Upload button shows the last uploaded image as preview */}
                   <button
                     onClick={() => {
                       if (!session) {
@@ -534,26 +518,19 @@ export default function Home() {
                       fileInputRef.current?.click();
                     }}
                     disabled={isUploading || imagesList.length >= 9}
-                    className="w-9 h-9 bg-primary-500/10 border border-primary-500/20 text-primary-500 rounded-md flex items-center justify-center hover:bg-primary-500 hover:text-white transition-colors overflow-hidden"
+                    className="flex-1 h-10 bg-primary-500/10 border border-primary-500/20 text-primary-500 rounded-md flex items-center justify-center gap-2 text-xs font-semibold hover:bg-primary-500 hover:text-white transition-colors overflow-hidden"
                   >
                     {isUploading ? (
-                      <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-                    ) : imagesList.length > 0 ? (
-                      <img
-                        src={imagesList[imagesList.length - 1]}
-                        className="w-full h-full object-cover rounded-md"
-                        alt="preview"
-                      />
+                      <>
+                        <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        Uploading…
+                      </>
                     ) : (
-                      <IoImageOutline />
+                      <>
+                        <IoImageOutline className="text-base" />
+                        Upload image
+                      </>
                     )}
-                  </button>
-                  <button
-                    onClick={addImageToList}
-                    disabled={!newImageUrl || imagesList.length >= 9}
-                    className="w-9 h-9 bg-glass-bg border border-glass-border text-primary-500 rounded-md flex items-center justify-center hover:bg-primary-500 hover:text-white transition-colors"
-                  >
-                    <FaPlus />
                   </button>
                 </div>
 
