@@ -14,25 +14,25 @@ const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 // The "recipe" — hidden from users, wraps every request to enforce
 // identity preservation, four-panel layout, and editorial quality.
 function buildPrompt(userLook) {
-  return `Generate ONE horizontal model sheet image showing the SAME person from the reference photos in a new outfit.
+  return `ABSOLUTE RULE — THIS IS NOT IMAGE GENERATION, THIS IS WARDROBE EDITING ON A FIXED PERSON.
 
-ABSOLUTE RULE — IDENTITY MUST BE IDENTICAL TO THE REFERENCE:
-- The face in EVERY panel must be 100% the same as the reference photo.
-- Match exactly: face shape, jawline, eyes, eyebrows, nose, mouth, ears, skin tone, age, facial hair pattern, hairstyle, hair color, hair texture.
-- DO NOT beautify, idealize, age, de-age, slim, restyle, or otherwise alter the face. Treat this as a costume/wardrobe edit on the EXACT SAME PERSON, not a new character that looks similar.
-- If you cannot preserve the face, return the reference face unchanged rather than inventing one.
+The reference photos define ONE specific person. Every panel of the output must show THAT EXACT person — same face, no exceptions.
 
-LAYOUT — exactly 4 panels in ONE horizontal row, left to right, evenly spaced with thin gaps between them:
-- Panel 1: Front view, full body from head to feet, arms relaxed at sides, looking at camera.
-- Panel 2: Right-side profile, full body from head to feet, looking forward (90° from panel 1).
-- Panel 3: Back view, full body from head to feet.
+The face must be PIXEL-IDENTICAL across all four panels, INCLUDING the smaller full-body panels. The face in the small full-body panels (1, 2, 3) must be drawn with the same precision and detail as the close-up panel (4). Do NOT save detail for the close-up. Do NOT simplify, smooth, blur, idealize, beautify, age, de-age, slim, or "interpret" the face when it appears small. If you cannot draw the face at full detail in a small panel, you should NOT generate the image at all — but you MUST NOT generate a different face.
+
+Match exactly to the reference photos: face shape, jawline, cheekbones, eyes (color, shape, spacing), eyebrows (shape, thickness), nose (shape, width, bridge), mouth, lips, chin, ears, skin tone, skin texture (pores, lines, marks), age, facial hair pattern and density, hairstyle, hair color, hair texture, hairline. Treat this as a costume change on the same person, not the creation of a new character that looks similar.
+
+LAYOUT — exactly 4 panels in ONE horizontal row, left to right, evenly spaced with thin gaps:
+- Panel 1: Front view, full body head-to-feet, arms relaxed at sides, looking at camera.
+- Panel 2: Right-side profile, full body head-to-feet, body rotated 90° from panel 1, looking forward.
+- Panel 3: Back view, full body head-to-feet.
 - Panel 4: A SINGLE close-up portrait of the face from the front — head and shoulders only.
 
 DO NOT duplicate the close-up. DO NOT add a 5th panel. DO NOT stack panels vertically. Output is ONE wide image, one row, four panels total.
 
 OUTFIT / LOOK: ${userLook}
 
-STYLE: Professional fashion model sheet on a clean white studio background. Soft, even, shadowless lighting. Ultra-realistic skin texture, sharp focus, natural hair detail. 8k editorial photography. No text, no logos, no watermarks, no captions.`;
+STYLE: Professional fashion model sheet on a clean white studio background. Soft, even, shadowless lighting. Ultra-realistic skin texture, sharp focus, natural hair detail. 8k editorial photography. No text, no logos, no watermarks, no captions. The four faces must be indistinguishable from each other when zoomed in — they are the same face.`;
 }
 
 async function uploadToR2(buffer, userId) {
