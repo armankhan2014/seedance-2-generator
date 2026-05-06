@@ -488,15 +488,14 @@ export default function Home() {
                 <button
                   key={m.id}
                   onClick={() => setMode(m.id)}
-                  className={`py-2 rounded-md text-xs sm:text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                  className={`py-2 px-1 rounded-md text-[10px] sm:text-sm font-medium transition-colors flex items-center justify-center gap-1 sm:gap-2 leading-tight text-center ${
                     mode === m.id
                       ? "bg-primary-500 text-white shadow-sm"
                       : "text-muted hover:text-foreground"
                   }`}
                 >
-                  <Icon className="shrink-0" />{" "}
-                  <span className="sm:hidden">{m.label}</span>
-                  <span className="hidden sm:inline">{m.fullLabel}</span>
+                  <Icon className="shrink-0 hidden sm:inline" />
+                  <span>{m.fullLabel}</span>
                 </button>
               );
             })}
@@ -504,8 +503,8 @@ export default function Home() {
 
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between flex-wrap gap-y-2 gap-x-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <label className="text-[10px] font-medium text-muted uppercase tracking-wider">
                     Prompt
                   </label>
@@ -524,12 +523,17 @@ export default function Home() {
                     🎨 Build my reference
                   </button>
                 </div>
-                <span className={`text-[10px] font-medium tabular-nums transition-colors ${
+                <span className={`text-[10px] font-medium tabular-nums transition-colors whitespace-nowrap ${
                   prompt.trim().split(/\s+/).filter(Boolean).length >= 18000 ? "text-red-400" :
                   prompt.trim().split(/\s+/).filter(Boolean).length >= 15000 ? "text-amber-400" :
                   "text-muted"
                 }`}>
-                  {prompt.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} / 20,000 words
+                  <span className="sm:hidden">
+                    {prompt.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} / 20K
+                  </span>
+                  <span className="hidden sm:inline">
+                    {prompt.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} / 20,000 words
+                  </span>
                 </span>
               </div>
               <textarea
