@@ -17,7 +17,7 @@ export async function GET() {
       where: { userId: owner.id, status: "completed", NOT: [{ imageUrl: null }, { imageUrl: "" }] },
       orderBy: { createdAt: "desc" },
       take: 48,
-      select: { id: true, imageUrl: true, prompt: true, aspectRatio: true, resolution: true, duration: true, createdAt: true, featured: true },
+      select: { id: true, imageUrl: true, prompt: true, aspectRatio: true, resolution: true, duration: true, createdAt: true, featured: true, inputImages: true },
     });
     return NextResponse.json({ videos });
   } catch (err) {
