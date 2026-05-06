@@ -47,11 +47,13 @@ export default function ImageBuilder({ onUse, onClose }) {
   const [refs, setRefs] = useState([]); // { file, previewUrl }
   const [look, setLook] = useState("");
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
   const [resultUrl, setResultUrl] = useState("");
   const [userCredits, setUserCredits] = useState(null);
   const fileInputRef = useRef(null);
   const overlayRef = useRef(null);
+  const progressIntervalRef = useRef(null);
 
   useEffect(() => {
     if (session?.user?.id) {
@@ -76,6 +78,9 @@ export default function ImageBuilder({ onUse, onClose }) {
 
   // Clean up object URLs on unmount
   useEffect(() => () => refs.forEach(r => URL.revokeObjectURL(r.previewUrl)), [refs]);
+
+  // Clean up the progress timer on unmount (e.g. user closes the modal mid-generation).
+  useEffect(() => () => { if (progressIntervalRef.current) clearInterval(progressIntervalRef.current); }, []);
 
   const handleAddFiles = async (fileList) => {
     if (!fileList?.length) return;
@@ -111,12 +116,36 @@ export default function ImageBuilder({ onUse, onClose }) {
     });
   };
 
+  const startProgressAnimation = () => {
+    setProgress(0);
+    let tick = 0;
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    progressIntervalRef.current = setInterval(() => {
+      tick++;
+      // Three phases tuned to ~30s typical generation, asymptotic toward 95%.
+      // 5 ticks/sec at 200ms interval.
+      setProgress((p) => {
+        if (tick <= 50) return Math.min(50, tick);                       //  0-10s → 0–50%
+        if (tick <= 150) return Math.min(90, 50 + (tick - 50) * 0.4);    // 10-30s → 50–90%
+        return Math.min(95, 90 + (tick - 150) * 0.05);                   //  30s+  → crawl to 95%
+      });
+    }, 200);
+  };
+
+  const stopProgressAnimation = () => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+  };
+
   const handleGenerate = async () => {
     if (!refs.length) { setError("Upload at least one reference photo."); return; }
     if (!look.trim()) { setError("Tell us the look (e.g. \"dress me like a king\")."); return; }
     setError("");
     setLoading(true);
     setResultUrl("");
+    startProgressAnimation();
     try {
       const fd = new FormData();
       fd.append("look", look.trim());
@@ -124,9 +153,14 @@ export default function ImageBuilder({ onUse, onClose }) {
       const res = await fetch("/api/image/build", { method: "POST", body: fd });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || `Failed (HTTP ${res.status})`);
+      stopProgressAnimation();
+      setProgress(100);
+      // Small delay so the user sees the bar hit 100% before the result renders.
+      await new Promise((r) => setTimeout(r, 500));
       setResultUrl(data.url);
       setUserCredits(prev => (prev == null ? prev : Math.max(0, prev - (data.creditsCharged || 0))));
     } catch (err) {
+      stopProgressAnimation();
       setError(err.message || "Failed to generate.");
     } finally {
       setLoading(false);
@@ -235,6 +269,39 @@ export default function ImageBuilder({ onUse, onClose }) {
       fontSize: "0.78rem", color: "#f87171", marginTop: "10px",
       background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.2)",
       borderRadius: "8px", padding: "10px 12px", lineHeight: 1.5,
+    },
+    // Loading bar — replaces the Generate button while a generation is in flight.
+    loadingBar: {
+      width: "100%",
+      position: "relative",
+      height: "44px",
+      borderRadius: "10px",
+      marginTop: "14px",
+      background: "rgba(255,255,255,0.05)",
+      border: "1px solid rgba(34,197,94,0.18)",
+      overflow: "hidden",
+    },
+    loadingFill: (pct) => ({
+      position: "absolute",
+      top: 0, bottom: 0, left: 0,
+      width: `${pct}%`,
+      background: "linear-gradient(90deg, #16a34a, #22c55e, #4ade80)",
+      boxShadow: "0 0 18px rgba(34,197,94,0.45), inset 0 1px 0 rgba(255,255,255,0.15)",
+      transition: "width 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+      borderRadius: "10px",
+    }),
+    loadingText: {
+      position: "absolute",
+      inset: 0,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: "0.85rem",
+      fontWeight: 700,
+      color: "#fff",
+      letterSpacing: "0.02em",
+      textShadow: "0 1px 2px rgba(0,0,0,0.6)",
+      pointerEvents: "none",
     },
   };
 
@@ -363,13 +430,22 @@ export default function ImageBuilder({ onUse, onClose }) {
                 ))}
               </div>
 
-              <button
-                style={S.primaryBtn(!loading && refs.length > 0 && look.trim().length > 0)}
-                disabled={loading || refs.length === 0 || !look.trim()}
-                onClick={handleGenerate}
-              >
-                {loading ? "✨ Generating… (~30s)" : `✨ Generate (2 credits)`}
-              </button>
+              {loading ? (
+                <div style={S.loadingBar} role="progressbar" aria-valuenow={Math.floor(progress)} aria-valuemin={0} aria-valuemax={100}>
+                  <div style={S.loadingFill(progress)} />
+                  <div style={S.loadingText}>
+                    ✨ Generating… {Math.floor(progress)}%
+                  </div>
+                </div>
+              ) : (
+                <button
+                  style={S.primaryBtn(refs.length > 0 && look.trim().length > 0)}
+                  disabled={refs.length === 0 || !look.trim()}
+                  onClick={handleGenerate}
+                >
+                  ✨ Generate (2 credits)
+                </button>
+              )}
 
               {error && <div style={S.errorBox}>{error}</div>}
 
