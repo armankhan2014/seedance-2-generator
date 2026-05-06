@@ -244,7 +244,39 @@ export default function ProfilePage() {
             </div>
 
             <div>
-              <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700, color: "#fff", display: "flex", alignItems: "center" }}>{name}{profile?.verified && (<span title="Verified — Paid Member" style={{ display: "inline-flex", alignItems: "center", marginLeft: "6px" }}><svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="10" fill="#ec4899"/><path d="M6 10.5L8.5 13L14 7.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg></span>)}</h1>
+              <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700, color: "#fff", display: "flex", alignItems: "center" }}>
+                {name}
+                {profile?.verified && (
+                  <span title="Verified — Paid Member" style={{ display: "inline-flex", alignItems: "center", marginLeft: "6px" }}>
+                    <svg width="22" height="22" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                      {/* 12 scalloped petals around the perimeter */}
+                      {Array.from({ length: 12 }).map((_, i) => {
+                        const a = (i / 12) * Math.PI * 2;
+                        return (
+                          <circle
+                            key={i}
+                            cx={50 + Math.cos(a) * 36}
+                            cy={50 + Math.sin(a) * 36}
+                            r={13}
+                            fill="#ec4899"
+                          />
+                        );
+                      })}
+                      {/* Central body — covers inner edges of petals for a clean flower shape */}
+                      <circle cx="50" cy="50" r="38" fill="#ec4899" />
+                      {/* White checkmark */}
+                      <path
+                        d="M30 52 L43 65 L70 38"
+                        stroke="white"
+                        strokeWidth="9"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        fill="none"
+                      />
+                    </svg>
+                  </span>
+                )}
+              </h1>
               <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "#64748b" }}>{email}</p>
               {/* Step-by-step upload status */}
               {uploadStatus && !uploadError && (
