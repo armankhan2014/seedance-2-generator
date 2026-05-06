@@ -57,16 +57,16 @@ function PromptBlock({ prompt }) {
   const router = useRouter();
   if (!prompt) return null;
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="text-[9px] font-semibold text-muted uppercase tracking-widest">Prompt</div>
+    <div className="space-y-2.5">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Prompt</div>
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => { navigator.clipboard.writeText(prompt); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all border"
             style={copied
-              ? { background: "rgba(34,197,94,0.15)", borderColor: "rgba(34,197,94,0.4)", color: "#22c55e" }
-              : { background: "rgba(139,92,246,0.1)", borderColor: "rgba(139,92,246,0.25)", color: "#a78bfa" }}
+              ? { background: "rgba(34,197,94,0.18)", borderColor: "rgba(34,197,94,0.5)", color: "#4ade80" }
+              : { background: "rgba(139,92,246,0.15)", borderColor: "rgba(139,92,246,0.35)", color: "#c4b5fd" }}
           >
             {copied ? <FiCheck size={11} /> : <FiClipboard size={11} />}
             <span className="ml-1">{copied ? "Copied!" : "Copy Prompt"}</span>
@@ -74,19 +74,21 @@ function PromptBlock({ prompt }) {
           <button
             onClick={() => { sessionStorage.setItem("pendingPrompt", prompt); router.push("/generate"); }}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all border"
-            style={{ background: "rgba(139,92,246,0.18)", borderColor: "rgba(139,92,246,0.4)", color: "#c4b5fd" }}
+            style={{ background: "rgba(139,92,246,0.22)", borderColor: "rgba(139,92,246,0.5)", color: "#ddd6fe" }}
           >
             <FiArrowRight size={11} />
             <span className="ml-1">Use This Prompt</span>
           </button>
         </div>
       </div>
-      <p
-        className="text-sm font-normal text-foreground leading-relaxed transition-all"
-        style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: expanded ? "unset" : 3, overflow: "hidden" }}
-      >
-        {prompt}
-      </p>
+      <div className="rounded-lg bg-white/[0.04] border border-white/10 p-3.5">
+        <p
+          className="text-[13px] text-slate-100 leading-relaxed transition-all"
+          style={{ display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: expanded ? "unset" : 4, overflow: "hidden" }}
+        >
+          {prompt}
+        </p>
+      </div>
       {prompt.length > 180 && (
         <button
           onClick={() => setExpanded(e => !e)}
@@ -502,44 +504,50 @@ export default function CreationsPage() {
               </div>
 
               {/* Details Side */}
-              <div className="flex w-full md:w-[50%] h-[50%] md:h-full p-6 flex flex-col bg-glass-bg backdrop-blur-3xl overflow-y-auto custom-scrollbar">
-                <div className="flex flex-col justify-center space-y-4">
+              <div className="flex w-full md:w-[50%] h-[50%] md:h-full p-6 flex-col bg-[#0c0c14] overflow-y-auto custom-scrollbar">
+                <div className="flex flex-col space-y-5">
                   <PromptBlock prompt={selectedImage.prompt} />
 
-                  <div className="space-y-6 border-t border-white/5 pt-10">
-                    <div className="grid grid-cols-2 gap-8">
-                      <div className="space-y-1.5">
-                        <div className="text-[9px] font-semibold text-muted uppercase tracking-widest">Ratio</div>
-                        <div className="text-xs text-foreground font-medium">{selectedImage.aspectRatio}</div>
+                  {/* Settings — only shown when at least one is set (videos have these; image creations don't) */}
+                  {(() => {
+                    const settings = [
+                      { label: "Ratio",      value: selectedImage.aspectRatio },
+                      { label: "Resolution", value: selectedImage.resolution },
+                      { label: "Duration",   value: selectedImage.duration ? `${selectedImage.duration}s` : null },
+                      { label: "Quality",    value: selectedImage.quality ? selectedImage.quality.toUpperCase() : null },
+                    ].filter((s) => s.value);
+                    if (settings.length === 0) return null;
+                    return (
+                      <div className="border-t border-white/10 pt-5">
+                        <div className="text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-3">Settings</div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {settings.map(({ label, value }) => (
+                            <div key={label} className="rounded-lg bg-white/[0.04] border border-white/10 px-3 py-2.5">
+                              <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">{label}</div>
+                              <div className="text-sm text-white font-semibold">{value}</div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <div className="space-y-1.5">
-                        <div className="text-[9px] font-semibold text-muted uppercase tracking-widest">Resolution</div>
-                        <div className="text-xs text-foreground font-medium">{selectedImage.resolution}</div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <div className="text-[9px] font-semibold text-muted uppercase tracking-widest">Duration</div>
-                        <div className="text-xs text-foreground font-medium">{selectedImage.duration ? `${selectedImage.duration}s` : "5s"}</div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <div className="text-[9px] font-semibold text-muted uppercase tracking-widest">Quality</div>
-                        <div className="text-xs text-foreground font-medium uppercase">{selectedImage.quality || "Basic"}</div>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-4 border-t border-glass-border pt-6">
+                    );
+                  })()}
+
+                  {/* References — only shown when present */}
+                  {(selectedImage.inputImages?.length > 0 || selectedImage.videoFiles?.length > 0 || selectedImage.audioFiles?.length > 0) && (
+                    <div className="border-t border-white/10 pt-5 space-y-4">
                       {selectedImage.inputImages?.length > 0 && (
                         <div className="space-y-2">
-                          <div className="text-[9px] font-semibold text-muted uppercase tracking-widest">Image References</div>
+                          <div className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Image References</div>
                           <div className="grid grid-cols-4 gap-2">
                             {selectedImage.inputImages.map((img, i) => (
-                              <div key={i} className="relative aspect-square rounded-md bg-glass-hover overflow-hidden border border-glass-border group">
-                                <img src={img} className="w-full h-full object-cover" />
+                              <div key={i} className="relative aspect-square rounded-md bg-white/5 overflow-hidden border border-white/10 group">
+                                <img src={img} className="w-full h-full object-cover" alt="" />
                                 <div className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <a href={img} target="_blank" rel="noopener noreferrer" className="p-1 bg-black/60 rounded flex items-center justify-center">
+                                  <a href={img} target="_blank" rel="noopener noreferrer" className="p-1 bg-black/70 rounded flex items-center justify-center">
                                     <FaExpandAlt className="text-[8px] text-white" />
                                   </a>
                                 </div>
-                                <div className="absolute bottom-1 right-1 bg-black/60 px-1 rounded text-[8px] text-white">@image{i+1}</div>
+                                <div className="absolute bottom-1 right-1 bg-black/70 px-1 rounded text-[8px] text-white">@image{i+1}</div>
                               </div>
                             ))}
                           </div>
@@ -548,17 +556,17 @@ export default function CreationsPage() {
 
                       {selectedImage.videoFiles?.length > 0 && (
                         <div className="space-y-2">
-                          <div className="text-[9px] font-semibold text-muted uppercase tracking-widest">Video References</div>
+                          <div className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Video References</div>
                           <div className="grid grid-cols-3 gap-2">
                             {selectedImage.videoFiles.map((v, i) => (
-                              <div key={i} className="relative aspect-video rounded-md bg-glass-hover overflow-hidden border border-glass-border group">
+                              <div key={i} className="relative aspect-video rounded-md bg-white/5 overflow-hidden border border-white/10 group">
                                 <video src={v} className="w-full h-full object-cover" />
                                 <div className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <a href={v} target="_blank" rel="noopener noreferrer" className="p-1 bg-black/60 rounded flex items-center justify-center">
+                                  <a href={v} target="_blank" rel="noopener noreferrer" className="p-1 bg-black/70 rounded flex items-center justify-center">
                                     <FaExpandAlt className="text-[8px] text-white" />
                                   </a>
                                 </div>
-                                <div className="absolute bottom-1 right-1 bg-black/60 px-1 rounded text-[8px] text-white">@video{i+1}</div>
+                                <div className="absolute bottom-1 right-1 bg-black/70 px-1 rounded text-[8px] text-white">@video{i+1}</div>
                               </div>
                             ))}
                           </div>
@@ -567,36 +575,37 @@ export default function CreationsPage() {
 
                       {selectedImage.audioFiles?.length > 0 && (
                         <div className="space-y-2">
-                          <div className="text-[9px] font-semibold text-muted uppercase tracking-widest">Audio References</div>
+                          <div className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Audio References</div>
                           <div className="space-y-2">
                             {selectedImage.audioFiles.map((a, i) => (
-                              <div key={i} className="flex items-center gap-2 p-2 rounded-md bg-glass-hover border border-glass-border">
-                                <FaMusic className="text-[10px] text-primary-500" />
-                                <span className="text-[10px] text-foreground truncate flex-1">{a.split('/').pop()}</span>
-                                <span className="text-[8px] text-muted font-bold">@audio{i+1}</span>
+                              <div key={i} className="flex items-center gap-2 p-2.5 rounded-md bg-white/5 border border-white/10">
+                                <FaMusic className="text-[11px] text-primary-400" />
+                                <span className="text-[11px] text-slate-200 truncate flex-1">{a.split('/').pop()}</span>
+                                <span className="text-[9px] text-slate-400 font-bold">@audio{i+1}</span>
                               </div>
                             ))}
                           </div>
                         </div>
                       )}
+                    </div>
+                  )}
 
-                      <div className="space-y-1.5 pt-2">
-                        <div className="text-[9px] font-semibold text-muted uppercase tracking-widest">Timestamp</div>
-                        <div className="text-[11px] text-muted">
-                          {new Date(selectedImage.createdAt).toLocaleString('en-US', { 
-                            month: 'long', 
-                            day: 'numeric',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </div>
-                      </div>
+                  {/* Timestamp — always shown */}
+                  <div className="border-t border-white/10 pt-5">
+                    <div className="text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-1.5">Created</div>
+                    <div className="text-xs text-slate-300 font-medium">
+                      {new Date(selectedImage.createdAt).toLocaleString('en-US', {
+                        month: 'long',
+                        day: 'numeric',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
                     </div>
                   </div>
                 </div>
 
-                <div className="pt-12 flex flex-col gap-3">
+                <div className="mt-auto pt-6 flex flex-col gap-3">
                   {/* For image creations: primary action is "use as reference for video" */}
                   {selectedImage.status === "completed" && isImageCreation(selectedImage) && (
                     <button

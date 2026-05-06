@@ -165,7 +165,9 @@ export async function POST(req) {
         prompt: look.trim(),
         imageUrl: url,
         status: "completed",
-        inputImages: files.map((f) => f.name || "ref").slice(0, 3),
+        // No inputImages: the user's reference photos aren't uploaded to R2
+        // (they're sent inline to Gemini), so we have no public URL to store.
+        inputImages: [],
       },
     });
     revalidateTag(`creations-${session.user.id}`);
