@@ -7,9 +7,21 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
 const CREDIT_COST = 2;
 const MAX_REFERENCES = 3;
-const MAX_PROMPT_LENGTH = 4000;
+const MAX_LOOK_LENGTH = 500;
 const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8MB after client-side compression
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+// The "recipe" — hidden from users, wraps every request to enforce
+// identity preservation, four-view layout, and editorial quality.
+function buildPrompt(userLook) {
+  return `Full body character turnaround sheet of the SAME person from the reference photos. Preserve exact facial identity — same face structure, eyes, nose, hairstyle, no face change.
+
+Look: ${userLook}
+
+Four views, side by side: 1) Front profile, arms relaxed. 2) Side profile. 3) Back profile. 4) Face close-up at high detail.
+
+Clean white studio background, soft even lighting, no harsh shadows. Professional fashion model sheet style, symmetrical layout, evenly spaced. Ultra realistic skin texture, sharp focus, natural hair detail. 8k editorial photography, highly detailed, no distortion, no stylization.`;
+}
 
 async function uploadToR2(buffer, userId) {
   const client = new S3Client({
@@ -39,15 +51,16 @@ export async function POST(req) {
   }
 
   const formData = await req.formData();
-  const prompt = formData.get("prompt");
+  const look = formData.get("look");
   const files = formData.getAll("references");
 
-  if (typeof prompt !== "string" || !prompt.trim()) {
-    return NextResponse.json({ error: "Please describe what you want to generate." }, { status: 400 });
+  if (typeof look !== "string" || !look.trim()) {
+    return NextResponse.json({ error: "Tell us what look you want (e.g. \"dress me like a king\")." }, { status: 400 });
   }
-  if (prompt.length > MAX_PROMPT_LENGTH) {
-    return NextResponse.json({ error: `Prompt is too long (max ${MAX_PROMPT_LENGTH} characters).` }, { status: 400 });
+  if (look.length > MAX_LOOK_LENGTH) {
+    return NextResponse.json({ error: `Description is too long (max ${MAX_LOOK_LENGTH} characters).` }, { status: 400 });
   }
+  const prompt = buildPrompt(look.trim());
   if (!files.length) {
     return NextResponse.json({ error: "Upload at least one reference photo." }, { status: 400 });
   }

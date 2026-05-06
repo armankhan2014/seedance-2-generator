@@ -2,13 +2,15 @@
 import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 
-const DEFAULT_PROMPT = `Full body character turnaround sheet of the SAME person from the reference photos. Preserve exact facial identity — same face structure, eyes, nose, hairstyle, no face change. Outfit: stylish all-black look — fitted black open-collar shirt, black jeans, black shoes. Slight stubble beard, confident neutral expression.
-
-Four views, side by side: 1) Front profile, arms relaxed. 2) Side profile. 3) Back profile. 4) Face close-up at high detail.
-
-Clean white studio background, soft even lighting, no harsh shadows. Professional fashion model sheet style, symmetrical layout, evenly spaced. Ultra realistic skin texture, sharp focus, natural hair detail. 8k editorial photography, highly detailed, no distortion, no stylization.`;
-
 const MAX_REFERENCES = 3;
+const MAX_LOOK_LENGTH = 500;
+const LOOK_EXAMPLES = [
+  "dress me like a king",
+  "1920s gangster",
+  "cyberpunk warrior",
+  "samurai in feudal Japan",
+  "Wall Street CEO in a suit",
+];
 
 // Mirror of the compressImage helper in GenerateClient.jsx — keeps modal
 // self-contained so it can be reused outside the generate page.
@@ -43,7 +45,7 @@ async function compressImage(file, { maxDim = 2048, quality = 0.85 } = {}) {
 export default function ImageBuilder({ onUse, onClose }) {
   const { data: session, status: sessionStatus } = useSession();
   const [refs, setRefs] = useState([]); // { file, previewUrl }
-  const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
+  const [look, setLook] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [resultUrl, setResultUrl] = useState("");
@@ -111,13 +113,13 @@ export default function ImageBuilder({ onUse, onClose }) {
 
   const handleGenerate = async () => {
     if (!refs.length) { setError("Upload at least one reference photo."); return; }
-    if (!prompt.trim()) { setError("Describe what you want to generate."); return; }
+    if (!look.trim()) { setError("Tell us the look (e.g. \"dress me like a king\")."); return; }
     setError("");
     setLoading(true);
     setResultUrl("");
     try {
       const fd = new FormData();
-      fd.append("prompt", prompt);
+      fd.append("look", look.trim());
       for (const r of refs) fd.append("references", r.file);
       const res = await fetch("/api/image/build", { method: "POST", body: fd });
       const data = await res.json().catch(() => ({}));
@@ -182,14 +184,27 @@ export default function ImageBuilder({ onUse, onClose }) {
       fontSize: "1.4rem", fontWeight: 800, fontFamily: "inherit",
     },
     addTileDisabled: { opacity: 0.3, cursor: "not-allowed" },
-    textarea: {
-      width: "100%", minHeight: "150px",
+    lookInput: {
+      width: "100%",
       background: "rgba(255,255,255,0.04)",
       border: "1px solid rgba(255,255,255,0.1)",
-      borderRadius: "10px", padding: "10px 12px",
-      color: "#e2e8f0", fontSize: "0.85rem",
-      fontFamily: "inherit", resize: "vertical",
-      outline: "none", lineHeight: 1.55, boxSizing: "border-box",
+      borderRadius: "10px", padding: "12px 14px",
+      color: "#e2e8f0", fontSize: "0.9rem",
+      fontFamily: "inherit",
+      outline: "none", boxSizing: "border-box",
+    },
+    examples: {
+      display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px",
+    },
+    examplePill: {
+      padding: "5px 10px",
+      background: "rgba(139,92,246,0.08)",
+      border: "1px solid rgba(139,92,246,0.2)",
+      borderRadius: "999px",
+      color: "#a78bfa",
+      fontSize: "0.72rem", fontWeight: 600,
+      cursor: "pointer", fontFamily: "inherit",
+      transition: "all 0.15s",
     },
     primaryBtn: (enabled) => ({
       width: "100%", padding: "12px",
@@ -310,17 +325,33 @@ export default function ImageBuilder({ onUse, onClose }) {
                 />
               </div>
 
-              <label style={S.label}>What should AI generate?</label>
-              <textarea
-                style={S.textarea}
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Describe the outfit, scene, or style…"
+              <label style={S.label}>Describe the look</label>
+              <input
+                type="text"
+                style={S.lookInput}
+                value={look}
+                onChange={(e) => setLook(e.target.value)}
+                placeholder='e.g. dress me like a king'
+                maxLength={MAX_LOOK_LENGTH}
+                onKeyDown={(e) => { if (e.key === "Enter" && !loading) handleGenerate(); }}
               />
+              <div style={S.examples}>
+                {LOOK_EXAMPLES.map((ex) => (
+                  <button
+                    key={ex}
+                    type="button"
+                    style={S.examplePill}
+                    disabled={loading}
+                    onClick={() => setLook(ex)}
+                  >
+                    {ex}
+                  </button>
+                ))}
+              </div>
 
               <button
-                style={S.primaryBtn(!loading && refs.length > 0 && prompt.trim().length > 0)}
-                disabled={loading || refs.length === 0 || !prompt.trim()}
+                style={S.primaryBtn(!loading && refs.length > 0 && look.trim().length > 0)}
+                disabled={loading || refs.length === 0 || !look.trim()}
                 onClick={handleGenerate}
               >
                 {loading ? "✨ Generating… (~30s)" : `✨ Generate (2 credits)`}
