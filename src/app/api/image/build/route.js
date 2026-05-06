@@ -141,7 +141,9 @@ export async function POST(req) {
     if (status === 400) {
       return NextResponse.json({ error: err.message || "The request was rejected (often a safety filter). Try a different photo or look description." }, { status: 400 });
     }
-    return NextResponse.json({ error: "Could not generate image. Please try again." }, { status: 502 });
+    return NextResponse.json({
+      error: `Could not generate image. (debug: ${err.message?.slice(0, 400) || "no message"})`,
+    }, { status: 502 });
   }
 
   // Upload to R2
