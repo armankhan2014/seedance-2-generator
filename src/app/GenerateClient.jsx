@@ -19,6 +19,7 @@ import { downloadMedia } from "@/lib/utils";
 import ArmanGallery from "@/components/saas/ArmanGallery";
 import toast from "@/lib/toast";
 import PromptBuilder from "@/components/saas/PromptBuilder";
+import ImageBuilder from "@/components/saas/ImageBuilder";
 
 export const dynamic = "force-dynamic";
 
@@ -182,6 +183,7 @@ export default function Home() {
     if (p) { setPrompt(p); sessionStorage.removeItem("pendingPrompt"); }
   }, []);
   const [showBuilder, setShowBuilder] = useState(false);
+  const [showImageBuilder, setShowImageBuilder] = useState(false);
   const [aspectRatio, setAspectRatio] = useState(ASPECT_RATIOS[0].value);
   const [resolution, setResolution] = useState(RESOLUTIONS[1].value); // 720p default
   const [duration, setDuration] = useState(DURATIONS[0].value);
@@ -513,6 +515,13 @@ export default function Home() {
                     className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold text-primary-500 bg-primary-500/10 border border-primary-500/20 hover:bg-primary-500/20 transition-colors"
                   >
                     ✨ Build my prompt
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowImageBuilder(true)}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold text-primary-500 bg-primary-500/10 border border-primary-500/20 hover:bg-primary-500/20 transition-colors"
+                  >
+                    🎨 Build my reference
                   </button>
                 </div>
                 <span className={`text-[10px] font-medium tabular-nums transition-colors ${
@@ -1015,6 +1024,21 @@ export default function Home() {
         <PromptBuilder
           onUse={(p) => setPrompt(p)}
           onClose={() => setShowBuilder(false)}
+        />
+      )}
+      {showImageBuilder && (
+        <ImageBuilder
+          onUse={(url) => {
+            // Add the generated image to the imagesList for video generation
+            // and save it to the Recent Images strip in localStorage.
+            if (imagesList.length < 9) {
+              setImagesList((prev) => [...prev, url]);
+            }
+            const updated = saveRecentImage(url);
+            setRecentImages(updated);
+            toast.success("Reference image ready");
+          }}
+          onClose={() => setShowImageBuilder(false)}
         />
       )}
     </>
