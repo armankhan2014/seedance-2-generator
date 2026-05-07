@@ -1,4 +1,4 @@
-# Hourly Postgres → R2 backup
+# Hourly Postgres ‚Üí R2 backup
 #
 # Runs every hour at :00 UTC. Dumps the Neon database with pg_dump,
 # gzips it, uploads to your R2 bucket under db-backups/, then prunes
@@ -9,15 +9,15 @@
 #   - Daily:  the 00:00 UTC dump from each of the last 30 days
 #   - Monthly: the 1st-of-month 00:00 UTC dump from the last 12 months
 #
-# Secrets required (Settings → Secrets and variables → Actions):
+# Secrets required (Settings ‚Üí Secrets and variables ‚Üí Actions):
 #   DATABASE_URL          - Postgres connection string from Neon
 #   R2_ACCOUNT_ID         - Cloudflare account ID
 #   R2_ACCESS_KEY_ID      - R2 API token (read+write)
 #   R2_SECRET_ACCESS_KEY  - R2 API token secret
 #   R2_BUCKET_NAME        - R2 bucket to store backups in (can reuse the
-#                           production bucket — backups go under db-backups/)
+#                           production bucket ‚Äî backups go under db-backups/)
 #
-# Manual trigger: Actions tab → "Hourly DB Backup" → "Run workflow".
+# Manual trigger: Actions tab ‚Üí "Hourly DB Backup" ‚Üí "Run workflow".
 
 name: Hourly DB Backup
 
@@ -36,13 +36,13 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Install Postgres 16 client
+      - name: Install Postgres 17 client (must match Neon's server version)
         run: |
           sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
           curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client-17
-          pg_dump --version
+          /usr/lib/postgresql/17/bin/pg_dump --version
 
       - name: Compute backup timestamp
         id: ts
@@ -88,7 +88,6 @@ jobs:
           bucket   = os.environ["R2_BUCKET_NAME"]
           prefix   = "db-backups/"
 
-          # List existing dumps
           out = subprocess.run(
               ["aws", "s3", "ls", f"s3://{bucket}/{prefix}",
                "--endpoint-url", endpoint],
@@ -98,3 +97,41 @@ jobs:
           pattern = re.compile(r"db-(\d{4}-\d{2}-\d{2}-\d{4})\.sql\.gz$")
           files = []
           for line in out.splitlines():
+              m = pattern.search(line)
+              if m:
+                  ts = datetime.strptime(m.group(1), "%Y-%m-%d-%H%M").replace(tzinfo=timezone.utc)
+                  key = line.split()[-1]
+                  files.append((ts, key))
+
+          now = datetime.now(timezone.utc)
+          hourly_cutoff  = now - timedelta(hours=48)
+          daily_cutoff   = now - timedelta(days=30)
+          monthly_cutoff = now - timedelta(days=365)
+
+          keep, delete = [], []
+          for ts, key in files:
+              if ts > hourly_cutoff:
+                  keep.append(key)
+              elif ts > daily_cutoff and ts.hour == 0:
+                  keep.append(key)
+              elif ts > monthly_cutoff and ts.day == 1 and ts.hour == 0:
+                  keep.append(key)
+              else:
+                  delete.append(key)
+
+          print(f"Total dumps:    {len(files)}")
+          print(f"Keeping:        {len(keep)}")
+          print(f"Deleting:       {len(delete)}")
+          for key in delete:
+              print(f"  - {key}")
+              subprocess.run(
+                  ["aws", "s3", "rm", f"s3://{bucket}/{prefix}{key}",
+                   "--endpoint-url", endpoint],
+                  check=True,
+              )
+          PY
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "::notice title=Backup complete::Stored db-backups/db-${{ steps.ts.outputs.value }}.sql.gz in R2 bucket ${{ secrets.R2_BUCKET_NAME }}"
