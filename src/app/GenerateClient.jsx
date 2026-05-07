@@ -217,6 +217,49 @@ export default function Home() {
     setRecentImages(saveRecentImage(url));
   }, []);
   const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const progressIntervalRef = useRef(null);
+
+  // Expected wall-clock seconds for a generation, based on the selected video
+  // duration. Provided by the user from real-world observation:
+  //   5s  → ~120s (2 min)
+  //   10s → ~330s (5.5 min)
+  //   15s → ~510s (8.5 min)
+  // For other durations (reference-to-video supports 8–15s), we linearly
+  // interpolate between these anchors.
+  const getExpectedGenerationSeconds = (videoSec) => {
+    if (videoSec <= 5)  return 120;
+    if (videoSec <= 10) return 120 + ((videoSec - 5)  / 5) * (330 - 120);
+    if (videoSec <= 15) return 330 + ((videoSec - 10) / 5) * (510 - 330);
+    return 510;
+  };
+
+  const startProgressAnimation = (videoSec) => {
+    setProgress(0);
+    const expected = getExpectedGenerationSeconds(videoSec);
+    const phase1End = Math.round(expected * 0.33); // 0-50% in the first third of expected time
+    const phase2End = Math.round(expected);        // 50-90% across the rest
+    let tick = 0;
+    if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
+    progressIntervalRef.current = setInterval(() => {
+      tick++;
+      setProgress((p) => {
+        if (tick <= phase1End) return Math.min(50, (tick / phase1End) * 50);
+        if (tick <= phase2End) return Math.min(90, 50 + ((tick - phase1End) / Math.max(1, phase2End - phase1End)) * 40);
+        return Math.min(95, 90 + (tick - phase2End) * 0.05);   // crawl asymptotically toward 95%
+      });
+    }, 1000);
+  };
+
+  const stopProgressAnimation = () => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+  };
+
+  // Clean up the progress timer on unmount.
+  useEffect(() => () => stopProgressAnimation(), []);
   const [statusMessage, setStatusMessage] = useState("");
   const [resultUrl, setResultUrl] = useState(null);
   const [error, setError] = useState(null);
@@ -357,6 +400,7 @@ export default function Home() {
       setError(null);
       setResultUrl(null);
       setStatusMessage("Starting generation...");
+      startProgressAnimation(duration);
       const res = await fetch("/api/seedance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -376,6 +420,7 @@ export default function Home() {
       if (!res.ok) throw new Error(data.error || "Request failed.");
       await pollStatus(data.request_id, data.metadata);
     } catch (err) {
+      stopProgressAnimation();
       setError(err.message);
       toast.error(err.message || "Generation failed.");
       setLoading(false);
@@ -393,6 +438,9 @@ export default function Home() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Status check failed.");
       if (data.status === "completed") {
+        stopProgressAnimation();
+        setProgress(100);
+        await new Promise((r) => setTimeout(r, 500)); // brief pause so users see the bar hit 100%
         setResultUrl(data.imageUrl);
         setLoading(false);
         toast.success("Video ready! 🎬");
@@ -402,6 +450,7 @@ export default function Home() {
         setTimeout(() => pollStatus(requestId, metadata), 3000);
       }
     } catch (err) {
+      stopProgressAnimation();
       setError(err.message);
       toast.error(err.message || "Something went wrong.");
       setLoading(false);
@@ -867,24 +916,51 @@ export default function Home() {
             </div>
           </div>
 
-          <button
-            onClick={handleGenerate}
-            disabled={
-              loading ||
-              (mode === "text-to-video" && !prompt.trim()) ||
-              (mode !== "text-to-video" && imagesList.length === 0)
-            }
-            className="w-full bg-primary-500 text-white rounded-md py-2 text-sm font-medium hover:bg-primary-600 active:scale-[0.98] transition-all disabled:opacity-60"
-          >
-            {loading ? (
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" />
-            ) : (
+          {loading ? (
+            <div
+              role="progressbar"
+              aria-valuenow={Math.floor(progress)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              className="relative w-full rounded-md overflow-hidden"
+              style={{
+                height: "36px",
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(34,197,94,0.25)",
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute", top: 0, bottom: 0, left: 0,
+                  width: `${progress}%`,
+                  background: "linear-gradient(90deg, #16a34a, #22c55e, #4ade80)",
+                  boxShadow: "0 0 18px rgba(34,197,94,0.45), inset 0 1px 0 rgba(255,255,255,0.15)",
+                  transition: "width 0.45s cubic-bezier(0.4, 0, 0.2, 1)",
+                  borderRadius: "6px",
+                }}
+              />
+              <div
+                className="absolute inset-0 flex items-center justify-center text-sm font-bold text-white pointer-events-none"
+                style={{ textShadow: "0 1px 2px rgba(0,0,0,0.6)", letterSpacing: "0.02em" }}
+              >
+                ✨ Generating… {Math.floor(progress)}%
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={handleGenerate}
+              disabled={
+                (mode === "text-to-video" && !prompt.trim()) ||
+                (mode !== "text-to-video" && imagesList.length === 0)
+              }
+              className="w-full bg-primary-500 text-white rounded-md py-2 text-sm font-medium hover:bg-primary-600 active:scale-[0.98] transition-all disabled:opacity-60"
+            >
               <span className="flex items-center justify-center gap-2">
                 Generate ({creditCost} Credits)
                 <span className="hidden sm:inline text-[10px] opacity-40 font-normal">⌘↵</span>
               </span>
-            )}
-          </button>
+            </button>
+          )}
 
           {error && (
             <p className="text-[10px] text-red-500 font-medium text-center">
