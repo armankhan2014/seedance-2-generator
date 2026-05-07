@@ -19,9 +19,9 @@ export const metadata = {
     title: "Seedance Studio — AI Video Generator",
     description: "Generate stunning AI videos in seconds with Seedance 2.0. Text-to-video, image-to-video, and audio sync.",
     url: "https://seedance.visualseffect.com",
-    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Seedance Studio — AI Video Generator" }],
+    images: [{ url: "/api/og-image", width: 1200, height: 630, alt: "Seedance Studio — AI Video Generator" }],
   },
-  twitter: { card: "summary_large_image", title: "Seedance Studio — AI Video Generator", description: "Generate stunning AI videos in seconds with Seedance 2.0.", images: ["/og-image.png"] },
+  twitter: { card: "summary_large_image", title: "Seedance Studio — AI Video Generator", description: "Generate stunning AI videos in seconds with Seedance 2.0.", images: ["/api/og-image"] },
   robots: { index: true, follow: true },
 };
 

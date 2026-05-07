@@ -79,7 +79,7 @@ export default function HomepageV2({ initialVideos = [] }) {
           </h1>
 
           <p className="text-muted text-sm md:text-base max-w-md mx-auto mb-10 leading-relaxed">
-            Write a prompt, pick your settings, and watch your vision come to life in seconds.
+            Create the most realistic AI videos.
           </p>
 
           {/* CTAs */}

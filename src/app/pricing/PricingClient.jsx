@@ -228,6 +228,11 @@ export default function PricingClient() {
           </p>
         )}
 
+        {/* Zoom-call value prop */}
+        <div style={{ textAlign: "center", padding: "14px 18px", borderRadius: 10, marginBottom: 24, background: "rgba(217, 255, 0, 0.06)", color: "#FFFFFF", border: "1px solid rgba(217, 255, 0, 0.25)", fontSize: ".9rem", lineHeight: 1.5, maxWidth: 720, marginLeft: "auto", marginRight: "auto" }}>
+          🎥 After your purchase, we&apos;ll personally guide you through a <span style={{ color: "#D9FF00", fontWeight: 700 }}>free Zoom call</span> to show you the best way to use the platform.
+        </div>
+
         {/* Fixed plans */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20, marginBottom: 20 }}>
           {PLANS.map(plan => {
