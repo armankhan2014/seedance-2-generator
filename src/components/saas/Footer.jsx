@@ -163,7 +163,7 @@ export default function Footer() {
             }}>
               Connect
             </p>
-            <a href="mailto:support@seedance.visualseffect.com" style={{
+            <a href="mailto:hello@visualseffect.com" style={{
               display: "block",
               fontSize: "0.85rem",
               color: "#64748b",
@@ -174,7 +174,7 @@ export default function Footer() {
               onMouseEnter={e => { e.currentTarget.style.color = "#a78bfa"; }}
               onMouseLeave={e => { e.currentTarget.style.color = "#64748b"; }}
             >
-              support@seedance.visualseffect.com
+              hello@visualseffect.com
             </a>
             <div style={{ display: "flex", gap: "10px" }}>
               {SOCIAL.map(({ label, href, icon }) => (

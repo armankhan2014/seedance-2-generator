@@ -71,7 +71,7 @@ export async function POST(req) {
 
     await transporter.sendMail({
       from: `"Seedance Contact" <${user}>`,
-      to: "armankhan0826@gmail.com",
+      to: "hello@visualseffect.com",
       replyTo: email || undefined,
       subject: `📬 Contact from ${firstName} ${lastName}`,
       html,

@@ -65,7 +65,7 @@ export default function PrivacyPage() {
           },
           {
             title: "Contact",
-            body: `If you have questions about this policy, please contact us at support@seedance.visualseffect.com.`,
+            body: `If you have questions about this policy, please contact us at hello@visualseffect.com.`,
           },
         ].map(({ title, body }) => (
           <div key={title} style={{ marginBottom: "36px" }}>

@@ -53,7 +53,7 @@ export default function TermsPage() {
           },
           {
             title: "Credits and Payments",
-            body: `Credits are purchased in advance and are non-transferable. Unused credits do not expire. Refunds are available on unused credit purchases within 7 days of the transaction, provided no credits from that purchase have been spent. To request a refund, contact us at support@seedance.visualseffect.com.`,
+            body: `Credits are purchased in advance and are non-transferable. Unused credits do not expire. Refunds are available on unused credit purchases within 7 days of the transaction, provided no credits from that purchase have been spent. To request a refund, contact us at hello@visualseffect.com.`,
           },
           {
             title: "Generated Content",
@@ -73,7 +73,7 @@ export default function TermsPage() {
           },
           {
             title: "Contact",
-            body: `Questions about these terms? Reach us at support@seedance.visualseffect.com.`,
+            body: `Questions about these terms? Reach us at hello@visualseffect.com.`,
           },
         ].map(({ title, body }) => (
           <div key={title} style={{ marginBottom: "36px" }}>
