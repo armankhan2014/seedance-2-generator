@@ -4,10 +4,15 @@
  * Sends via Resend API (https://resend.com) — works on Vercel serverless.
  * Required env var:
  *   RESEND_API_KEY  — from resend.com dashboard
+ *
+ * Visual language mirrors seedance.visualseffect.com — minimal, cinematic,
+ * dark slate with brand green #A6CC00 / #D9FF00 accents. Inter typography
+ * (system fallbacks since email clients block webfont loading).
  */
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "armankhan0826@gmail.com";
 const FROM        = "Seedance Studio <noreply@visualseffect.com>";
+const SITE        = "https://seedance.visualseffect.com";
 
 async function send({ to, subject, html }) {
   const key = process.env.RESEND_API_KEY;
@@ -37,47 +42,348 @@ async function send({ to, subject, html }) {
   }
 }
 
-const BG      = "#0d0d14";
-const CARD    = "#13111f";
-const BORDER  = "rgba(166, 204, 0,0.18)";
-const PURPLE  = "#A6CC00";
-const PURPLE_L= "#D9FF00";
-const MUTED   = "#9ca3af";
-const TEXT    = "#e5e7eb";
-const WHITE   = "#ffffff";
+/* ─────────────────────────────────────────────────────────────────
+ * Design tokens — match the live site palette
+ * Brand green pulled from duration badges (#A6CC00) and the
+ * image-builder progress gradient seen at seedance.visualseffect.com
+ * ───────────────────────────────────────────────────────────────── */
+const BG          = "#0a0a0a";
+const CARD        = "#0d0d0f";
+const BORDER      = "rgba(255,255,255,0.07)";
+const DIVIDER     = "rgba(255,255,255,0.05)";
+const TEXT        = "#f1f5f9";
+const TEXT_DIM    = "#cbd5e1";
+const MUTED       = "#64748b";
+const ACCENT      = "#A6CC00";  // brand olive lime — primary
+const ACCENT_LT   = "#D9FF00";  // electric yellow-green — bright accent
+const ACCENT_DK   = "#65a30d";  // deep olive — gradient depth
+const ACCENT_BG   = "rgba(166,204,0,0.10)";
+const ACCENT_BORD = "rgba(166,204,0,0.32)";
+const ACCENT_GLOW = "rgba(217,255,0,0.45)";
+const ACCENT_INK  = "#0a0a0a";  // dark text used on bright green CTAs
+const FONT        = "'Inter','SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif";
+const MONO        = "'JetBrains Mono','SF Mono',Menlo,Consolas,monospace";
 
-function baseWrapper(inner) {
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:0;background:${BG};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif"><table width="100%" cellpadding="0" cellspacing="0" style="min-height:100vh;background:${BG}"><tr><td align="center" style="padding:40px 16px"><table width="100%" style="max-width:520px" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding-bottom:24px"><span style="color:${WHITE};font-size:16px;font-weight:700;letter-spacing:-0.3px">&#127916; Seedance Studio</span></td></tr><tr><td style="background:${CARD};border:1px solid ${BORDER};border-radius:16px;overflow:hidden">${inner}</td></tr><tr><td align="center" style="padding:24px 0 8px"><p style="margin:0;font-size:11px;color:${MUTED};line-height:1.8">Seedance Studio &nbsp;&middot;&nbsp;<a href="https://seedance.visualseffect.com" style="color:${PURPLE_L};text-decoration:none">seedance.visualseffect.com</a></p></td></tr></table></td></tr></table></body></html>`;
+/* ─────────────────────────────────────────────────────────────────
+ * Reusable building blocks
+ * ───────────────────────────────────────────────────────────────── */
+
+function pageWrapper({ title = "Seedance Studio", preheader = "", inner }) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="supported-color-schemes" content="dark">
+<title>${title}</title>
+</head>
+<body style="margin:0;padding:0;background:${BG};font-family:${FONT};color:${TEXT};-webkit-font-smoothing:antialiased">
+${preheader ? `<span style="display:none!important;visibility:hidden;mso-hide:all;font-size:0;line-height:0;color:transparent;max-height:0;max-width:0;opacity:0;overflow:hidden">${preheader}</span>` : ""}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${BG}">
+  <tr><td align="center" style="padding:48px 16px 36px">
+    <table role="presentation" width="100%" style="max-width:560px" cellpadding="0" cellspacing="0" border="0">
+
+      <!-- Wordmark -->
+      <tr><td align="center" style="padding-bottom:32px">
+        <span style="font-family:${FONT};font-size:11px;font-weight:700;color:${TEXT};letter-spacing:0.42em;text-transform:uppercase">SEEDANCE STUDIO</span>
+      </td></tr>
+
+      <!-- Card -->
+      <tr><td style="background:${CARD};border:1px solid ${BORDER};border-radius:18px;overflow:hidden;box-shadow:0 24px 60px -20px rgba(0,0,0,0.5)">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr><td style="height:1px;font-size:0;line-height:0;background:linear-gradient(90deg,transparent 0%,${ACCENT} 30%,${ACCENT_LT} 50%,${ACCENT} 70%,transparent 100%)">&nbsp;</td></tr>
+        </table>
+        ${inner}
+      </td></tr>
+
+      <!-- Footer -->
+      <tr><td align="center" style="padding:28px 8px 8px">
+        <p style="margin:0;font-family:${FONT};font-size:11px;color:${MUTED};line-height:1.8">
+          Seedance Studio &nbsp;·&nbsp; <a href="${SITE}" style="color:${ACCENT_LT};text-decoration:none">seedance.visualseffect.com</a>
+        </p>
+        <p style="margin:6px 0 0;font-family:${FONT};font-size:10px;color:${MUTED};letter-spacing:0.06em">
+          AI video generation · London, UK
+        </p>
+      </td></tr>
+
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`;
 }
 
+function pulseBadge({ label, color = ACCENT_LT, glow = ACCENT }) {
+  return `<p style="margin:0 0 22px;font-family:${FONT};font-size:10px;font-weight:700;color:${color};letter-spacing:0.24em;text-transform:uppercase">
+    <span style="color:${color};font-size:14px;vertical-align:-1px;text-shadow:0 0 8px ${glow}">●</span>&nbsp;&nbsp;${label}
+  </p>`;
+}
+
+function headline(htmlContent, size = 28) {
+  return `<h1 style="margin:0 0 14px;font-family:${FONT};font-size:${size}px;font-weight:600;color:${TEXT};line-height:1.18;letter-spacing:-0.025em">${htmlContent}</h1>`;
+}
+
+function subline(text) {
+  return `<p style="margin:0 0 32px;font-family:${FONT};font-size:14px;color:${MUTED};line-height:1.6;font-weight:400">${text}</p>`;
+}
+
+function ctaButton({ url, label, accent = ACCENT, accentLt = ACCENT_LT, glow = ACCENT_GLOW, ink = ACCENT_INK }) {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0">
+    <tr><td style="background:linear-gradient(135deg,${accentLt} 0%,${accent} 100%);border:1px solid rgba(255,255,255,0.22);border-radius:12px;box-shadow:0 12px 32px -8px ${glow}">
+      <a href="${url}" style="display:inline-block;padding:14px 28px;font-family:${FONT};font-size:13px;font-weight:800;color:${ink};text-decoration:none;letter-spacing:0.04em;text-transform:uppercase">${label}&nbsp;&nbsp;→</a>
+    </td></tr>
+  </table>`;
+}
+
+function infoTable(rows) {
+  const cells = rows.map((r, i) => {
+    const last = i === rows.length - 1;
+    const border = last ? "" : `border-bottom:1px solid ${DIVIDER};`;
+    const labelStyle = `padding:14px 0;${border}width:88px;font-family:${FONT};font-size:10px;color:${MUTED};text-transform:uppercase;letter-spacing:0.14em;font-weight:600;vertical-align:top`;
+    const valueStyle = `padding:14px 0;${border}font-size:13px;color:${TEXT_DIM};${r.mono ? `font-family:${MONO};` : `font-family:${FONT};`}vertical-align:top;font-weight:500`;
+    const valueHtml = r.link
+      ? `<a href="${r.link}" style="color:${ACCENT_LT};text-decoration:none">${r.value}</a>`
+      : r.value;
+    return `<tr><td style="${labelStyle}">${r.label}</td><td style="${valueStyle}">${valueHtml}</td></tr>`;
+  }).join("");
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">${cells}</table>`;
+}
+
+function statChip({ value, label, color = ACCENT_LT, bg = ACCENT_BG, border = ACCENT_BORD }) {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 32px">
+    <tr><td style="background:${bg};border:1px solid ${border};border-radius:14px;padding:18px 24px">
+      <p style="margin:0;font-family:${FONT};font-size:26px;font-weight:700;color:${color};line-height:1;letter-spacing:-0.02em">${value}</p>
+      <p style="margin:8px 0 0;font-family:${FONT};font-size:10px;color:${MUTED};letter-spacing:0.16em;text-transform:uppercase;font-weight:600">${label}</p>
+    </td></tr>
+  </table>`;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+ * 1. New sign-up — admin alert
+ * ───────────────────────────────────────────────────────────────── */
 export async function sendSignupNotification({ name, email, image, isReturning = false }) {
   const time = new Date().toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "full", timeStyle: "short" });
-  const avatarHtml = image ? `<tr><td style="padding:0 32px 24px"><img src="${image}" width="56" height="56" style="border-radius:50%;border:2px solid ${BORDER};display:block" /></td></tr>` : "";
-  const inner = `<tr><td style="background:linear-gradient(135deg,${PURPLE},#4c1d95);padding:28px 32px 24px"><p style="margin:0;font-size:11px;font-weight:700;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.12em">Admin Alert</p><h1 style="margin:6px 0 0;font-size:22px;font-weight:700;color:${WHITE};line-height:1.2">New sign-up! &#127881;</h1></td></tr>${avatarHtml}<tr><td style="padding:${image ? "0" : "24px"} 32px 28px"><table width="100%" cellpadding="0" cellspacing="0"><tr><td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:${MUTED};font-size:12px;width:72px">Name</td><td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:${TEXT};font-size:13px;font-weight:600">${name || "&#8212;"}</td></tr><tr><td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:${MUTED};font-size:12px">Email</td><td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);font-size:13px"><a href="mailto:${email}" style="color:${PURPLE_L};text-decoration:none">${email}</a></td></tr><tr><td style="padding:10px 0;color:${MUTED};font-size:12px">Time</td><td style="padding:10px 0;color:${TEXT};font-size:13px">${time}</td></tr></table></td></tr><tr><td style="padding:0 32px 32px"><a href="https://seedance.visualseffect.com" style="display:inline-block;padding:12px 24px;background:linear-gradient(135deg,${PURPLE},#5b21b6);color:${WHITE};font-size:13px;font-weight:700;text-decoration:none;border-radius:8px">View Site &#8594;</a></td></tr>`;
-  await send({ to: ADMIN_EMAIL, subject: `New sign-up: ${name || email}`, html: baseWrapper(inner) });
+  const displayName = name || email;
+  const avatarHtml = image
+    ? `<tr><td style="padding:0 36px 4px">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td style="background:${CARD};padding:3px;border:1px solid ${ACCENT_BORD};border-radius:50%">
+          <img src="${image}" width="56" height="56" alt="" style="display:block;border-radius:50%;border:0" />
+        </td></tr></table>
+       </td></tr>`
+    : "";
+
+  const inner = `
+    <tr><td style="padding:36px 36px 0">
+      ${pulseBadge({ label: "New Member" })}
+      ${headline(`A new <span style="color:${ACCENT_LT}">creator</span><br/>just joined the studio`)}
+      ${subline("Your community grew by one. Drop a line when you get a chance.")}
+    </td></tr>
+    ${avatarHtml}
+    <tr><td style="padding:${image ? "16px" : "0"} 36px 0">
+      ${infoTable([
+        { label: "Name", value: name || "—" },
+        { label: "Email", value: email, link: `mailto:${email}` },
+        { label: "Joined", value: time },
+      ])}
+    </td></tr>
+    <tr><td style="padding:32px 36px 36px">
+      ${ctaButton({ url: `${SITE}/admin`, label: "Open admin panel" })}
+    </td></tr>
+  `;
+
+  await send({
+    to: ADMIN_EMAIL,
+    subject: `New member · ${displayName}`,
+    html: pageWrapper({
+      title: "New sign-up",
+      preheader: `${displayName} just joined Seedance Studio · ${time}`,
+      inner,
+    }),
+  });
 }
 
+/* ─────────────────────────────────────────────────────────────────
+ * 2. Welcome email — to the new user
+ * ───────────────────────────────────────────────────────────────── */
 export async function sendWelcomeEmail({ name, email }) {
   const firstName = name ? name.split(" ")[0] : "there";
-  const inner = `<tr><td style="background:linear-gradient(135deg,#1e1b4b,#2e1065);padding:36px 32px 28px;text-align:center"><div style="font-size:40px;margin-bottom:12px">&#127916;</div><h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:${WHITE}">Welcome to Seedance, ${firstName}!</h1><p style="margin:0;font-size:14px;color:rgba(217, 255, 0,0.9);line-height:1.6">You've just unlocked AI-powered video generation.<br/>Your first 10 credits are ready to use.</p></td></tr><tr><td style="padding:28px 32px 32px;text-align:center"><a href="https://seedance.visualseffect.com" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,${PURPLE},#5b21b6);color:${WHITE};font-size:14px;font-weight:700;text-decoration:none;border-radius:10px">Start Generating &#8594;</a></td></tr>`;
-  await send({ to: email, subject: `Welcome to Seedance, ${firstName}! Your 10 free credits are ready`, html: baseWrapper(inner) });
+
+  const inner = `
+    <tr><td style="padding:40px 36px 0">
+      ${pulseBadge({ label: "Welcome" })}
+      ${headline(`Welcome to <span style="color:${ACCENT_LT}">Seedance</span>,<br/>${firstName}.`, 30)}
+      ${subline("Your studio is ready. Write a prompt, choose your settings, and watch your idea come to life — your first 10 credits are waiting.")}
+    </td></tr>
+    <tr><td style="padding:0 36px 0">
+      ${statChip({ value: "10 credits", label: "Ready to use" })}
+    </td></tr>
+    <tr><td style="padding:0 36px 8px">
+      ${ctaButton({ url: `${SITE}/generate`, label: "Start creating" })}
+    </td></tr>
+    <tr><td style="padding:28px 36px 0">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr><td style="height:1px;background:${DIVIDER};font-size:0;line-height:0">&nbsp;</td></tr>
+      </table>
+    </td></tr>
+    <tr><td style="padding:24px 36px 36px">
+      <p style="margin:0 0 12px;font-family:${FONT};font-size:10px;color:${MUTED};letter-spacing:0.18em;text-transform:uppercase;font-weight:700">How it works</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        ${[
+          ["01", "Write your prompt", "Describe your scene, mood, and action — or let the AI builder expand a short idea."],
+          ["02", "Choose your settings", "Aspect ratio, duration, resolution. 1:1 · 16:9 · 9:16 supported."],
+          ["03", "Download &amp; share", "Your video lands in your gallery in seconds. Download or share instantly."],
+        ].map(([n, t, b], i, arr) => `
+          <tr><td style="padding:14px 0;${i === arr.length - 1 ? "" : `border-bottom:1px solid ${DIVIDER};`}vertical-align:top">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td style="width:46px;vertical-align:top">
+                  <span style="display:inline-block;font-family:${MONO};font-size:11px;font-weight:700;color:${ACCENT_LT};background:${ACCENT_BG};border:1px solid ${ACCENT_BORD};border-radius:6px;padding:4px 8px;letter-spacing:0.05em">${n}</span>
+                </td>
+                <td style="vertical-align:top;padding-top:1px">
+                  <p style="margin:0 0 4px;font-family:${FONT};font-size:13px;font-weight:600;color:${TEXT}">${t}</p>
+                  <p style="margin:0;font-family:${FONT};font-size:12px;color:${MUTED};line-height:1.55">${b}</p>
+                </td>
+              </tr>
+            </table>
+          </td></tr>
+        `).join("")}
+      </table>
+    </td></tr>
+  `;
+
+  await send({
+    to: email,
+    subject: `Welcome to Seedance, ${firstName} — your 10 credits are ready`,
+    html: pageWrapper({
+      title: "Welcome to Seedance",
+      preheader: "Your studio is ready. 10 credits waiting — start creating in seconds.",
+      inner,
+    }),
+  });
 }
 
+/* ─────────────────────────────────────────────────────────────────
+ * 3. Payment received — admin alert
+ * ───────────────────────────────────────────────────────────────── */
 export async function sendPaymentNotification({ customerEmail, customerName, plan, credits, amountCents }) {
-  const amountUSD = amountCents ? (amountCents / 100).toFixed(2) : "—";
+  const amountUSD = amountCents != null ? (amountCents / 100).toFixed(2) : "—";
   const time = new Date().toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "full", timeStyle: "short" });
-  const inner = `<tr><td style="background:linear-gradient(135deg,#15803d,#166534);padding:28px 32px 24px"><p style="margin:0;font-size:11px;font-weight:700;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.12em">Payment Received</p><h1 style="margin:6px 0 0;font-size:22px;font-weight:700;color:#ffffff">&#128181; $${amountUSD} received!</h1></td></tr><tr><td style="padding:24px 32px 28px"><table width="100%" cellpadding="0" cellspacing="0"><tr><td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#9ca3af;font-size:12px;width:80px">Customer</td><td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#e5e7eb;font-size:13px">${customerName || customerEmail}</td></tr><tr><td style="padding:10px 0;color:#9ca3af;font-size:12px">Time</td><td style="padding:10px 0;color:#e5e7eb;font-size:13px">${time}</td></tr></table></td></tr>`;
-  await send({ to: ADMIN_EMAIL, subject: `Payment $${amountUSD} — ${customerEmail}`, html: baseWrapper(inner) });
+
+  const rows = [
+    { label: "Customer", value: customerName || customerEmail },
+    { label: "Email", value: customerEmail, link: `mailto:${customerEmail}` },
+  ];
+  if (plan)    rows.push({ label: "Plan",    value: plan });
+  if (credits) rows.push({ label: "Credits", value: `${credits}` });
+  rows.push({ label: "Time", value: time });
+
+  const inner = `
+    <tr><td style="padding:36px 36px 0">
+      ${pulseBadge({ label: "Payment Received" })}
+      ${headline(`<span style="color:${ACCENT_LT};font-variant-numeric:tabular-nums">$${amountUSD}</span> received`)}
+      ${subline(`A payment from ${customerName || customerEmail} just landed.`)}
+    </td></tr>
+    <tr><td style="padding:0 36px">
+      ${infoTable(rows)}
+    </td></tr>
+    <tr><td style="padding:32px 36px 36px">
+      ${ctaButton({ url: `${SITE}/admin`, label: "Open admin panel" })}
+    </td></tr>
+  `;
+
+  await send({
+    to: ADMIN_EMAIL,
+    subject: `Payment received · $${amountUSD} from ${customerEmail}`,
+    html: pageWrapper({
+      title: "Payment received",
+      preheader: `$${amountUSD} from ${customerName || customerEmail} · ${time}`,
+      inner,
+    }),
+  });
 }
 
+/* ─────────────────────────────────────────────────────────────────
+ * 4. Magic link sign-in — to user
+ * ───────────────────────────────────────────────────────────────── */
 export async function sendMagicLinkEmail({ email, url }) {
-  const inner = `<tr><td style="background:linear-gradient(135deg,#1e1b4b,#2e1065);padding:36px 32px 28px;text-align:center"><div style="font-size:36px;margin-bottom:12px">🔗</div><h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#ffffff">Your sign-in link</h1><p style="margin:0;font-size:13px;color:rgba(217, 255, 0,0.85);line-height:1.6">Click below to sign in. Expires in 24 hours.</p></td></tr><tr><td style="padding:32px 32px 28px;text-align:center"><a href="${url}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#A6CC00,#5b21b6);color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;border-radius:12px">Sign in to Seedance &#8594;</a></td></tr>`;
-  await send({ to: email, subject: "Your Seedance sign-in link", html: baseWrapper(inner) });
+  const inner = `
+    <tr><td style="padding:40px 36px 0">
+      ${pulseBadge({ label: "Secure Sign-in" })}
+      ${headline(`Your sign-in <span style="color:${ACCENT_LT}">link</span><br/>is ready`, 28)}
+      ${subline("Click below to sign in to Seedance Studio. The link expires in 24 hours and can only be used once.")}
+    </td></tr>
+    <tr><td style="padding:8px 36px 0">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+        <tr><td align="left">
+          ${ctaButton({ url, label: "Sign in to Seedance" })}
+        </td></tr>
+      </table>
+    </td></tr>
+    <tr><td style="padding:24px 36px 0">
+      <p style="margin:0;font-family:${FONT};font-size:11px;color:${MUTED};line-height:1.6">
+        Or paste this link into your browser:<br/>
+        <span style="font-family:${MONO};font-size:11px;color:${TEXT_DIM};word-break:break-all">${url}</span>
+      </p>
+    </td></tr>
+    <tr><td style="padding:28px 36px 0">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr><td style="height:1px;background:${DIVIDER};font-size:0;line-height:0">&nbsp;</td></tr>
+      </table>
+    </td></tr>
+    <tr><td style="padding:20px 36px 36px">
+      <p style="margin:0;font-family:${FONT};font-size:11px;color:${MUTED};line-height:1.6">
+        Didn't request this? You can safely ignore this email — your account stays secure.
+      </p>
+    </td></tr>
+  `;
+
+  await send({
+    to: email,
+    subject: "Sign in to Seedance Studio",
+    html: pageWrapper({
+      title: "Your sign-in link",
+      preheader: "Click to sign in to Seedance Studio · expires in 24 hours",
+      inner,
+    }),
+  });
 }
 
+/* ─────────────────────────────────────────────────────────────────
+ * 5. New visitor — admin alert
+ * ───────────────────────────────────────────────────────────────── */
 export async function sendVisitNotification({ ip, country, region, city, isp, page }) {
   const time = new Date().toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "full", timeStyle: "short" });
-  const location = [city, region, country].filter(Boolean).join(", ") || "Unknown";
-  const inner = `<tr><td style="background:linear-gradient(135deg,#1e1b4b,#2e1065);padding:24px 32px 20px"><p style="margin:0;font-size:11px;font-weight:700;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.12em">New Visitor</p><h1 style="margin:6px 0 0;font-size:20px;font-weight:700;color:#ffffff">&#127758; ${location}</h1></td></tr><tr><td style="padding:24px 32px 28px"><table width="100%" cellpadding="0" cellspacing="0"><tr><td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#9ca3af;font-size:11px;width:72px;text-transform:uppercase">IP</td><td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#e5e7eb;font-size:13px;font-family:monospace">${ip}</td></tr><tr><td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#9ca3af;font-size:11px;text-transform:uppercase">Page</td><td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#D9FF00;font-size:13px;font-family:monospace">${page}</td></tr><tr><td style="padding:9px 0;color:#9ca3af;font-size:11px;text-transform:uppercase">Time</td><td style="padding:9px 0;color:#e5e7eb;font-size:13px">${time}</td></tr></table></td></tr>`;
-  await send({ to: ADMIN_EMAIL, subject: `New visitor: ${location} — ${ip}`, html: baseWrapper(inner) });
+  const location = [city, region, country].filter(Boolean).join(", ") || "Unknown location";
+
+  const rows = [
+    { label: "IP",       value: ip,                 mono: true },
+    { label: "Page",     value: page,               mono: true, link: `${SITE}${page.startsWith("/") ? page : "/" + page}` },
+  ];
+  if (isp) rows.push({ label: "ISP", value: isp });
+  rows.push({ label: "Time", value: time });
+
+  const inner = `
+    <tr><td style="padding:36px 36px 0">
+      ${pulseBadge({ label: "New Visitor" })}
+      ${headline(`<span style="color:${ACCENT_LT}">${location}</span>`, 24)}
+      ${subline("Someone just opened the studio.")}
+    </td></tr>
+    <tr><td style="padding:0 36px">
+      ${infoTable(rows)}
+    </td></tr>
+    <tr><td style="padding:32px 36px 36px">
+      ${ctaButton({ url: `${SITE}/admin`, label: "View visitors" })}
+    </td></tr>
+  `;
+
+  await send({
+    to: ADMIN_EMAIL,
+    subject: `New visitor · ${location}`,
+    html: pageWrapper({
+      title: "New visitor",
+      preheader: `Visit from ${location} (${ip}) · ${page}`,
+      inner,
+    }),
+  });
 }
