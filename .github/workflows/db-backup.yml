@@ -1,0 +1,100 @@
+# Hourly Postgres → R2 backup
+#
+# Runs every hour at :00 UTC. Dumps the Neon database with pg_dump,
+# gzips it, uploads to your R2 bucket under db-backups/, then prunes
+# old backups using a tiered retention policy.
+#
+# Retention:
+#   - Hourly: every hourly dump from the last 48 hours (max 48 files)
+#   - Daily:  the 00:00 UTC dump from each of the last 30 days
+#   - Monthly: the 1st-of-month 00:00 UTC dump from the last 12 months
+#
+# Secrets required (Settings → Secrets and variables → Actions):
+#   DATABASE_URL          - Postgres connection string from Neon
+#   R2_ACCOUNT_ID         - Cloudflare account ID
+#   R2_ACCESS_KEY_ID      - R2 API token (read+write)
+#   R2_SECRET_ACCESS_KEY  - R2 API token secret
+#   R2_BUCKET_NAME        - R2 bucket to store backups in (can reuse the
+#                           production bucket — backups go under db-backups/)
+#
+# Manual trigger: Actions tab → "Hourly DB Backup" → "Run workflow".
+
+name: Hourly DB Backup
+
+on:
+  schedule:
+    - cron: "0 * * * *"   # every hour at :00 UTC
+  workflow_dispatch:       # allow manual runs
+
+# This job needs no repo write access.
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Install Postgres 16 client
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-16
+          pg_dump --version
+
+      - name: Compute backup timestamp
+        id: ts
+        run: |
+          TIMESTAMP=$(date -u +"%Y-%m-%d-%H%M")
+          echo "value=$TIMESTAMP" >> "$GITHUB_OUTPUT"
+
+      - name: Dump database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          set -euo pipefail
+          pg_dump --no-owner --no-acl --clean --if-exists "$DATABASE_URL" \
+            | gzip -9 \
+            > "/tmp/db-${{ steps.ts.outputs.value }}.sql.gz"
+          ls -lh "/tmp/db-${{ steps.ts.outputs.value }}.sql.gz"
+
+      - name: Upload to R2
+        env:
+          AWS_ACCESS_KEY_ID:     ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION:    auto
+        run: |
+          aws s3 cp \
+            "/tmp/db-${{ steps.ts.outputs.value }}.sql.gz" \
+            "s3://${{ secrets.R2_BUCKET_NAME }}/db-backups/db-${{ steps.ts.outputs.value }}.sql.gz" \
+            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com" \
+            --no-progress
+
+      - name: Prune old backups (48h hourly + 30d daily + 12mo monthly)
+        env:
+          AWS_ACCESS_KEY_ID:     ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION:    auto
+          R2_ACCOUNT_ID:         ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET_NAME:        ${{ secrets.R2_BUCKET_NAME }}
+        run: |
+          python3 <<'PY'
+          import os, re, subprocess
+          from datetime import datetime, timezone, timedelta
+
+          endpoint = f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com"
+          bucket   = os.environ["R2_BUCKET_NAME"]
+          prefix   = "db-backups/"
+
+          # List existing dumps
+          out = subprocess.run(
+              ["aws", "s3", "ls", f"s3://{bucket}/{prefix}",
+               "--endpoint-url", endpoint],
+              capture_output=True, text=True, check=True,
+          ).stdout
+
+          pattern = re.compile(r"db-(\d{4}-\d{2}-\d{2}-\d{4})\.sql\.gz$")
+          files = []
+          for line in out.splitlines():
