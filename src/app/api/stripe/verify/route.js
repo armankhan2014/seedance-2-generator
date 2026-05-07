@@ -42,16 +42,20 @@ export async function GET(req) {
       return NextResponse.json({ error: "Invalid payment metadata" }, { status: 400 });
     }
 
+    // Credit the LOGGED-IN user (session.user.id), not whichever email
+    // came back on the Stripe session. Stripe's customer_email and our
+    // session can drift (email changes, account linking), and trusting
+    // the email could credit the wrong account in edge cases.
     const [, updatedUser] = await prisma.$transaction([
       prisma.payment.create({ data: { stripeSessionId, userId: session.user.id, credits } }),
       prisma.user.update({
-        where: { email },
+        where: { id: session.user.id },
         data: { credits: { increment: credits }, verified: true },
         select: { credits: true },
       }),
     ]);
 
-    console.log("[VERIFY] Credits awarded:", credits, "to", email, "| new total:", updatedUser.credits);
+    console.log("[VERIFY] Credits awarded:", credits, "to user", session.user.id, "(", email, ") | new total:", updatedUser.credits);
 
     sendPaymentNotification({ customerEmail: email, customerName: name, plan, credits, amountCents })
       .catch(err => console.error("[VERIFY] Payment email failed:", err.message));

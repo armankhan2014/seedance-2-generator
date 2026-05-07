@@ -18,6 +18,14 @@ export async function POST(req) {
       return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
     }
 
+    // Cap prompt length so abusers can't spam huge payloads at MuAPI on our dime.
+    if (typeof prompt === "string" && prompt.length > 4000) {
+      return NextResponse.json(
+        { error: "Prompt is too long (max 4000 characters)." },
+        { status: 400 }
+      );
+    }
+
     let result;
     if (mode === "reference-to-video") {
       result = await AIService.edit(session.user.id, {

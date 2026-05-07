@@ -12,12 +12,12 @@ export async function POST(req) {
       console.warn("[MUAPI_WEBHOOK] Rejected — missing webhook secret");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const secretsMatch = crypto.timingSafeEqual(
-      Buffer.from(webhookSecret),
-      Buffer.from(expectedSecret)
-    );
-    if (!secretsMatch) {
-      console.warn("[MUAPI_WEBHOOK] Rejected — invalid or missing webhook secret");
+    // timingSafeEqual throws on length mismatch — pre-check to avoid the
+    // crash when an attacker (or typo) sends a wrong-length secret.
+    const a = Buffer.from(webhookSecret);
+    const b = Buffer.from(expectedSecret);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      console.warn("[MUAPI_WEBHOOK] Rejected — invalid webhook secret");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

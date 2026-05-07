@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
+import { UserService } from "@/lib/services/user";
+
+// 1 credit per AI prompt build call. Charged before we hit Anthropic so
+// the user can't run unlimited paid Claude calls on a single credit.
+const PROMPT_BUILD_COST = 1;
+const MAX_DESCRIPTION_LEN = 2000;
 
 const SYSTEM = `You are a world-class Seedance 2.0 cinematic director and prompt engineer. Your job is to transform any user idea — no matter how brief — into a DETAILED, PRODUCTION-READY Seedance video generation prompt.
 
@@ -57,23 +62,16 @@ export async function POST(req) {
       );
     }
 
-    // ── Credits check ────────────────────────────────────────────────────────
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { credits: true },
-    });
-
-    if (!user || user.credits <= 0) {
-      return NextResponse.json(
-        { error: "You need credits to use AI Prompt Builder. Buy credits to unlock.", upgradeRequired: true },
-        { status: 403 }
-      );
-    }
-
     // ── Input ────────────────────────────────────────────────────────────────
     const { description } = await req.json();
     if (!description?.trim()) {
       return NextResponse.json({ error: "No description provided." }, { status: 400 });
+    }
+    if (description.length > MAX_DESCRIPTION_LEN) {
+      return NextResponse.json(
+        { error: `Description is too long (max ${MAX_DESCRIPTION_LEN} characters).` },
+        { status: 400 }
+      );
     }
 
     // ── API key check ────────────────────────────────────────────────────────
@@ -82,26 +80,50 @@ export async function POST(req) {
       return NextResponse.json({ error: "AI service not configured." }, { status: 500 });
     }
 
-    // ── Claude call ──────────────────────────────────────────────────────────
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 3000,
-        system: SYSTEM,
-        messages: [{ role: "user", content: description.trim() }],
-      }),
-    });
+    // ── Debit BEFORE the Anthropic call ──────────────────────────────────────
+    // Refunds on infrastructure failure below. Without this, anyone with
+    // 1 credit could call Anthropic forever — the old code only checked
+    // the balance, never decremented it.
+    try {
+      await UserService.deductCredits(session.user.id, PROMPT_BUILD_COST);
+    } catch (e) {
+      if (e.message === "Insufficient credits") {
+        return NextResponse.json(
+          { error: "You need credits to use AI Prompt Builder. Buy credits to unlock.", upgradeRequired: true },
+          { status: 403 }
+        );
+      }
+      throw e;
+    }
 
-    const d = await r.json();
+    // ── Claude call ──────────────────────────────────────────────────────────
+    let r, d;
+    try {
+      r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 3000,
+          system: SYSTEM,
+          messages: [{ role: "user", content: description.trim() }],
+        }),
+      });
+      d = await r.json();
+    } catch (fetchErr) {
+      // Network failure — refund and bail.
+      await UserService.addCredits(session.user.id, PROMPT_BUILD_COST).catch(() => {});
+      throw fetchErr;
+    }
 
     if (!r.ok) {
       console.error("Anthropic API error:", JSON.stringify(d));
+      // Anthropic infrastructure rejected us — refund.
+      await UserService.addCredits(session.user.id, PROMPT_BUILD_COST).catch(() => {});
       return NextResponse.json(
         { error: `AI error: ${d.error?.message || "Unknown error."}` },
         { status: 500 }
@@ -110,6 +132,7 @@ export async function POST(req) {
 
     const prompt = d.content?.[0]?.text?.trim();
     if (!prompt) {
+      await UserService.addCredits(session.user.id, PROMPT_BUILD_COST).catch(() => {});
       return NextResponse.json({ error: "AI returned empty response. Please try again." }, { status: 500 });
     }
 

@@ -23,7 +23,10 @@ if (process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET) {
   providers.push(FacebookProvider({
     clientId: process.env.FACEBOOK_CLIENT_ID,
     clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
-    allowDangerousEmailAccountLinking: true,
+    // Facebook does NOT always verify email ownership — auto-linking on
+    // email lets an attacker who controls a Facebook profile claiming
+    // someone else's email take over that account. Off by default here.
+    allowDangerousEmailAccountLinking: false,
   }));
 }
 

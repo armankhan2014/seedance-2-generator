@@ -75,8 +75,13 @@ export const AIService = {
       const responseText = await submitRes.text();
 
       if (!submitRes.ok) {
-        // API rejected the request — refund happens in catch block below
-        throw new Error(`API Submission Failed: ${submitRes.status} ${responseText}`);
+        // 4xx = user's payload was rejected (bad prompt, content policy, etc.).
+        // We tag it so the catch block knows NOT to refund — otherwise an
+        // attacker can spam garbage prompts and have credits returned each time.
+        // 5xx and network errors still refund (our infrastructure problem).
+        const err = new Error(`API Submission Failed: ${submitRes.status} ${responseText}`);
+        err.userFault = submitRes.status >= 400 && submitRes.status < 500;
+        throw err;
       }
 
       let responseData;
@@ -108,17 +113,21 @@ export const AIService = {
       return { request_id };
 
     } catch (error) {
-      // ── AUTO-REFUND ──────────────────────────────────────────────────────────
-      // Any failure after credit deduction triggers an automatic refund.
-      // This covers: muapi.ai "not enough fund", network errors, bad responses, etc.
-      console.error("[AI_REFUND] Generation failed — refunding", cost, "credits to user", userId, "| reason:", error.message);
-      try {
-        await UserService.addCredits(userId, cost);
-      } catch (refundErr) {
-        // Log refund failure but don't hide the original error
-        console.error("[AI_REFUND_FAILED] Could not refund credits for user", userId, refundErr.message);
+      // ── AUTO-REFUND (only for our-fault failures) ───────────────────────────
+      // Refund on infrastructure failures (5xx, network errors), but NOT on
+      // 4xx where the user's payload was the problem. Otherwise any logged-in
+      // user could repeatedly submit garbage prompts and have their credits
+      // returned each time, costing nothing to abuse.
+      if (error.userFault) {
+        console.error("[AI_NO_REFUND] User-fault failure — keeping", cost, "credits | reason:", error.message);
+      } else {
+        console.error("[AI_REFUND] Generation failed — refunding", cost, "credits to user", userId, "| reason:", error.message);
+        try {
+          await UserService.addCredits(userId, cost);
+        } catch (refundErr) {
+          console.error("[AI_REFUND_FAILED] Could not refund credits for user", userId, refundErr.message);
+        }
       }
-      // ────────────────────────────────────────────────────────────────────────
       throw error;
     }
   },
@@ -149,7 +158,11 @@ export const AIService = {
   },
 
   async checkStatus(requestId, userId) {
-    const creation = await prisma.creation.findUnique({ where: { requestId } });
+    // Scope to the calling user — without this, anyone can poll any
+    // requestId and read other users' generation status / output URLs.
+    const creation = await prisma.creation.findFirst({
+      where: { requestId, userId },
+    });
     if (!creation) return { status: "processing" };
 
     if (creation.status === "completed") {

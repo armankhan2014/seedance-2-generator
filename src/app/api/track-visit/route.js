@@ -2,6 +2,14 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendVisitNotification } from "@/lib/email";
 
+// Cap visit emails to 20/hour per serverless instance. This route is
+// anonymous, so without a cap an attacker rotating IPs could flood the
+// owner's inbox. Past the cap we still record the visit in the DB but
+// skip the email.
+const EMAIL_CAP_PER_HOUR = 20;
+let emailsSentThisHour = 0;
+let emailWindowStart = Date.now();
+
 export async function POST(req) {
   try {
     // Get real IP from Vercel headers
@@ -53,8 +61,17 @@ export async function POST(req) {
       },
     });
 
-    // Send email notification (fire and forget — never block the response)
-    sendVisitNotification({ ip, page: page || "/", ...geo }).catch(() => {});
+    // Send email notification (fire and forget — never block the response).
+    // Rate-limited per serverless instance to prevent inbox flooding.
+    const now = Date.now();
+    if (now - emailWindowStart > 60 * 60 * 1000) {
+      emailsSentThisHour = 0;
+      emailWindowStart = now;
+    }
+    if (emailsSentThisHour < EMAIL_CAP_PER_HOUR) {
+      emailsSentThisHour += 1;
+      sendVisitNotification({ ip, page: page || "/", ...geo }).catch(() => {});
+    }
 
     return NextResponse.json({ ok: true, id: visit.id });
   } catch (err) {

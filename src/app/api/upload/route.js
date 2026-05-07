@@ -4,6 +4,14 @@ import { authOptions } from "@/lib/auth";
 import config from "@/lib/config";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+const ALLOWED_MIME = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+
 async function uploadToR2(file, userId) {
   const accountId = process.env.R2_ACCOUNT_ID;
   const client = new S3Client({
@@ -42,6 +50,21 @@ export async function POST(req) {
     const file = formData.get("file");
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    }
+
+    // Reject anything that isn't a real image — without this, attackers
+    // could host arbitrary HTML/JS on our CDN by faking the file extension.
+    if (!ALLOWED_MIME.has(file.type)) {
+      return NextResponse.json(
+        { error: "Only JPEG, PNG, WebP, and GIF images are allowed." },
+        { status: 400 }
+      );
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return NextResponse.json(
+        { error: `File too large. Max ${MAX_UPLOAD_BYTES / 1024 / 1024}MB.` },
+        { status: 413 }
+      );
     }
 
     // ── Try R2 first ─────────────────────────────────────────────────────────
