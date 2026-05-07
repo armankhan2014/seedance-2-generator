@@ -55,7 +55,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
           set -euo pipefail
-          pg_dump --no-owner --no-acl --clean --if-exists "$DATABASE_URL" \
+          /usr/lib/postgresql/17/bin/pg_dump --no-owner --no-acl --clean --if-exists "$DATABASE_URL" \
             | gzip -9 \
             > "/tmp/db-${{ steps.ts.outputs.value }}.sql.gz"
           ls -lh "/tmp/db-${{ steps.ts.outputs.value }}.sql.gz"
