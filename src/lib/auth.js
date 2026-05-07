@@ -60,9 +60,13 @@ if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASS) {
 }
 
 // ── Auth config ────────────────────────────────────────────────────────────────
+// NOTE: Using database sessions (not JWT) so the session cookie stays tiny
+// (~150 bytes). Vercel rejects requests with headers > 16KB, and a bloated
+// JWT cookie chunked across .0/.1/.2 fragments was tipping requests over
+// that limit during OAuth signup. See KNOWN_ISSUES.md.
 export const authOptions = {
   adapter: PrismaAdapter(prisma),
-  session: { strategy: "jwt" },
+  session: { strategy: "database" },
   providers,
   pages: { signIn: "/", error: "/" },
 
@@ -89,38 +93,12 @@ export const authOptions = {
   },
 
   callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-        token.credits = user.credits ?? 10;
-        return token;
-      }
-      if (token.id) {
-        try {
-          const dbUser = await prisma.user.findUnique({ where: { id: token.id } });
-          if (dbUser) token.credits = dbUser.credits;
-        } catch (e) { console.error("JWT credits refresh failed:", e.message); }
-        return token;
-      }
-      if (!token.id && token.email) {
-        try {
-          let dbUser = await prisma.user.findUnique({ where: { email: token.email } });
-          if (!dbUser) {
-            dbUser = await prisma.user.create({
-              data: { email: token.email, name: token.name || null, image: token.picture || null },
-            });
-          }
-          token.id = dbUser.id;
-          token.credits = dbUser.credits;
-        } catch (e) { console.error("JWT user lookup failed:", e.message); }
-      }
-      return token;
-    },
-
-    async session({ session, token }) {
+    // With database sessions, NextAuth passes the live DB user record here,
+    // so we can read `credits` straight off it — no extra query needed.
+    async session({ session, user }) {
       if (session.user) {
-        session.user.id = token.id;
-        session.user.credits = token.credits ?? 10;
+        session.user.id = user.id;
+        session.user.credits = user.credits ?? 10;
       }
       return session;
     },
