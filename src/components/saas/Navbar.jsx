@@ -121,7 +121,7 @@ export default function Navbar() {
     ) : (
       <div style={{
         width: size, height: size, borderRadius: "50%",
-        background: "linear-gradient(135deg,#8b5cf6,#7c3aed)",
+        background: "linear-gradient(135deg,#D9FF00,#A6CC00)",
         display: "flex", alignItems: "center", justifyContent: "center",
         fontSize: size * 0.42 + "px", fontWeight: 700, color: "#fff", flexShrink: 0,
       }}>
@@ -154,7 +154,7 @@ export default function Navbar() {
         }}>
           {/* Logo */}
           <Link href="/" style={{ textDecoration: "none", fontSize: "1rem", fontWeight: 800, color: "#fff", flexShrink: 0 }}>
-            Seedance<span style={{ background: "linear-gradient(135deg,#8b5cf6,#7c3aed)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Studio</span>
+            Seedance<span style={{ background: "linear-gradient(135deg,#D9FF00,#A6CC00)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Studio</span>
           </Link>
 
           {/* Desktop nav */}
@@ -167,7 +167,7 @@ export default function Navbar() {
                 fontWeight: 600,
                 textDecoration: "none",
                 color: pathname === l.href ? "#fff" : "#64748b",
-                background: pathname === l.href ? "rgba(139,92,246,0.15)" : "transparent",
+                background: pathname === l.href ? "rgba(217, 255, 0,0.15)" : "transparent",
                 whiteSpace: "nowrap",
               }}>{l.label}</Link>
             ))}
@@ -185,10 +185,10 @@ export default function Navbar() {
               <>
                 {/* Credits badge */}
                 <span style={{
-                  background: "linear-gradient(135deg, rgba(139,92,246,0.2), rgba(124,58,237,0.2))",
-                  border: "1px solid rgba(139,92,246,0.4)",
+                  background: "linear-gradient(135deg, rgba(217, 255, 0,0.2), rgba(166, 204, 0,0.2))",
+                  border: "1px solid rgba(217, 255, 0,0.4)",
                   borderRadius: "20px",
-                  color: "#a78bfa",
+                  color: "#D9FF00",
                   padding: "4px 10px",
                   fontSize: "0.75rem",
                   fontWeight: 700,
@@ -295,7 +295,7 @@ export default function Navbar() {
             ) : (
               <button
                 onClick={handleSignIn}
-                style={{ background: "linear-gradient(135deg,#8b5cf6,#7c3aed)", border: "none", borderRadius: "8px", color: "#fff", padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+                style={{ background: "linear-gradient(135deg,#D9FF00,#A6CC00)", border: "none", borderRadius: "8px", color: "#000", padding: "8px 16px", fontSize: "0.82rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
                 Sign in
               </button>
             )}
@@ -330,7 +330,7 @@ export default function Navbar() {
                   fontWeight: 600,
                   textDecoration: "none",
                   color: pathname === l.href ? "#fff" : "#94a3b8",
-                  background: pathname === l.href ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.03)",
+                  background: pathname === l.href ? "rgba(217, 255, 0,0.15)" : "rgba(255,255,255,0.03)",
                 }}>{l.label}</Link>
             ))}
             <button
@@ -355,10 +355,10 @@ export default function Navbar() {
                   <div style={{
                     display: "inline-flex",
                     alignItems: "center",
-                    background: "linear-gradient(135deg, rgba(139,92,246,0.2), rgba(124,58,237,0.2))",
-                    border: "1px solid rgba(139,92,246,0.4)",
+                    background: "linear-gradient(135deg, rgba(217, 255, 0,0.2), rgba(166, 204, 0,0.2))",
+                    border: "1px solid rgba(217, 255, 0,0.4)",
                     borderRadius: "20px",
-                    color: "#a78bfa",
+                    color: "#D9FF00",
                     padding: "4px 12px",
                     fontSize: "0.82rem",
                     fontWeight: 700,
@@ -369,7 +369,7 @@ export default function Navbar() {
               ) : (
                 <button
                   onClick={() => { handleSignIn(); setMenuOpen(false); }}
-                  style={{ width: "100%", background: "linear-gradient(135deg,#8b5cf6,#7c3aed)", border: "none", borderRadius: "8px", color: "#fff", padding: "12px", fontSize: "0.9rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                  style={{ width: "100%", background: "linear-gradient(135deg,#D9FF00,#A6CC00)", border: "none", borderRadius: "8px", color: "#000", padding: "12px", fontSize: "0.9rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
                   Sign in
                 </button>
               )}

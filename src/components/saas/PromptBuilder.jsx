@@ -29,10 +29,10 @@ function FormattedPrompt({ text }) {
         }}>
           <div style={{
             height: "1px", width: "16px", flexShrink: 0,
-            background: "rgba(139,92,246,0.5)",
+            background: "rgba(217, 255, 0,0.5)",
           }} />
           <span style={{
-            fontSize: "0.62rem", fontWeight: 800, color: "#8b5cf6",
+            fontSize: "0.62rem", fontWeight: 800, color: "#D9FF00",
             textTransform: "uppercase", letterSpacing: "0.1em",
             whiteSpace: "nowrap",
           }}>
@@ -40,7 +40,7 @@ function FormattedPrompt({ text }) {
           </span>
           <div style={{
             height: "1px", flex: 1,
-            background: "rgba(139,92,246,0.2)",
+            background: "rgba(217, 255, 0,0.2)",
           }} />
         </div>
       );
@@ -88,7 +88,7 @@ function FormattedPrompt({ text }) {
             </span>
             {shotTitle && (
               <span style={{
-                fontSize: "0.82rem", fontWeight: 600, color: "#e2e8f0",
+                fontSize: "0.82rem", fontWeight: 600, color: "#FFFFFF",
               }}>
                 {shotTitle}
               </span>
@@ -149,7 +149,7 @@ function FormattedPrompt({ text }) {
       return parts.map((p, pi) => {
         if (/^\*\*[^*]+\*\*$/.test(p)) {
           return (
-            <strong key={pi} style={{ color: "#c4b5fd", fontWeight: 700 }}>
+            <strong key={pi} style={{ color: "#D9FF00", fontWeight: 700 }}>
               {p.replace(/\*\*/g, "")}
             </strong>
           );
@@ -251,13 +251,13 @@ export default function PromptBuilder({ onUse, onClose }) {
     },
     modal: {
       background: "#111118",
-      border: "1px solid rgba(139,92,246,0.25)",
+      border: "1px solid rgba(217, 255, 0,0.25)",
       borderRadius: "20px",
       width: "100%",
       maxWidth: "620px",
       maxHeight: "90vh",
       overflowY: "auto",
-      boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(139,92,246,0.1)",
+      boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(217, 255, 0,0.1)",
       fontFamily: "Inter, sans-serif",
     },
     header: {
@@ -268,7 +268,7 @@ export default function PromptBuilder({ onUse, onClose }) {
       zIndex: 10,
     },
     title: {
-      fontSize: "1rem", fontWeight: 800, color: "#e2e8f0",
+      fontSize: "1rem", fontWeight: 800, color: "#FFFFFF",
       letterSpacing: "-0.02em", marginBottom: "4px",
     },
     subtitle: {
@@ -285,7 +285,7 @@ export default function PromptBuilder({ onUse, onClose }) {
       padding: "12px",
       borderRadius: "10px",
       border: "none",
-      background: enabled ? "linear-gradient(135deg,#8b5cf6,#7c3aed)" : "rgba(255,255,255,0.06)",
+      background: enabled ? "linear-gradient(135deg,#D9FF00,#A6CC00)" : "rgba(255,255,255,0.06)",
       color: enabled ? "#fff" : "#334155",
       fontSize: "0.9rem", fontWeight: 700,
       cursor: enabled ? "pointer" : "not-allowed",
@@ -300,7 +300,7 @@ export default function PromptBuilder({ onUse, onClose }) {
       border: "1px solid rgba(255,255,255,0.1)",
       borderRadius: "10px",
       padding: "10px 12px",
-      color: "#e2e8f0",
+      color: "#FFFFFF",
       fontSize: "0.85rem",
       fontFamily: "inherit",
       resize: "vertical",
@@ -314,8 +314,8 @@ export default function PromptBuilder({ onUse, onClose }) {
       borderRadius: "9px",
       border: "none",
       marginTop: "10px",
-      background: enabled ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.04)",
-      color: enabled ? "#a78bfa" : "#334155",
+      background: enabled ? "rgba(217, 255, 0,0.15)" : "rgba(255,255,255,0.04)",
+      color: enabled ? "#D9FF00" : "#334155",
       fontSize: "0.85rem", fontWeight: 700,
       cursor: enabled ? "pointer" : "not-allowed",
       fontFamily: "inherit",
@@ -356,7 +356,7 @@ export default function PromptBuilder({ onUse, onClose }) {
                 textAlign: "center", padding: "32px 16px", gap: "12px",
               }}>
                 <div style={{ fontSize: "2rem" }}>🔒</div>
-                <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "#e2e8f0", margin: 0 }}>
+                <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "#FFFFFF", margin: 0 }}>
                   Sign in to use AI Prompt Builder
                 </p>
                 <p style={{ fontSize: "0.78rem", color: "#475569", margin: 0, lineHeight: 1.6 }}>
@@ -366,7 +366,7 @@ export default function PromptBuilder({ onUse, onClose }) {
                   onClick={() => window.dispatchEvent(new CustomEvent("openSignIn"))}
                   style={{
                     marginTop: "8px", padding: "10px 24px",
-                    background: "linear-gradient(135deg,#8b5cf6,#7c3aed)",
+                    background: "linear-gradient(135deg,#D9FF00,#A6CC00)",
                     border: "none", borderRadius: "10px",
                     color: "#fff", fontSize: "0.85rem", fontWeight: 700,
                     cursor: "pointer", fontFamily: "inherit",
@@ -391,7 +391,7 @@ export default function PromptBuilder({ onUse, onClose }) {
                 textAlign: "center", padding: "32px 16px", gap: "12px",
               }}>
                 <div style={{ fontSize: "2rem" }}>⚡</div>
-                <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "#e2e8f0", margin: 0 }}>
+                <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "#FFFFFF", margin: 0 }}>
                   Credits required
                 </p>
                 <p style={{ fontSize: "0.78rem", color: "#475569", margin: 0, lineHeight: 1.6 }}>
@@ -401,7 +401,7 @@ export default function PromptBuilder({ onUse, onClose }) {
                   href="/pricing"
                   style={{
                     marginTop: "8px", padding: "10px 24px",
-                    background: "linear-gradient(135deg,#8b5cf6,#7c3aed)",
+                    background: "linear-gradient(135deg,#D9FF00,#A6CC00)",
                     border: "none", borderRadius: "10px",
                     color: "#fff", fontSize: "0.85rem", fontWeight: 700,
                     cursor: "pointer", fontFamily: "inherit",
@@ -443,7 +443,7 @@ export default function PromptBuilder({ onUse, onClose }) {
                   }}>
                     {aiError}
                     {aiError.includes("credits") && (
-                      <a href="/pricing" style={{ color: "#a78bfa", marginLeft: "6px", fontWeight: 700 }}>
+                      <a href="/pricing" style={{ color: "#D9FF00", marginLeft: "6px", fontWeight: 700 }}>
                         Buy credits →
                       </a>
                     )}
@@ -479,8 +479,8 @@ export default function PromptBuilder({ onUse, onClose }) {
                         </button>
                       </div>
                       <div style={{
-                        background: "rgba(139,92,246,0.04)",
-                        border: "1px solid rgba(139,92,246,0.18)",
+                        background: "rgba(217, 255, 0,0.04)",
+                        border: "1px solid rgba(217, 255, 0,0.18)",
                         borderRadius: "12px", padding: "16px 18px",
                         maxHeight: "420px", overflowY: "auto",
                       }}>

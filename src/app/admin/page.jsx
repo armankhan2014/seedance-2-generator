@@ -11,7 +11,7 @@ const OWNER_EMAIL = "armankhan0826@gmail.com";
 export const dynamic = "force-dynamic";
 
 function planLabel(credits) {
-  if (credits >= 24000) return { label: "Quantum Flow",     color: "#a78bfa", bg: "#2a1a40" };
+  if (credits >= 24000) return { label: "Quantum Flow",     color: "#D9FF00", bg: "#2a1a40" };
   if (credits >= 7000)  return { label: "Power Engine",     color: "#818cf8", bg: "#1a2040" };
   if (credits >= 3000)  return { label: "Starter Manifest", color: "#34d399", bg: "#1a3028" };
   return                        { label: "Custom",           color: "#f59e0b", bg: "#2a2010" };
@@ -98,7 +98,7 @@ export default async function AdminDashboard() {
 CREATE INDEX IF NOT EXISTS "Payment_userId_idx" ON "Payment"("userId");`;
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0f0f1a", color: "#f0f0f0", fontFamily: "system-ui, sans-serif", padding: "32px 24px" }}>
+    <div style={{ minHeight: "100vh", background: "#0a0a0a", color: "#f0f0f0", fontFamily: "system-ui, sans-serif", padding: "32px 24px" }}>
       <div style={{ maxWidth: 1100, margin: "0 auto" }}>
 
         {/* Header */}
@@ -151,7 +151,7 @@ CREATE INDEX IF NOT EXISTS "Payment_userId_idx" ON "Payment"("userId");`;
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 36 }}>
           {[
             { label: "Paid Users",    value: uniquePayerIds.size,                        icon: "💳", color: "#f59e0b" },
-            { label: "Total Orders",  value: payments.length,                            icon: "🧾", color: "#a78bfa" },
+            { label: "Total Orders",  value: payments.length,                            icon: "🧾", color: "#D9FF00" },
             { label: "Total Revenue", value: "$" + (totalRevenueCents / 100).toFixed(2), icon: "💰", color: "#34d399" },
           ].map(card => (
             <div key={card.label} style={{ background: "#1a1a2e", borderRadius: 12, padding: "20px 22px", border: "1px solid #2a2a40" }}>
@@ -363,7 +363,7 @@ CREATE INDEX IF NOT EXISTS "Payment_userId_idx" ON "Payment"("userId");`;
                         <td style={{ padding: "11px 18px", color: "#888", maxWidth: 200 }}>
                           <span style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.isp || <span style={{ color: "#444" }}>—</span>}</span>
                         </td>
-                        <td style={{ padding: "11px 18px", fontFamily: "monospace", color: "#a78bfa", fontSize: 12 }}>{v.page || "/"}</td>
+                        <td style={{ padding: "11px 18px", fontFamily: "monospace", color: "#D9FF00", fontSize: 12 }}>{v.page || "/"}</td>
                         <td style={{ padding: "11px 18px", color: "#666", fontSize: 12, whiteSpace: "nowrap" }}>
                           {new Date(v.createdAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
                         </td>
@@ -386,7 +386,7 @@ CREATE INDEX IF NOT EXISTS "Payment_userId_idx" ON "Payment"("userId");`;
 
 function ErrorPage({ msg }) {
   return (
-    <div style={{ minHeight: "100vh", background: "#0f0f1a", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui, sans-serif" }}>
+    <div style={{ minHeight: "100vh", background: "#0a0a0a", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "system-ui, sans-serif" }}>
       <div style={{ background: "#1a1a2e", border: "1px solid #3a1a1a", borderRadius: 14, padding: "32px 40px", maxWidth: 600, width: "100%" }}>
         <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
         <h2 style={{ color: "#f87171", margin: "0 0 12px", fontSize: 18 }}>Admin page error</h2>

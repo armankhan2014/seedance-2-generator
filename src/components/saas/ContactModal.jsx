@@ -49,7 +49,7 @@ export default function ContactModal({ onClose }) {
         transform: "translate(-50%,-50%)",
         zIndex: 1000,
         background: "#111118",
-        border: "1px solid rgba(139,92,246,0.25)",
+        border: "1px solid rgba(217, 255, 0,0.25)",
         borderRadius: "16px",
         padding: "32px",
         width: "90%",
@@ -72,11 +72,11 @@ export default function ContactModal({ onClose }) {
         {status === "success" ? (
           <div style={{ textAlign: "center", padding: "24px 0" }}>
             <div style={{ fontSize: "2.5rem", marginBottom: "12px" }}>✅</div>
-            <p style={{ color: "#a78bfa", fontWeight: 600, fontSize: "1rem", margin: "0 0 8px" }}>Message sent!</p>
+            <p style={{ color: "#D9FF00", fontWeight: 600, fontSize: "1rem", margin: "0 0 8px" }}>Message sent!</p>
             <p style={{ color: "#64748b", fontSize: "0.85rem", margin: 0 }}>We'll get back to you soon.</p>
             <button
               onClick={onClose}
-              style={{ marginTop: "20px", background: "linear-gradient(135deg,#8b5cf6,#7c3aed)", border: "none", borderRadius: "8px", color: "#fff", padding: "10px 24px", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+              style={{ marginTop: "20px", background: "linear-gradient(135deg,#D9FF00,#A6CC00)", border: "none", borderRadius: "8px", color: "#000", padding: "10px 24px", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
               Close
             </button>
           </div>
@@ -193,7 +193,7 @@ export default function ContactModal({ onClose }) {
               type="submit"
               disabled={status === "sending"}
               style={{
-                background: status === "sending" ? "rgba(139,92,246,0.5)" : "linear-gradient(135deg,#8b5cf6,#7c3aed)",
+                background: status === "sending" ? "rgba(217, 255, 0,0.5)" : "linear-gradient(135deg,#D9FF00,#A6CC00)",
                 border: "none",
                 borderRadius: "8px",
                 color: "#fff",

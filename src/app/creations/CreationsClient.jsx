@@ -66,7 +66,7 @@ function PromptBlock({ prompt }) {
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all border"
             style={copied
               ? { background: "rgba(34,197,94,0.18)", borderColor: "rgba(34,197,94,0.5)", color: "#4ade80" }
-              : { background: "rgba(139,92,246,0.15)", borderColor: "rgba(139,92,246,0.35)", color: "#c4b5fd" }}
+              : { background: "rgba(217, 255, 0,0.15)", borderColor: "rgba(217, 255, 0,0.35)", color: "#D9FF00" }}
           >
             {copied ? <FiCheck size={11} /> : <FiClipboard size={11} />}
             <span className="ml-1">{copied ? "Copied!" : "Copy Prompt"}</span>
@@ -74,7 +74,7 @@ function PromptBlock({ prompt }) {
           <button
             onClick={() => { sessionStorage.setItem("pendingPrompt", prompt); router.push("/generate"); }}
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all border"
-            style={{ background: "rgba(139,92,246,0.22)", borderColor: "rgba(139,92,246,0.5)", color: "#ddd6fe" }}
+            style={{ background: "rgba(217, 255, 0,0.22)", borderColor: "rgba(217, 255, 0,0.5)", color: "#E5FF4D" }}
           >
             <FiArrowRight size={11} />
             <span className="ml-1">Use This Prompt</span>
@@ -242,7 +242,7 @@ export default function CreationsPage() {
                   onClick={() => setFilter(t.id)}
                   className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
                     filter === t.id
-                      ? "bg-primary-500 text-white"
+                      ? "bg-primary-500 text-black"
                       : "text-muted hover:text-foreground"
                   }`}
                 >
@@ -302,7 +302,7 @@ export default function CreationsPage() {
             {/* CTA */}
             <button
               onClick={() => router.push("/")}
-              className="px-8 py-3 bg-primary-600 hover:bg-primary-500 text-white rounded-xl font-semibold text-sm transition-all shadow-xl shadow-primary-500/20 flex items-center gap-2"
+              className="px-8 py-3 bg-primary-600 hover:bg-primary-500 text-black rounded-xl font-semibold text-sm transition-all shadow-xl shadow-primary-500/20 flex items-center gap-2"
             >
               <FaMagic className="text-xs" />
               Generate your first video
@@ -357,7 +357,7 @@ export default function CreationsPage() {
                       {item.requestId && (
                         <button
                           onClick={(e) => { e.stopPropagation(); syncCreation(item.requestId); }}
-                          style={{ marginTop: "4px", background: "rgba(139,92,246,0.8)", border: "none", borderRadius: "6px", color: "#fff", padding: "4px 12px", fontSize: "0.7rem", cursor: "pointer" }}>
+                          style={{ marginTop: "4px", background: "rgba(217, 255, 0,0.8)", border: "none", borderRadius: "6px", color: "#fff", padding: "4px 12px", fontSize: "0.7rem", cursor: "pointer" }}>
                           ↻ Check Status
                         </button>
                       )}
@@ -398,7 +398,7 @@ export default function CreationsPage() {
                                 toast.info("Download started");
                               }}
                               title={isImageCreation(item) ? "Download image" : "Download video"}
-                              className="w-8 h-8 rounded-lg bg-primary-600 hover:bg-primary-500 border border-primary-400/50 flex items-center justify-center text-white transition-colors"
+                              className="w-8 h-8 rounded-lg bg-primary-600 hover:bg-primary-500 border border-primary-400/50 flex items-center justify-center text-black transition-colors"
                             >
                               <FiDownload size={12} />
                             </button>
@@ -614,7 +614,7 @@ export default function CreationsPage() {
                         setSelectedImage(null);
                         router.push("/generate");
                       }}
-                      className="w-full py-3 bg-gradient-to-r from-primary-600 to-primary-500 text-white rounded-lg font-bold tracking-wider uppercase text-xs flex items-center justify-center gap-3 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-primary-500/20 border border-primary-400/50"
+                      className="w-full py-3 bg-gradient-to-r from-primary-600 to-primary-500 text-black rounded-lg font-bold tracking-wider uppercase text-xs flex items-center justify-center gap-3 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-xl shadow-primary-500/20 border border-primary-400/50"
                     >
                       <FaMagic size={13} />
                       Use this image to generate a video
@@ -632,7 +632,7 @@ export default function CreationsPage() {
                     className={`w-full py-3 rounded-lg font-bold tracking-wider uppercase text-xs flex items-center justify-center gap-3 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 ${
                       isImageCreation(selectedImage)
                         ? "bg-glass-bg border border-glass-border text-foreground hover:bg-glass-hover"
-                        : "bg-gradient-to-r from-primary-600 to-primary-500 text-white shadow-xl shadow-primary-500/20 border border-primary-400/50"
+                        : "bg-gradient-to-r from-primary-600 to-primary-500 text-black shadow-xl shadow-primary-500/20 border border-primary-400/50"
                     }`}
                   >
                     {downloading ? (

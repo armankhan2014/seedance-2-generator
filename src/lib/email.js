@@ -39,9 +39,9 @@ async function send({ to, subject, html }) {
 
 const BG      = "#0d0d14";
 const CARD    = "#13111f";
-const BORDER  = "rgba(124,58,237,0.18)";
-const PURPLE  = "#7c3aed";
-const PURPLE_L= "#a78bfa";
+const BORDER  = "rgba(166, 204, 0,0.18)";
+const PURPLE  = "#A6CC00";
+const PURPLE_L= "#D9FF00";
 const MUTED   = "#9ca3af";
 const TEXT    = "#e5e7eb";
 const WHITE   = "#ffffff";
@@ -59,7 +59,7 @@ export async function sendSignupNotification({ name, email, image, isReturning =
 
 export async function sendWelcomeEmail({ name, email }) {
   const firstName = name ? name.split(" ")[0] : "there";
-  const inner = `<tr><td style="background:linear-gradient(135deg,#1e1b4b,#2e1065);padding:36px 32px 28px;text-align:center"><div style="font-size:40px;margin-bottom:12px">&#127916;</div><h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:${WHITE}">Welcome to Seedance, ${firstName}!</h1><p style="margin:0;font-size:14px;color:rgba(196,181,253,0.9);line-height:1.6">You've just unlocked AI-powered video generation.<br/>Your first 10 credits are ready to use.</p></td></tr><tr><td style="padding:28px 32px 32px;text-align:center"><a href="https://seedance.visualseffect.com" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,${PURPLE},#5b21b6);color:${WHITE};font-size:14px;font-weight:700;text-decoration:none;border-radius:10px">Start Generating &#8594;</a></td></tr>`;
+  const inner = `<tr><td style="background:linear-gradient(135deg,#1e1b4b,#2e1065);padding:36px 32px 28px;text-align:center"><div style="font-size:40px;margin-bottom:12px">&#127916;</div><h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:${WHITE}">Welcome to Seedance, ${firstName}!</h1><p style="margin:0;font-size:14px;color:rgba(217, 255, 0,0.9);line-height:1.6">You've just unlocked AI-powered video generation.<br/>Your first 10 credits are ready to use.</p></td></tr><tr><td style="padding:28px 32px 32px;text-align:center"><a href="https://seedance.visualseffect.com" style="display:inline-block;padding:14px 32px;background:linear-gradient(135deg,${PURPLE},#5b21b6);color:${WHITE};font-size:14px;font-weight:700;text-decoration:none;border-radius:10px">Start Generating &#8594;</a></td></tr>`;
   await send({ to: email, subject: `Welcome to Seedance, ${firstName}! Your 10 free credits are ready`, html: baseWrapper(inner) });
 }
 
@@ -71,13 +71,13 @@ export async function sendPaymentNotification({ customerEmail, customerName, pla
 }
 
 export async function sendMagicLinkEmail({ email, url }) {
-  const inner = `<tr><td style="background:linear-gradient(135deg,#1e1b4b,#2e1065);padding:36px 32px 28px;text-align:center"><div style="font-size:36px;margin-bottom:12px">🔗</div><h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#ffffff">Your sign-in link</h1><p style="margin:0;font-size:13px;color:rgba(196,181,253,0.85);line-height:1.6">Click below to sign in. Expires in 24 hours.</p></td></tr><tr><td style="padding:32px 32px 28px;text-align:center"><a href="${url}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;border-radius:12px">Sign in to Seedance &#8594;</a></td></tr>`;
+  const inner = `<tr><td style="background:linear-gradient(135deg,#1e1b4b,#2e1065);padding:36px 32px 28px;text-align:center"><div style="font-size:36px;margin-bottom:12px">🔗</div><h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#ffffff">Your sign-in link</h1><p style="margin:0;font-size:13px;color:rgba(217, 255, 0,0.85);line-height:1.6">Click below to sign in. Expires in 24 hours.</p></td></tr><tr><td style="padding:32px 32px 28px;text-align:center"><a href="${url}" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#A6CC00,#5b21b6);color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;border-radius:12px">Sign in to Seedance &#8594;</a></td></tr>`;
   await send({ to: email, subject: "Your Seedance sign-in link", html: baseWrapper(inner) });
 }
 
 export async function sendVisitNotification({ ip, country, region, city, isp, page }) {
   const time = new Date().toLocaleString("en-GB", { timeZone: "Europe/London", dateStyle: "full", timeStyle: "short" });
   const location = [city, region, country].filter(Boolean).join(", ") || "Unknown";
-  const inner = `<tr><td style="background:linear-gradient(135deg,#1e1b4b,#2e1065);padding:24px 32px 20px"><p style="margin:0;font-size:11px;font-weight:700;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.12em">New Visitor</p><h1 style="margin:6px 0 0;font-size:20px;font-weight:700;color:#ffffff">&#127758; ${location}</h1></td></tr><tr><td style="padding:24px 32px 28px"><table width="100%" cellpadding="0" cellspacing="0"><tr><td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#9ca3af;font-size:11px;width:72px;text-transform:uppercase">IP</td><td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#e5e7eb;font-size:13px;font-family:monospace">${ip}</td></tr><tr><td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#9ca3af;font-size:11px;text-transform:uppercase">Page</td><td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#a78bfa;font-size:13px;font-family:monospace">${page}</td></tr><tr><td style="padding:9px 0;color:#9ca3af;font-size:11px;text-transform:uppercase">Time</td><td style="padding:9px 0;color:#e5e7eb;font-size:13px">${time}</td></tr></table></td></tr>`;
+  const inner = `<tr><td style="background:linear-gradient(135deg,#1e1b4b,#2e1065);padding:24px 32px 20px"><p style="margin:0;font-size:11px;font-weight:700;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.12em">New Visitor</p><h1 style="margin:6px 0 0;font-size:20px;font-weight:700;color:#ffffff">&#127758; ${location}</h1></td></tr><tr><td style="padding:24px 32px 28px"><table width="100%" cellpadding="0" cellspacing="0"><tr><td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#9ca3af;font-size:11px;width:72px;text-transform:uppercase">IP</td><td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#e5e7eb;font-size:13px;font-family:monospace">${ip}</td></tr><tr><td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#9ca3af;font-size:11px;text-transform:uppercase">Page</td><td style="padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05);color:#D9FF00;font-size:13px;font-family:monospace">${page}</td></tr><tr><td style="padding:9px 0;color:#9ca3af;font-size:11px;text-transform:uppercase">Time</td><td style="padding:9px 0;color:#e5e7eb;font-size:13px">${time}</td></tr></table></td></tr>`;
   await send({ to: ADMIN_EMAIL, subject: `New visitor: ${location} — ${ip}`, html: baseWrapper(inner) });
 }

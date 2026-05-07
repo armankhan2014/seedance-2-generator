@@ -14,7 +14,7 @@ const COLORS = {
   success: { bg: "rgba(16,185,129,0.12)", border: "rgba(16,185,129,0.35)", icon: "#10b981", bar: "#10b981" },
   error:   { bg: "rgba(239,68,68,0.12)",  border: "rgba(239,68,68,0.35)",  icon: "#ef4444", bar: "#ef4444" },
   warning: { bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.35)", icon: "#f59e0b", bar: "#f59e0b" },
-  info:    { bg: "rgba(139,92,246,0.12)", border: "rgba(139,92,246,0.35)", icon: "#a78bfa", bar: "#8b5cf6" },
+  info:    { bg: "rgba(217, 255, 0,0.12)", border: "rgba(217, 255, 0,0.35)", icon: "#D9FF00", bar: "#D9FF00" },
 };
 
 function Toast({ id, message, type, duration, onDismiss }) {
@@ -69,7 +69,7 @@ function Toast({ id, message, type, duration, onDismiss }) {
       </div>
 
       {/* Message */}
-      <p style={{ margin: 0, fontSize: "0.82rem", color: "#e2e8f0", lineHeight: 1.5, flex: 1, paddingRight: 4 }}>
+      <p style={{ margin: 0, fontSize: "0.82rem", color: "#FFFFFF", lineHeight: 1.5, flex: 1, paddingRight: 4 }}>
         {message}
       </p>
 

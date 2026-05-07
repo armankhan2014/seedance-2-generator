@@ -177,13 +177,13 @@ export default function ImageBuilder({ onUse, onClose }) {
     },
     modal: {
       background: "#111118",
-      border: "1px solid rgba(139,92,246,0.25)",
+      border: "1px solid rgba(217, 255, 0,0.25)",
       borderRadius: "20px",
       // Compact: leaves margin around the modal so it doesn't feel full-screen.
       // The 1536x1024 result image still fits comfortably at this width.
       width: "100%", maxWidth: "min(960px, 90vw)", maxHeight: "85vh",
       overflowY: "auto",
-      boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(139,92,246,0.1)",
+      boxShadow: "0 32px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(217, 255, 0,0.1)",
       fontFamily: "Inter, sans-serif",
     },
     header: {
@@ -191,7 +191,7 @@ export default function ImageBuilder({ onUse, onClose }) {
       borderBottom: "1px solid rgba(255,255,255,0.06)",
       position: "sticky", top: 0, background: "#111118", zIndex: 10,
     },
-    title: { fontSize: "1rem", fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.02em", marginBottom: "4px" },
+    title: { fontSize: "1rem", fontWeight: 800, color: "#FFFFFF", letterSpacing: "-0.02em", marginBottom: "4px" },
     subtitle: { fontSize: "0.78rem", color: "#475569", lineHeight: 1.5 },
     body: { padding: "20px 24px" },
     label: {
@@ -203,7 +203,7 @@ export default function ImageBuilder({ onUse, onClose }) {
     refTile: {
       position: "relative", width: "76px", height: "76px",
       borderRadius: "10px", overflow: "hidden",
-      border: "1px solid rgba(139,92,246,0.25)",
+      border: "1px solid rgba(217, 255, 0,0.25)",
     },
     refImg: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
     refLabel: {
@@ -222,8 +222,8 @@ export default function ImageBuilder({ onUse, onClose }) {
     },
     addTile: {
       width: "76px", height: "76px", borderRadius: "10px",
-      border: "1px dashed rgba(139,92,246,0.5)",
-      background: "rgba(139,92,246,0.05)", color: "#a78bfa",
+      border: "1px dashed rgba(217, 255, 0,0.5)",
+      background: "rgba(217, 255, 0,0.05)", color: "#D9FF00",
       cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
       fontSize: "1.4rem", fontWeight: 800, fontFamily: "inherit",
     },
@@ -233,7 +233,7 @@ export default function ImageBuilder({ onUse, onClose }) {
       background: "rgba(255,255,255,0.04)",
       border: "1px solid rgba(255,255,255,0.1)",
       borderRadius: "10px", padding: "12px 14px",
-      color: "#e2e8f0", fontSize: "0.9rem",
+      color: "#FFFFFF", fontSize: "0.9rem",
       fontFamily: "inherit",
       outline: "none", boxSizing: "border-box",
     },
@@ -242,10 +242,10 @@ export default function ImageBuilder({ onUse, onClose }) {
     },
     examplePill: {
       padding: "5px 10px",
-      background: "rgba(139,92,246,0.08)",
-      border: "1px solid rgba(139,92,246,0.2)",
+      background: "rgba(217, 255, 0,0.08)",
+      border: "1px solid rgba(217, 255, 0,0.2)",
       borderRadius: "999px",
-      color: "#a78bfa",
+      color: "#D9FF00",
       fontSize: "0.72rem", fontWeight: 600,
       cursor: "pointer", fontFamily: "inherit",
       transition: "all 0.15s",
@@ -254,7 +254,7 @@ export default function ImageBuilder({ onUse, onClose }) {
       width: "100%", padding: "12px",
       borderRadius: "10px", border: "none",
       marginTop: "14px",
-      background: enabled ? "linear-gradient(135deg,#8b5cf6,#7c3aed)" : "rgba(255,255,255,0.06)",
+      background: enabled ? "linear-gradient(135deg,#D9FF00,#A6CC00)" : "rgba(255,255,255,0.06)",
       color: enabled ? "#fff" : "#334155",
       fontSize: "0.9rem", fontWeight: 700,
       cursor: enabled ? "pointer" : "not-allowed",
@@ -262,8 +262,8 @@ export default function ImageBuilder({ onUse, onClose }) {
     }),
     resultBox: {
       marginTop: "18px", borderRadius: "12px", overflow: "hidden",
-      border: "1px solid rgba(139,92,246,0.25)",
-      background: "rgba(139,92,246,0.04)",
+      border: "1px solid rgba(217, 255, 0,0.25)",
+      background: "rgba(217, 255, 0,0.04)",
     },
     errorBox: {
       fontSize: "0.78rem", color: "#f87171", marginTop: "10px",
@@ -333,7 +333,7 @@ export default function ImageBuilder({ onUse, onClose }) {
           {isLoggedOut ? (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", padding: "32px 16px", gap: "12px" }}>
               <div style={{ fontSize: "2rem" }}>🔒</div>
-              <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "#e2e8f0", margin: 0 }}>
+              <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "#FFFFFF", margin: 0 }}>
                 Sign in to build references
               </p>
               <p style={{ fontSize: "0.78rem", color: "#475569", margin: 0, lineHeight: 1.6 }}>
@@ -341,7 +341,7 @@ export default function ImageBuilder({ onUse, onClose }) {
               </p>
               <button
                 onClick={() => window.dispatchEvent(new CustomEvent("openSignIn"))}
-                style={{ marginTop: "8px", padding: "10px 24px", background: "linear-gradient(135deg,#8b5cf6,#7c3aed)", border: "none", borderRadius: "10px", color: "#fff", fontSize: "0.85rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+                style={{ marginTop: "8px", padding: "10px 24px", background: "linear-gradient(135deg,#D9FF00,#A6CC00)", border: "none", borderRadius: "10px", color: "#000", fontSize: "0.85rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
               >
                 Sign in with Google →
               </button>
@@ -353,13 +353,13 @@ export default function ImageBuilder({ onUse, onClose }) {
           ) : noCredits ? (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", padding: "32px 16px", gap: "12px" }}>
               <div style={{ fontSize: "2rem" }}>⚡</div>
-              <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "#e2e8f0", margin: 0 }}>
+              <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "#FFFFFF", margin: 0 }}>
                 You need at least 20 credits
               </p>
               <p style={{ fontSize: "0.78rem", color: "#475569", margin: 0, lineHeight: 1.6 }}>
                 Build my reference uses 20 credits per image. Buy a credit pack to unlock it.
               </p>
-              <a href="/pricing" style={{ marginTop: "8px", padding: "10px 24px", background: "linear-gradient(135deg,#8b5cf6,#7c3aed)", borderRadius: "10px", color: "#fff", fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit", textDecoration: "none" }}>
+              <a href="/pricing" style={{ marginTop: "8px", padding: "10px 24px", background: "linear-gradient(135deg,#D9FF00,#A6CC00)", borderRadius: "10px", color: "#000", fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit", textDecoration: "none" }}>
                 View Pricing →
               </a>
             </div>

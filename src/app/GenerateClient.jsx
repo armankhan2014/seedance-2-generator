@@ -156,7 +156,7 @@ function CustomSelect({ label, value, options, onChange, icon: Icon }) {
                   }}
                   className={`w-full text-left px-3 py-2.5 text-xs transition-colors ${
                     value === option.value
-                      ? "bg-primary-500 text-white"
+                      ? "bg-primary-500 text-black"
                       : "text-muted hover:bg-glass-hover hover:text-foreground"
                   }`}
                 >
@@ -549,7 +549,7 @@ export default function Home() {
                   onClick={() => setMode(m.id)}
                   className={`py-2 px-1 rounded-md text-[10px] sm:text-sm font-medium transition-colors flex items-center justify-center gap-1 sm:gap-2 leading-tight text-center ${
                     mode === m.id
-                      ? "bg-primary-500 text-white shadow-sm"
+                      ? "bg-primary-500 text-black shadow-sm"
                       : "text-muted hover:text-foreground"
                   }`}
                 >
@@ -630,7 +630,7 @@ export default function Home() {
                       fileInputRef.current?.click();
                     }}
                     disabled={isUploading || imagesList.length >= 9}
-                    className="flex-1 h-10 bg-primary-500/10 border border-primary-500/20 text-primary-500 rounded-md flex items-center justify-center gap-2 text-xs font-semibold hover:bg-primary-500 hover:text-white transition-colors overflow-hidden"
+                    className="flex-1 h-10 bg-primary-500/10 border border-primary-500/20 text-primary-500 rounded-md flex items-center justify-center gap-2 text-xs font-semibold hover:bg-primary-500 hover:text-black transition-colors overflow-hidden"
                   >
                     {isUploading ? (
                       <>
@@ -757,7 +757,7 @@ export default function Home() {
                         videoInputRef.current?.click();
                       }}
                       disabled={isUploadingVideo || videoFiles.length >= 3}
-                      className="w-9 h-9 bg-primary-500/10 border border-primary-500/20 text-primary-500 rounded-md flex items-center justify-center hover:bg-primary-500 hover:text-white transition-colors"
+                      className="w-9 h-9 bg-primary-500/10 border border-primary-500/20 text-primary-500 rounded-md flex items-center justify-center hover:bg-primary-500 hover:text-black transition-colors"
                     >
                       {isUploadingVideo ? (
                         <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
@@ -773,7 +773,7 @@ export default function Home() {
                         }
                       }}
                       disabled={!newVideoUrl || videoFiles.length >= 3}
-                      className="w-9 h-9 bg-glass-bg border border-glass-border text-primary-500 rounded-md flex items-center justify-center hover:bg-primary-500 hover:text-white transition-colors"
+                      className="w-9 h-9 bg-glass-bg border border-glass-border text-primary-500 rounded-md flex items-center justify-center hover:bg-primary-500 hover:text-black transition-colors"
                     >
                       <FaPlus />
                     </button>
@@ -833,7 +833,7 @@ export default function Home() {
                         audioInputRef.current?.click();
                       }}
                       disabled={isUploadingAudio || audioFiles.length >= 3}
-                      className="w-9 h-9 bg-primary-500/10 border border-primary-500/20 text-primary-500 rounded-md flex items-center justify-center hover:bg-primary-500 hover:text-white transition-colors"
+                      className="w-9 h-9 bg-primary-500/10 border border-primary-500/20 text-primary-500 rounded-md flex items-center justify-center hover:bg-primary-500 hover:text-black transition-colors"
                     >
                       {isUploadingAudio ? (
                         <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
@@ -849,7 +849,7 @@ export default function Home() {
                         }
                       }}
                       disabled={!newAudioUrl || audioFiles.length >= 3}
-                      className="w-9 h-9 bg-glass-bg border border-glass-border text-primary-500 rounded-md flex items-center justify-center hover:bg-primary-500 hover:text-white transition-colors"
+                      className="w-9 h-9 bg-glass-bg border border-glass-border text-primary-500 rounded-md flex items-center justify-center hover:bg-primary-500 hover:text-black transition-colors"
                     >
                       <FaPlus />
                     </button>
@@ -953,7 +953,7 @@ export default function Home() {
                 (mode === "text-to-video" && !prompt.trim()) ||
                 (mode !== "text-to-video" && imagesList.length === 0)
               }
-              className="w-full bg-primary-500 text-white rounded-md py-2 text-sm font-medium hover:bg-primary-600 active:scale-[0.98] transition-all disabled:opacity-60"
+              className="w-full bg-primary-500 text-black rounded-md py-2 text-sm font-medium hover:bg-primary-600 active:scale-[0.98] transition-all disabled:opacity-60"
             >
               <span className="flex items-center justify-center gap-2">
                 Generate ({creditCost} Credits)
@@ -1071,9 +1071,9 @@ export default function Home() {
           background: linear-gradient(
             90deg,
             transparent 0%,
-            rgba(139,92,246,0.08) 40%,
-            rgba(139,92,246,0.14) 50%,
-            rgba(139,92,246,0.08) 60%,
+            rgba(217, 255, 0,0.08) 40%,
+            rgba(217, 255, 0,0.14) 50%,
+            rgba(217, 255, 0,0.08) 60%,
             transparent 100%
           );
           animation: shimmer 1.6s ease-in-out infinite;
@@ -1084,9 +1084,9 @@ export default function Home() {
           background: linear-gradient(
             90deg,
             transparent 0%,
-            rgba(139,92,246,0.1) 40%,
-            rgba(139,92,246,0.18) 50%,
-            rgba(139,92,246,0.1) 60%,
+            rgba(217, 255, 0,0.1) 40%,
+            rgba(217, 255, 0,0.18) 50%,
+            rgba(217, 255, 0,0.1) 60%,
             transparent 100%
           );
           animation: shimmer 1.6s ease-in-out infinite;

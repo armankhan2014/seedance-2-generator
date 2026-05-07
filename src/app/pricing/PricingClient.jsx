@@ -207,23 +207,23 @@ export default function PricingClient() {
           <div style={{ textAlign: "center", marginBottom: 32 }}>
             <span style={{
               display: "inline-flex", alignItems: "center", gap: 6,
-              background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.25)",
-              borderRadius: 50, padding: "5px 14px", fontSize: ".75rem", color: "#a78bfa", fontWeight: 600,
+              background: "rgba(217, 255, 0,0.1)", border: "1px solid rgba(217, 255, 0,0.25)",
+              borderRadius: 50, padding: "5px 14px", fontSize: ".75rem", color: "#D9FF00", fontWeight: 600,
             }}>
               <span style={{ fontSize: "1em" }}>🌍</span>
-              Prices &amp; checkout in <strong style={{ color: "#c4b5fd" }}>{cur.code}</strong>
+              Prices &amp; checkout in <strong style={{ color: "#D9FF00" }}>{cur.code}</strong>
             </span>
           </div>
         )}
 
         {message && (
-          <div style={{ textAlign: "center", padding: "10px", borderRadius: "8px", marginBottom: 24, background: "rgba(139,92,246,.1)", color: "#a78bfa", border: "1px solid rgba(139,92,246,.3)" }}>
+          <div style={{ textAlign: "center", padding: "10px", borderRadius: "8px", marginBottom: 24, background: "rgba(217, 255, 0,.1)", color: "#D9FF00", border: "1px solid rgba(217, 255, 0,.3)" }}>
             {message}
           </div>
         )}
 
         {session && liveCredits !== null && (
-          <p style={{ textAlign: "center", color: "#8b5cf6", fontSize: ".85rem", marginBottom: 24, fontWeight: 600, opacity: verifying ? 0.7 : 1, transition: "opacity 0.3s" }}>
+          <p style={{ textAlign: "center", color: "#D9FF00", fontSize: ".85rem", marginBottom: 24, fontWeight: 600, opacity: verifying ? 0.7 : 1, transition: "opacity 0.3s" }}>
             {verifying ? "⏳" : "⚡"} Your current balance: {liveCredits.toLocaleString()} credits
           </p>
         )}
@@ -233,9 +233,9 @@ export default function PricingClient() {
           {PLANS.map(plan => {
             const { whole, cents } = formatPrice(plan.p, cur);
             return (
-              <div key={plan.id} style={{ background: "#111", border: plan.hot ? "1px solid #8b5cf6" : "1px solid rgba(255,255,255,.08)", borderRadius: 16, padding: "32px 24px", position: "relative" }}>
+              <div key={plan.id} style={{ background: "#111", border: plan.hot ? "1px solid #D9FF00" : "1px solid rgba(255,255,255,.08)", borderRadius: 16, padding: "32px 24px", position: "relative" }}>
                 {plan.hot && (
-                  <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", background: "linear-gradient(135deg,#8b5cf6,#7c3aed)", color: "#fff", fontSize: ".7rem", fontWeight: 700, padding: "3px 14px", borderRadius: 50 }}>
+                  <div style={{ position: "absolute", top: -12, left: "50%", transform: "translateX(-50%)", background: "linear-gradient(135deg,#D9FF00,#A6CC00)", color: "#000", fontSize: ".7rem", fontWeight: 700, padding: "3px 14px", borderRadius: 50 }}>
                     Most Popular
                   </div>
                 )}
@@ -257,7 +257,7 @@ export default function PricingClient() {
                   )}
                 </div>
 
-                <div style={{ fontSize: ".82rem", color: "#8b5cf6", fontWeight: 600, marginBottom: !isUSD && !cur.loading ? 4 : 8 }}>{plan.c.toLocaleString()} Credits</div>
+                <div style={{ fontSize: ".82rem", color: "#D9FF00", fontWeight: 600, marginBottom: !isUSD && !cur.loading ? 4 : 8 }}>{plan.c.toLocaleString()} Credits</div>
                 {!isUSD && !cur.loading && (
                   <div style={{ fontSize: ".72rem", color: "#475569", marginBottom: 8 }}>
                     {(() => {
@@ -276,9 +276,9 @@ export default function PricingClient() {
                 {(() => {
                   const vc = videoCounts(plan.c);
                   return (
-                    <div style={{ background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)", borderRadius: 10, padding: "10px 12px", marginBottom: 16 }}>
-                      <div style={{ fontSize: ".78rem", fontWeight: 800, color: "#e2e8f0", marginBottom: 4 }}>
-                        🎬 <span style={{ color: "#a78bfa" }}>{vc.v15} full videos</span> (15s, 1080p high)
+                    <div style={{ background: "rgba(217, 255, 0,0.08)", border: "1px solid rgba(217, 255, 0,0.2)", borderRadius: 10, padding: "10px 12px", marginBottom: 16 }}>
+                      <div style={{ fontSize: ".78rem", fontWeight: 800, color: "#FFFFFF", marginBottom: 4 }}>
+                        🎬 <span style={{ color: "#D9FF00" }}>{vc.v15} full videos</span> (15s, 1080p high)
                       </div>
                       <div style={{ fontSize: ".7rem", color: "#64748b", lineHeight: 1.5 }}>
                         Or <strong style={{ color: "#94a3b8" }}>{vc.v10} videos</strong> at 10s · <strong style={{ color: "#94a3b8" }}>{vc.v5} clips</strong> at 5s
@@ -293,7 +293,7 @@ export default function PricingClient() {
                 <button
                   onClick={() => buy(plan.id)}
                   disabled={loading === plan.id}
-                  style={{ width: "100%", padding: "11px", borderRadius: 9, fontSize: ".88rem", fontWeight: 700, cursor: loading === plan.id ? "wait" : "pointer", border: plan.hot ? "none" : "1px solid rgba(255,255,255,.12)", background: plan.hot ? "linear-gradient(135deg,#8b5cf6,#7c3aed)" : "transparent", color: plan.hot ? "#fff" : "#94a3b8", fontFamily: "inherit", opacity: loading === plan.id ? 0.5 : 1 }}
+                  style={{ width: "100%", padding: "11px", borderRadius: 9, fontSize: ".88rem", fontWeight: 700, cursor: loading === plan.id ? "wait" : "pointer", border: plan.hot ? "none" : "1px solid rgba(255,255,255,.12)", background: plan.hot ? "linear-gradient(135deg,#D9FF00,#A6CC00)" : "transparent", color: plan.hot ? "#fff" : "#94a3b8", fontFamily: "inherit", opacity: loading === plan.id ? 0.5 : 1 }}
                 >
                   {loading === plan.id ? "Redirecting…" : (session ? "Buy Credits" : "Sign in to Buy")}
                 </button>
@@ -303,10 +303,10 @@ export default function PricingClient() {
         </div>
 
         {/* Custom credits card */}
-        <div style={{ background: "#111", border: "1px solid rgba(139,92,246,0.35)", borderRadius: 16, padding: "32px 28px" }}>
+        <div style={{ background: "#111", border: "1px solid rgba(217, 255, 0,0.35)", borderRadius: 16, padding: "32px 28px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
             <div style={{ fontSize: ".75rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "1px" }}>Custom Amount</div>
-            <div style={{ fontSize: ".68rem", fontWeight: 600, color: "#a78bfa", background: "rgba(139,92,246,0.12)", border: "1px solid rgba(139,92,246,0.25)", borderRadius: 50, padding: "2px 10px" }}>
+            <div style={{ fontSize: ".68rem", fontWeight: 600, color: "#D9FF00", background: "rgba(217, 255, 0,0.12)", border: "1px solid rgba(217, 255, 0,0.25)", borderRadius: 50, padding: "2px 10px" }}>
               {isUSD
                 ? `$1 = ${CREDITS_PER_DOLLAR} credits`
                 : (() => {
@@ -331,7 +331,7 @@ export default function PricingClient() {
                 Amount ({isUSD ? "USD" : cur.code})
               </label>
               <div style={{ position: "relative" }}>
-                <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#8b5cf6", fontWeight: 700, fontSize: "1rem", pointerEvents: "none" }}>{cur.symbol}</span>
+                <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#D9FF00", fontWeight: 700, fontSize: "1rem", pointerEvents: "none" }}>{cur.symbol}</span>
                 <input
                   type="number" min="1" step="1" placeholder="e.g. 5"
                   value={customDollars}
@@ -351,8 +351,8 @@ export default function PricingClient() {
               <label style={{ display: "block", fontSize: ".72rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
                 You will get
               </label>
-              <div style={{ padding: "10px 14px", background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)", borderRadius: 9, minHeight: 42, display: "flex", alignItems: "center" }}>
-                <span style={{ fontSize: customCredits > 0 ? "1.1rem" : ".9rem", fontWeight: 800, color: customCredits > 0 ? "#a78bfa" : "#334155" }}>
+              <div style={{ padding: "10px 14px", background: "rgba(217, 255, 0,0.08)", border: "1px solid rgba(217, 255, 0,0.2)", borderRadius: 9, minHeight: 42, display: "flex", alignItems: "center" }}>
+                <span style={{ fontSize: customCredits > 0 ? "1.1rem" : ".9rem", fontWeight: 800, color: customCredits > 0 ? "#D9FF00" : "#334155" }}>
                   {customCredits > 0 ? `⚡ ${customCredits.toLocaleString()} credits` : "Enter amount above"}
                 </span>
               </div>
@@ -364,7 +364,7 @@ export default function PricingClient() {
               <button
                 onClick={() => buy("custom")}
                 disabled={customAmount < 1 || loading === "custom"}
-                style={{ padding: "11px 20px", borderRadius: 9, fontSize: ".88rem", fontWeight: 700, cursor: customAmount < 1 || loading === "custom" ? "not-allowed" : "pointer", border: "none", background: customAmount >= 1 ? "linear-gradient(135deg,#8b5cf6,#7c3aed)" : "rgba(255,255,255,0.06)", color: customAmount >= 1 ? "#fff" : "#475569", fontFamily: "inherit", opacity: loading === "custom" ? 0.5 : 1, whiteSpace: "nowrap", width: "100%" }}
+                style={{ padding: "11px 20px", borderRadius: 9, fontSize: ".88rem", fontWeight: 700, cursor: customAmount < 1 || loading === "custom" ? "not-allowed" : "pointer", border: "none", background: customAmount >= 1 ? "linear-gradient(135deg,#D9FF00,#A6CC00)" : "rgba(255,255,255,0.06)", color: customAmount >= 1 ? "#fff" : "#475569", fontFamily: "inherit", opacity: loading === "custom" ? 0.5 : 1, whiteSpace: "nowrap", width: "100%" }}
               >
                 {loading === "custom" ? "Redirecting…" : customAmount >= 1 ? `Pay ${cur.symbol}${customAmount}` : session ? "Enter Amount" : "Sign in to Buy"}
               </button>
@@ -401,13 +401,13 @@ export default function PricingClient() {
 function FaqItem({ q, a }) {
   const [open, setOpen] = useState(false);
   return (
-    <div style={{ background: "#111", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, overflow: "hidden", transition: "border-color 0.2s", ...(open ? { borderColor: "rgba(139,92,246,0.35)" } : {}) }}>
+    <div style={{ background: "#111", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, overflow: "hidden", transition: "border-color 0.2s", ...(open ? { borderColor: "rgba(217, 255, 0,0.35)" } : {}) }}>
       <button
         onClick={() => setOpen(o => !o)}
         style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px", background: "none", border: "none", cursor: "pointer", textAlign: "left", gap: 12, fontFamily: "inherit" }}
       >
-        <span style={{ fontSize: ".9rem", fontWeight: 700, color: "#e2e8f0" }}>{q}</span>
-        <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: "50%", background: open ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", color: open ? "#a78bfa" : "#64748b", fontSize: "1rem", fontWeight: 700, lineHeight: 1, transition: "all 0.2s" }}>
+        <span style={{ fontSize: ".9rem", fontWeight: 700, color: "#FFFFFF" }}>{q}</span>
+        <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: "50%", background: open ? "rgba(217, 255, 0,0.2)" : "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", color: open ? "#D9FF00" : "#64748b", fontSize: "1rem", fontWeight: 700, lineHeight: 1, transition: "all 0.2s" }}>
           {open ? "−" : "+"}
         </span>
       </button>

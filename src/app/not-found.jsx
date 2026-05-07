@@ -38,7 +38,7 @@ export default function NotFound() {
         transform: "translate(-50%, -50%)",
         width: "600px",
         height: "400px",
-        background: "radial-gradient(ellipse, rgba(139,92,246,0.12) 0%, transparent 70%)",
+        background: "radial-gradient(ellipse, rgba(217, 255, 0,0.12) 0%, transparent 70%)",
         pointerEvents: "none",
       }} />
 
@@ -63,10 +63,10 @@ export default function NotFound() {
               height: i === 2 ? "40px" : "20px",
               borderRadius: "6px",
               background: i === 2
-                ? "rgba(139,92,246,0.2)"
+                ? "rgba(217, 255, 0,0.2)"
                 : "rgba(255,255,255,0.04)",
               border: i === 2
-                ? "1px solid rgba(139,92,246,0.4)"
+                ? "1px solid rgba(217, 255, 0,0.4)"
                 : "1px solid rgba(255,255,255,0.08)",
               display: "flex",
               alignItems: "center",
@@ -86,7 +86,7 @@ export default function NotFound() {
           fontWeight: 900,
           lineHeight: 1,
           letterSpacing: "-0.04em",
-          background: "linear-gradient(135deg, #a78bfa 0%, #7c3aed 50%, #4c1d95 100%)",
+          background: "linear-gradient(135deg, #D9FF00 0%, #A6CC00 50%, #4c1d95 100%)",
           WebkitBackgroundClip: "text",
           WebkitTextFillColor: "transparent",
           backgroundClip: "text",
@@ -101,7 +101,7 @@ export default function NotFound() {
           margin: "0 0 12px",
           fontSize: "1.4rem",
           fontWeight: 700,
-          color: "#e2e8f0",
+          color: "#FFFFFF",
           letterSpacing: "-0.02em",
         }}>
           Frame not found
@@ -123,13 +123,13 @@ export default function NotFound() {
           alignItems: "center",
           gap: "8px",
           padding: "13px 28px",
-          background: "linear-gradient(135deg, #8b5cf6, #7c3aed)",
+          background: "linear-gradient(135deg, #D9FF00, #A6CC00)",
           color: "#fff",
           borderRadius: "12px",
           fontWeight: 700,
           fontSize: "0.9rem",
           textDecoration: "none",
-          boxShadow: "0 8px 32px rgba(139,92,246,0.3)",
+          boxShadow: "0 8px 32px rgba(217, 255, 0,0.3)",
         }}>
           ⚡ Back to Generate
         </Link>

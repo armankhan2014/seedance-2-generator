@@ -86,7 +86,7 @@ export default function HomepageV2({ initialVideos = [] }) {
           <div className="flex items-center justify-center gap-3 flex-wrap">
             <button
               onClick={() => router.push("/generate")}
-              className="px-7 py-3.5 bg-gradient-to-r from-primary-600 to-primary-500 text-white rounded-xl text-sm font-bold tracking-wide shadow-xl shadow-primary-500/20 border border-primary-400/40 hover:scale-[1.02] active:scale-[0.98] transition-all"
+              className="px-7 py-3.5 bg-gradient-to-r from-primary-600 to-primary-500 text-black rounded-xl text-sm font-bold tracking-wide shadow-xl shadow-primary-500/20 border border-primary-400/40 hover:scale-[1.02] active:scale-[0.98] transition-all"
             >
               Generate a video
             </button>

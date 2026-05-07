@@ -28,7 +28,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className="h-dvh w-full" style={{ colorScheme: "dark" }}>
-      <body className={inter.className} style={{ background: "#0a0a0a", color: "#f1f5f9" }}>
+      <body className={inter.className} style={{ background: "#0a0a0a", color: "#FFFFFF" }}>
         <Providers>
           <Suspense fallback={null}>
             <Navbar />

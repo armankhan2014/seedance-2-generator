@@ -92,7 +92,7 @@ function GalleryCard({ video, index, onClick, isAdmin, onToggle, toggling }) {
           </span>
         )}
         {video.duration && (
-          <span style={{ padding: "2px 5px", background: "rgba(124,58,237,.85)", color: "#fff", fontSize: 9, borderRadius: 3, fontWeight: 700 }}>
+          <span style={{ padding: "2px 5px", background: "rgba(166, 204, 0,.85)", color: "#fff", fontSize: 9, borderRadius: 3, fontWeight: 700 }}>
             {video.duration}s
           </span>
         )}
@@ -216,7 +216,7 @@ function VideoModal({ video, onClose }) {
                   <button
                     onClick={() => { navigator.clipboard.writeText(video.prompt); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
                     className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all border"
-                    style={copied ? { background: "rgba(34,197,94,0.15)", borderColor: "rgba(34,197,94,0.4)", color: "#22c55e" } : { background: "rgba(139,92,246,0.1)", borderColor: "rgba(139,92,246,0.25)", color: "#a78bfa" }}
+                    style={copied ? { background: "rgba(34,197,94,0.15)", borderColor: "rgba(34,197,94,0.4)", color: "#22c55e" } : { background: "rgba(217, 255, 0,0.1)", borderColor: "rgba(217, 255, 0,0.25)", color: "#D9FF00" }}
                   >
                     {copied ? <FiCheck size={11} /> : <FiClipboard size={11} />}
                     {copied ? "Copied!" : "Copy Prompt"}
@@ -224,7 +224,7 @@ function VideoModal({ video, onClose }) {
                   <button
                     onClick={() => { sessionStorage.setItem("pendingPrompt", video.prompt); onClose(); router.push("/generate"); }}
                     className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all border"
-                    style={{ background: "rgba(139,92,246,0.18)", borderColor: "rgba(139,92,246,0.4)", color: "#c4b5fd" }}
+                    style={{ background: "rgba(217, 255, 0,0.18)", borderColor: "rgba(217, 255, 0,0.4)", color: "#D9FF00" }}
                   >
                     <FiArrowRight size={11} />
                     Use This Prompt
@@ -261,7 +261,7 @@ function VideoModal({ video, onClose }) {
                         height: 64,
                         objectFit: "cover",
                         borderRadius: 8,
-                        border: "1px solid rgba(139,92,246,0.25)",
+                        border: "1px solid rgba(217, 255, 0,0.25)",
                       }}
                     />
                   ))}
@@ -309,7 +309,7 @@ function VideoModal({ video, onClose }) {
             <button
               onClick={async () => { setDownloading(true); await downloadMedia(video.imageUrl, `seedance-${video.id}.mp4`); setDownloading(false); }}
               disabled={downloading}
-              className="w-full py-3 bg-gradient-to-r from-primary-600 to-primary-500 text-white rounded-lg font-bold tracking-wider uppercase text-xs flex items-center justify-center gap-3 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 shadow-xl shadow-primary-500/20 border border-primary-400/50"
+              className="w-full py-3 bg-gradient-to-r from-primary-600 to-primary-500 text-black rounded-lg font-bold tracking-wider uppercase text-xs flex items-center justify-center gap-3 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 shadow-xl shadow-primary-500/20 border border-primary-400/50"
             >
               {downloading ? <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <FiDownload size={16} />}
               {downloading ? "Downloading…" : "Download Video"}
@@ -386,9 +386,9 @@ export default function ArmanGallery({ initialVideos = [] }) {
             </p>
           </div>
           {isAdmin && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", background: "rgba(124,58,237,0.12)", border: "1px solid rgba(124,58,237,0.3)", borderRadius: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", background: "rgba(166, 204, 0,0.12)", border: "1px solid rgba(166, 204, 0,0.3)", borderRadius: 8 }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
-              <span style={{ fontSize: 10, fontWeight: 700, color: "#a78bfa", textTransform: "uppercase", letterSpacing: "0.1em" }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#D9FF00", textTransform: "uppercase", letterSpacing: "0.1em" }}>
                 Admin mode — {videos.filter(v => v.featured).length} live / {videos.length} total
               </span>
             </div>

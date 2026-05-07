@@ -165,7 +165,7 @@ export default function ProfilePage() {
       <div style={{ minHeight: "100vh", background: "#0a0a0a", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter,sans-serif" }}>
         <div style={{ textAlign: "center" }}>
           <p style={{ color: "#64748b", marginBottom: "16px" }}>You need to be signed in to view your profile.</p>
-          <Link href="/" style={{ color: "#a78bfa", textDecoration: "none", fontWeight: 600 }}>← Back to home</Link>
+          <Link href="/" style={{ color: "#D9FF00", textDecoration: "none", fontWeight: 600 }}>← Back to home</Link>
         </div>
       </div>
     );
@@ -191,7 +191,7 @@ export default function ProfilePage() {
         {/* Profile card */}
         <div style={{
           background: "#111118",
-          border: "1px solid rgba(139,92,246,0.2)",
+          border: "1px solid rgba(217, 255, 0,0.2)",
           borderRadius: "20px",
           padding: "36px",
           boxShadow: "0 24px 60px rgba(0,0,0,0.5)",
@@ -204,12 +204,12 @@ export default function ProfilePage() {
                 <img
                   src={imageUrl}
                   alt={name}
-                  style={{ width: "80px", height: "80px", borderRadius: "50%", border: "2px solid rgba(139,92,246,0.4)", objectFit: "cover" }}
+                  style={{ width: "80px", height: "80px", borderRadius: "50%", border: "2px solid rgba(217, 255, 0,0.4)", objectFit: "cover" }}
                 />
               ) : (
                 <div style={{
                   width: "80px", height: "80px", borderRadius: "50%",
-                  background: "linear-gradient(135deg,#8b5cf6,#7c3aed)",
+                  background: "linear-gradient(135deg,#D9FF00,#A6CC00)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontSize: "1.5rem", fontWeight: 700, color: "#fff",
                 }}>
@@ -225,7 +225,7 @@ export default function ProfilePage() {
                 style={{
                   position: "absolute", bottom: 0, right: 0,
                   width: "26px", height: "26px",
-                  background: uploading ? "rgba(139,92,246,0.5)" : "#7c3aed",
+                  background: uploading ? "rgba(217, 255, 0,0.5)" : "#A6CC00",
                   border: "2px solid #111118",
                   borderRadius: "50%",
                   display: "flex", alignItems: "center", justifyContent: "center",
@@ -258,7 +258,7 @@ export default function ProfilePage() {
               <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "#64748b" }}>{email}</p>
               {/* Step-by-step upload status */}
               {uploadStatus && !uploadError && (
-                <p style={{ margin: "6px 0 0", fontSize: "0.75rem", color: uploadStatus.startsWith("✅") ? "#4ade80" : "#a78bfa" }}>{uploadStatus}</p>
+                <p style={{ margin: "6px 0 0", fontSize: "0.75rem", color: uploadStatus.startsWith("✅") ? "#4ade80" : "#D9FF00" }}>{uploadStatus}</p>
               )}
               {uploadError && (
                 <p style={{ margin: "6px 0 0", fontSize: "0.75rem", color: "#f87171" }}>{uploadError}</p>
@@ -270,28 +270,28 @@ export default function ProfilePage() {
           {/* Stats grid — 2×2 */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "28px" }}>
             {/* Credits remaining */}
-            <div style={{ background: "rgba(139,92,246,0.1)", border: "1px solid rgba(139,92,246,0.2)", borderRadius: "12px", padding: "16px" }}>
+            <div style={{ background: "rgba(217, 255, 0,0.1)", border: "1px solid rgba(217, 255, 0,0.2)", borderRadius: "12px", padding: "16px" }}>
               <p style={{ margin: 0, fontSize: "0.7rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>Credits</p>
-              <p style={{ margin: 0, fontSize: "1.4rem", fontWeight: 800, color: "#a78bfa" }}>⚡ {credits.toLocaleString()}</p>
+              <p style={{ margin: 0, fontSize: "1.4rem", fontWeight: 800, color: "#D9FF00" }}>⚡ {credits.toLocaleString()}</p>
             </div>
             {/* Member since */}
             <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "16px" }}>
               <p style={{ margin: 0, fontSize: "0.7rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>Member Since</p>
-              <p style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700, color: "#e2e8f0" }}>
+              <p style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700, color: "#FFFFFF" }}>
                 {memberSince || joinDate || "—"}
               </p>
             </div>
             {/* Videos generated */}
             <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "16px" }}>
               <p style={{ margin: 0, fontSize: "0.7rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>Videos Generated</p>
-              <p style={{ margin: 0, fontSize: "1.4rem", fontWeight: 800, color: "#e2e8f0" }}>
+              <p style={{ margin: 0, fontSize: "1.4rem", fontWeight: 800, color: "#FFFFFF" }}>
                 🎬 {(profile?.videosGenerated ?? 0).toLocaleString()}
               </p>
             </div>
             {/* Total credits spent */}
             <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "12px", padding: "16px" }}>
               <p style={{ margin: 0, fontSize: "0.7rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>Credits Spent</p>
-              <p style={{ margin: 0, fontSize: "1.4rem", fontWeight: 800, color: "#e2e8f0" }}>
+              <p style={{ margin: 0, fontSize: "1.4rem", fontWeight: 800, color: "#FFFFFF" }}>
                 ⚡ {(profile?.totalCreditsSpent ?? 0).toLocaleString()}
               </p>
             </div>
@@ -306,7 +306,7 @@ export default function ProfilePage() {
             ].map(row => (
               <div key={row.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "rgba(255,255,255,0.03)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.06)" }}>
                 <span style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>{row.label}</span>
-                <span style={{ fontSize: "0.85rem", color: "#e2e8f0" }}>{row.value}</span>
+                <span style={{ fontSize: "0.85rem", color: "#FFFFFF" }}>{row.value}</span>
               </div>
             ))}
           </div>
@@ -315,7 +315,7 @@ export default function ProfilePage() {
           <div style={{ display: "flex", gap: "10px" }}>
             <Link href="/pricing" style={{
               flex: 1,
-              background: "linear-gradient(135deg,#8b5cf6,#7c3aed)",
+              background: "linear-gradient(135deg,#D9FF00,#A6CC00)",
               border: "none",
               borderRadius: "10px",
               color: "#fff",

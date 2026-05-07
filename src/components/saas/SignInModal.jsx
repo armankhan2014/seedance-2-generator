@@ -73,11 +73,11 @@ export default function SignInModal() {
         @keyframes _sdSpin { to{transform:rotate(360deg)} }
         ._sd-social:hover:not(:disabled){background:rgba(255,255,255,0.12)!important;border-color:rgba(255,255,255,0.22)!important;transform:translateY(-2px);}
         ._sd-social:active:not(:disabled){transform:translateY(0)!important;}
-        ._sd-input:focus{border-color:rgba(124,58,237,.7)!important;box-shadow:0 0 0 3px rgba(124,58,237,.15)!important;outline:none;}
+        ._sd-input:focus{border-color:rgba(166, 204, 0,.7)!important;box-shadow:0 0 0 3px rgba(166, 204, 0,.15)!important;outline:none;}
         ._sd-input::placeholder{color:#334155;}
         ._sd-btn:hover:not(:disabled){opacity:.9;transform:translateY(-1px);}
         ._sd-btn:active:not(:disabled){transform:translateY(0);}
-        ._sd-toggle:hover{color:#a78bfa!important;}
+        ._sd-toggle:hover{color:#D9FF00!important;}
       `}</style>
 
       {/* Backdrop */}
@@ -85,10 +85,10 @@ export default function SignInModal() {
 
       {/* Card wrapper */}
       <div style={{position:"fixed",inset:0,zIndex:9991,display:"flex",alignItems:"center",justifyContent:"center",padding:16,pointerEvents:"none"}}>
-        <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:420,background:"#111118",border:"1px solid rgba(255,255,255,0.08)",borderRadius:20,boxShadow:"0 0 0 1px rgba(124,58,237,0.1),0 40px 100px rgba(0,0,0,.8)",overflow:"hidden",pointerEvents:"all",animation:"_sdCard .22s cubic-bezier(.22,1,.36,1)"}}>
+        <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:420,background:"#111118",border:"1px solid rgba(255,255,255,0.08)",borderRadius:20,boxShadow:"0 0 0 1px rgba(166, 204, 0,0.1),0 40px 100px rgba(0,0,0,.8)",overflow:"hidden",pointerEvents:"all",animation:"_sdCard .22s cubic-bezier(.22,1,.36,1)"}}>
 
           {/* Top accent */}
-          <div style={{height:1.5,background:"linear-gradient(90deg,transparent,#7c3aed,#a78bfa,#7c3aed,transparent)"}}/>
+          <div style={{height:1.5,background:"linear-gradient(90deg,transparent,#A6CC00,#D9FF00,#A6CC00,transparent)"}}/>
 
           {/* Tab switcher */}
           <div style={{display:"flex",margin:"20px 24px 0",background:"rgba(255,255,255,0.04)",borderRadius:10,padding:3,border:"1px solid rgba(255,255,255,0.07)"}}>
@@ -96,9 +96,9 @@ export default function SignInModal() {
               <button key={m} onClick={()=>{setMode(m);setEmail("");setName("");setEmailSent(false);}} style={{
                 flex:1,padding:"8px 0",borderRadius:8,fontSize:".8rem",fontWeight:600,
                 fontFamily:"inherit",cursor:"pointer",border:"none",transition:"all .2s",
-                background: mode===m ? "rgba(124,58,237,0.25)" : "transparent",
-                color: mode===m ? "#c4b5fd" : "#475569",
-                boxShadow: mode===m ? "0 1px 6px rgba(124,58,237,.2)" : "none",
+                background: mode===m ? "rgba(166, 204, 0,0.25)" : "transparent",
+                color: mode===m ? "#D9FF00" : "#475569",
+                boxShadow: mode===m ? "0 1px 6px rgba(166, 204, 0,.2)" : "none",
               }}>
                 {m==="signin" ? "Sign in" : "Create account"}
               </button>
@@ -110,13 +110,13 @@ export default function SignInModal() {
 
             {/* Close */}
             <button onClick={close} style={{position:"absolute",top:-8,right:0,width:28,height:28,borderRadius:"50%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",color:"#475569",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s",fontFamily:"inherit",lineHeight:1}}
-              onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,.1)";e.currentTarget.style.color="#e2e8f0";}}
+              onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,.1)";e.currentTarget.style.color="#FFFFFF";}}
               onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,.05)";e.currentTarget.style.color="#475569";}}>✕</button>
 
             {/* Logo + heading */}
             <div style={{textAlign:"center",marginBottom:20}}>
-              <div style={{width:44,height:44,margin:"0 auto 12px",background:"linear-gradient(135deg,#7c3aed,#5b21b6)",borderRadius:13,fontSize:22,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 6px 24px rgba(124,58,237,.38)"}}>🎬</div>
-              <div style={{fontSize:"1rem",fontWeight:700,color:"#f1f5f9",letterSpacing:"-.02em",marginBottom:4}}>
+              <div style={{width:44,height:44,margin:"0 auto 12px",background:"linear-gradient(135deg,#A6CC00,#5b21b6)",borderRadius:13,fontSize:22,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 6px 24px rgba(166, 204, 0,.38)"}}>🎬</div>
+              <div style={{fontSize:"1rem",fontWeight:700,color:"#FFFFFF",letterSpacing:"-.02em",marginBottom:4}}>
                 {isSignUp ? "Create your account" : "Welcome back"}
               </div>
               <div style={{fontSize:".78rem",color:"#475569"}}>
@@ -131,11 +131,11 @@ export default function SignInModal() {
             {emailSent ? (
               <div style={{textAlign:"center",padding:"8px 0 12px"}}>
                 <div style={{fontSize:38,marginBottom:10}}>📬</div>
-                <p style={{margin:"0 0 6px",fontSize:".9rem",fontWeight:600,color:"#e2e8f0"}}>Magic link sent!</p>
+                <p style={{margin:"0 0 6px",fontSize:".9rem",fontWeight:600,color:"#FFFFFF"}}>Magic link sent!</p>
                 <p style={{margin:"0 0 16px",fontSize:".78rem",color:"#64748b",lineHeight:1.7}}>
-                  We emailed a sign-in link to<br/><strong style={{color:"#a78bfa"}}>{email}</strong>.<br/>Click it to sign in instantly.
+                  We emailed a sign-in link to<br/><strong style={{color:"#D9FF00"}}>{email}</strong>.<br/>Click it to sign in instantly.
                 </p>
-                <button onClick={()=>{setEmailSent(false);setEmail("");}} style={{fontSize:".78rem",color:"#7c3aed",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",textDecoration:"underline"}}>
+                <button onClick={()=>{setEmailSent(false);setEmail("");}} style={{fontSize:".78rem",color:"#A6CC00",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",textDecoration:"underline"}}>
                   Use a different email
                 </button>
               </div>
@@ -147,7 +147,7 @@ export default function SignInModal() {
                     <button key={p.id} className="_sd-social" onClick={()=>handleSocial(p.id)} disabled={!!loading} title={`Continue with ${p.label}`}
                       style={{height:44,borderRadius:10,background:p.bg,border:`1px solid ${p.border}`,color:p.color,display:"flex",alignItems:"center",justifyContent:"center",cursor:loading?"wait":"pointer",transition:"all .15s",opacity:loading&&loading!==p.id?.45:1,fontFamily:"inherit"}}>
                       {loading===p.id
-                        ? <div style={{width:15,height:15,border:"2px solid rgba(255,255,255,.2)",borderTopColor:"#a78bfa",borderRadius:"50%",animation:"_sdSpin .65s linear infinite"}}/>
+                        ? <div style={{width:15,height:15,border:"2px solid rgba(255,255,255,.2)",borderTopColor:"#D9FF00",borderRadius:"50%",animation:"_sdSpin .65s linear infinite"}}/>
                         : p.icon}
                     </button>
                   ))}
@@ -165,15 +165,15 @@ export default function SignInModal() {
                   {isSignUp && (
                     <input className="_sd-input" type="text" placeholder="Your name (optional)"
                       value={name} onChange={e=>setName(e.target.value)} disabled={!!loading}
-                      style={{width:"100%",boxSizing:"border-box",padding:"10px 13px",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:9,color:"#f1f5f9",fontSize:".85rem",fontFamily:"inherit",transition:"border-color .15s,box-shadow .15s"}}
+                      style={{width:"100%",boxSizing:"border-box",padding:"10px 13px",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:9,color:"#FFFFFF",fontSize:".85rem",fontFamily:"inherit",transition:"border-color .15s,box-shadow .15s"}}
                     />
                   )}
                   <input className="_sd-input" type="email" placeholder="Email address" required
                     value={email} onChange={e=>setEmail(e.target.value)} disabled={!!loading}
-                    style={{width:"100%",boxSizing:"border-box",padding:"10px 13px",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:9,color:"#f1f5f9",fontSize:".85rem",fontFamily:"inherit",transition:"border-color .15s,box-shadow .15s"}}
+                    style={{width:"100%",boxSizing:"border-box",padding:"10px 13px",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:9,color:"#FFFFFF",fontSize:".85rem",fontFamily:"inherit",transition:"border-color .15s,box-shadow .15s"}}
                   />
                   <button type="submit" className="_sd-btn" disabled={!email||!!loading}
-                    style={{width:"100%",padding:"11px",background:email?"linear-gradient(135deg,#7c3aed,#6d28d9)":"rgba(255,255,255,0.05)",border:"none",borderRadius:9,color:email?"#fff":"#334155",fontSize:".875rem",fontWeight:600,fontFamily:"inherit",cursor:email&&!loading?"pointer":"default",transition:"all .15s",display:"flex",alignItems:"center",justifyContent:"center",gap:7,boxShadow:email?"0 4px 18px rgba(124,58,237,.35)":"none"}}>
+                    style={{width:"100%",padding:"11px",background:email?"linear-gradient(135deg,#A6CC00,#A6CC00)":"rgba(255,255,255,0.05)",border:"none",borderRadius:9,color:email?"#fff":"#334155",fontSize:".875rem",fontWeight:600,fontFamily:"inherit",cursor:email&&!loading?"pointer":"default",transition:"all .15s",display:"flex",alignItems:"center",justifyContent:"center",gap:7,boxShadow:email?"0 4px 18px rgba(166, 204, 0,.35)":"none"}}>
                     {loading==="email"
                       ? <><div style={{width:14,height:14,border:"2px solid rgba(255,255,255,.3)",borderTopColor:"#fff",borderRadius:"50%",animation:"_sdSpin .65s linear infinite"}}/> Sending…</>
                       : <>{isSignUp ? "Create account" : "Continue"} <span style={{opacity:.6,fontSize:11}}>→</span></>}
@@ -189,16 +189,16 @@ export default function SignInModal() {
               <p style={{margin:"0 0 10px",fontSize:".78rem",color:"#334155"}}>
                 {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
                 <button className="_sd-toggle" onClick={toggleMode}
-                  style={{color:"#7c3aed",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:".78rem",fontWeight:600,textDecoration:"none",transition:"color .15s",padding:0}}>
+                  style={{color:"#A6CC00",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",fontSize:".78rem",fontWeight:600,textDecoration:"none",transition:"color .15s",padding:0}}>
                   {isSignUp ? "Sign in" : "Sign up free"}
                 </button>
               </p>
             )}
             <p style={{margin:0,fontSize:".68rem",color:"#1e293b",lineHeight:1.7}}>
               By continuing you agree to our{" "}
-              <a href="/terms" style={{color:"#7c3aed",textDecoration:"none",fontWeight:500}}>Terms</a>
+              <a href="/terms" style={{color:"#A6CC00",textDecoration:"none",fontWeight:500}}>Terms</a>
               {" & "}
-              <a href="/privacy" style={{color:"#7c3aed",textDecoration:"none",fontWeight:500}}>Privacy Policy</a>
+              <a href="/privacy" style={{color:"#A6CC00",textDecoration:"none",fontWeight:500}}>Privacy Policy</a>
               <br/><span>🔒 Secured · End-to-end encrypted</span>
             </p>
           </div>

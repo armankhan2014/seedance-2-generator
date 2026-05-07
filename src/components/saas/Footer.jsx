@@ -64,7 +64,7 @@ export default function Footer() {
                   width: "28px",
                   height: "28px",
                   borderRadius: "7px",
-                  background: "linear-gradient(135deg, #8b5cf6, #7c3aed)",
+                  background: "linear-gradient(135deg, #D9FF00, #A6CC00)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -75,7 +75,7 @@ export default function Footer() {
                 <span style={{
                   fontSize: "1rem",
                   fontWeight: 800,
-                  color: "#e2e8f0",
+                  color: "#FFFFFF",
                   letterSpacing: "-0.02em",
                 }}>
                   Seedance Studio
@@ -113,7 +113,7 @@ export default function Footer() {
                   textDecoration: "none",
                   transition: "color 0.15s",
                 }}
-                  onMouseEnter={e => { e.currentTarget.style.color = "#a78bfa"; }}
+                  onMouseEnter={e => { e.currentTarget.style.color = "#D9FF00"; }}
                   onMouseLeave={e => { e.currentTarget.style.color = "#64748b"; }}
                 >
                   {label}
@@ -142,7 +142,7 @@ export default function Footer() {
                   textDecoration: "none",
                   transition: "color 0.15s",
                 }}
-                  onMouseEnter={e => { e.currentTarget.style.color = "#a78bfa"; }}
+                  onMouseEnter={e => { e.currentTarget.style.color = "#D9FF00"; }}
                   onMouseLeave={e => { e.currentTarget.style.color = "#64748b"; }}
                 >
                   {label}
@@ -171,7 +171,7 @@ export default function Footer() {
               marginBottom: "16px",
               transition: "color 0.15s",
             }}
-              onMouseEnter={e => { e.currentTarget.style.color = "#a78bfa"; }}
+              onMouseEnter={e => { e.currentTarget.style.color = "#D9FF00"; }}
               onMouseLeave={e => { e.currentTarget.style.color = "#64748b"; }}
             >
               hello@visualseffect.com
@@ -198,9 +198,9 @@ export default function Footer() {
                     transition: "color 0.15s, border-color 0.15s, background 0.15s",
                   }}
                   onMouseEnter={e => {
-                    e.currentTarget.style.color = "#a78bfa";
-                    e.currentTarget.style.borderColor = "rgba(139,92,246,0.4)";
-                    e.currentTarget.style.background = "rgba(139,92,246,0.08)";
+                    e.currentTarget.style.color = "#D9FF00";
+                    e.currentTarget.style.borderColor = "rgba(217, 255, 0,0.4)";
+                    e.currentTarget.style.background = "rgba(217, 255, 0,0.08)";
                   }}
                   onMouseLeave={e => {
                     e.currentTarget.style.color = "#64748b";

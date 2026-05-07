@@ -49,7 +49,7 @@ export default function AddCreditsWidget() {
       <button
         type="submit"
         disabled={loading}
-        style={{ padding: "10px", background: "#7c3aed", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}
+        style={{ padding: "10px", background: "#A6CC00", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}
       >
         {loading ? "Adding..." : "Add Credits"}
       </button>

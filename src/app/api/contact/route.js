@@ -47,18 +47,18 @@ export async function POST(req) {
     });
 
     const html = `
-      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#0f0f14;color:#e5e7eb;padding:32px;border-radius:12px;border:1px solid rgba(255,255,255,0.08)">
-        <h2 style="color:#a78bfa;margin-top:0">📬 New Contact Form Submission</h2>
+      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#0a0a0a;color:#e5e7eb;padding:32px;border-radius:12px;border:1px solid rgba(255,255,255,0.08)">
+        <h2 style="color:#D9FF00;margin-top:0">📬 New Contact Form Submission</h2>
         <table style="width:100%;border-collapse:collapse">
           <tr><td style="padding:6px 0;color:#9ca3af;width:90px">Name</td><td style="padding:6px 0;font-weight:600">${safeFirst} ${safeLast}</td></tr>
-          <tr><td style="padding:6px 0;color:#9ca3af">Email</td><td style="padding:6px 0"><a href="mailto:${safeEmail}" style="color:#a78bfa">${safeEmail}</a></td></tr>
+          <tr><td style="padding:6px 0;color:#9ca3af">Email</td><td style="padding:6px 0"><a href="mailto:${safeEmail}" style="color:#D9FF00">${safeEmail}</a></td></tr>
           <tr><td style="padding:6px 0;color:#9ca3af">Time</td><td style="padding:6px 0">${time}</td></tr>
         </table>
         <div style="margin-top:20px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px">
           <p style="margin:0;color:#9ca3af;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Message</p>
           <p style="margin:0;color:#e5e7eb;white-space:pre-wrap;line-height:1.6">${safeMessage}</p>
         </div>
-        <p style="margin-top:24px;font-size:12px;color:#6b7280">Sent via Seedance contact form · <a href="https://seedance.visualseffect.com" style="color:#a78bfa">seedance.visualseffect.com</a></p>
+        <p style="margin-top:24px;font-size:12px;color:#6b7280">Sent via Seedance contact form · <a href="https://seedance.visualseffect.com" style="color:#D9FF00">seedance.visualseffect.com</a></p>
       </div>
     `;
 

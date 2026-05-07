@@ -32,7 +32,7 @@ export default function TermsPage() {
         <h1 style={{
           fontSize: "2rem",
           fontWeight: 900,
-          color: "#e2e8f0",
+          color: "#FFFFFF",
           letterSpacing: "-0.03em",
           marginBottom: "8px",
         }}>
@@ -80,7 +80,7 @@ export default function TermsPage() {
             <h2 style={{
               fontSize: "1rem",
               fontWeight: 700,
-              color: "#e2e8f0",
+              color: "#FFFFFF",
               marginBottom: "10px",
               letterSpacing: "-0.01em",
             }}>
