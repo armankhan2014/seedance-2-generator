@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import AddCreditsWidget from "./AddCreditsWidget";
 import VerifyToggle from "./VerifyToggle";
+import BackupNowButton from "./BackupNowButton";
 
 const OWNER_EMAIL = "armankhan0826@gmail.com";
 
@@ -110,7 +111,10 @@ CREATE INDEX IF NOT EXISTS "Payment_userId_idx" ON "Payment"("userId");`;
               Seedance Studio · {new Date().toLocaleDateString("en-GB", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
             </p>
           </div>
-          <a href="/" style={{ color: "#ec4899", fontSize: 13, textDecoration: "none" }}>← Back to site</a>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <BackupNowButton />
+            <a href="/" style={{ color: "#ec4899", fontSize: 13, textDecoration: "none" }}>← Back to site</a>
+          </div>
         </div>
 
         {/* Payment table missing banner */}
