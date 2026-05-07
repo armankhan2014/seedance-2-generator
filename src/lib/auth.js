@@ -66,7 +66,7 @@ if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASS) {
 // that limit during OAuth signup. See KNOWN_ISSUES.md.
 export const authOptions = {
   adapter: PrismaAdapter(prisma),
-  session: { strategy: "database" },
+  session: { strategy: "database", maxAge: 30 * 24 * 60 * 60 },
   providers,
   pages: { signIn: "/", error: "/" },
 
