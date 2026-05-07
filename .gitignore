@@ -41,3 +41,7 @@ next-env.d.ts
 # prisma
 /prisma/migrations
 /node_modules/.prisma
+
+# local utility scripts (Mac double-clickable bash) and editor backups
+*.command
+*.bak
