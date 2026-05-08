@@ -67,11 +67,32 @@ if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASS) {
 // (~150 bytes). Vercel rejects requests with headers > 16KB, and a bloated
 // JWT cookie chunked across .0/.1/.2 fragments was tipping requests over
 // that limit during OAuth signup. See KNOWN_ISSUES.md.
+const isProd = process.env.NODE_ENV === "production";
+
 export const authOptions = {
   adapter: PrismaAdapter(prisma),
   session: { strategy: "database", maxAge: 30 * 24 * 60 * 60 },
   providers,
   pages: { signIn: "/", error: "/" },
+
+  // Cross-subdomain SSO: cookie scoped to `.visualseffect.com` so the
+  // same session is valid on community.visualseffect.com. Database
+  // sessions mean existing logins keep working — the cookie domain
+  // changes but the session record in Postgres is untouched.
+  cookies: {
+    sessionToken: {
+      name: isProd
+        ? "__Secure-next-auth.session-token"
+        : "next-auth.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: isProd,
+        domain: isProd ? ".visualseffect.com" : undefined,
+      },
+    },
+  },
 
   events: {
     async signIn({ user, isNewUser }) {
