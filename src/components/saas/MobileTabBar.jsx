@@ -1,6 +1,5 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
 
 // Persistent bottom navigation that mirrors the bar on
 // community.visualseffect.com so users never lose their place when
@@ -10,46 +9,15 @@ import { useEffect, useState } from "react";
 //
 // Visual contract MUST match community/src/components/shell/MobileTabBar
 // (icons, sizes, colors, fonts, padding) — change them in lockstep.
+//
+// The Inbox unread badge that the community side has is intentionally
+// NOT replicated here. We had a cross-origin credentialed fetch
+// implementation; users reported mobile auth issues right after it
+// shipped, so we removed it as a safety measure while we confirm
+// the root cause. Ship the badge again only after we have a clean
+// repro that proves the fetch wasn't the trigger.
 
 const COMMUNITY_URL = "https://community.visualseffect.com";
-
-// Cross-subdomain unread-count fetch. The session cookie is scoped to
-// `.visualseffect.com` (see seedance-community/src/lib/auth.js) so
-// `credentials: include` ships it automatically. Community's endpoint
-// returns CORS headers allowing this exact origin. Returns 0 silently
-// on every error path — no badge ever beats a wrong badge.
-function useCommunityUnread() {
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    let cancelled = false;
-    const refresh = async () => {
-      try {
-        const res = await fetch(`${COMMUNITY_URL}/api/messages/unread-count`, {
-          credentials: "include",
-          cache: "no-store",
-        });
-        if (!res.ok) return;
-        const j = await res.json();
-        if (!cancelled) setCount(j.count || 0);
-      } catch {
-        /* anonymous viewers + offline + CORS errors all land here */
-      }
-    };
-    refresh();
-    const id = setInterval(() => {
-      if (document.visibilityState === "visible") refresh();
-    }, 30000);
-    const onVis = () =>
-      document.visibilityState === "visible" && refresh();
-    document.addEventListener("visibilitychange", onVis);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-      document.removeEventListener("visibilitychange", onVis);
-    };
-  }, []);
-  return count;
-}
 
 const TABS = [
   {
@@ -91,7 +59,6 @@ const TABS = [
     id: "messages",
     href: `${COMMUNITY_URL}/messages`,
     label: "Inbox",
-    showsUnread: true,
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z" />
@@ -113,7 +80,6 @@ const TABS = [
 ];
 
 export default function MobileTabBar() {
-  const unread = useCommunityUnread();
   return (
     <nav
       style={{
@@ -163,33 +129,7 @@ export default function MobileTabBar() {
               fontFamily: "inherit",
             }}
           >
-            <span style={{ position: "relative", lineHeight: 0 }}>
-              {tab.icon}
-              {tab.showsUnread && unread > 0 && (
-                <span
-                  style={{
-                    position: "absolute",
-                    top: -3,
-                    right: -6,
-                    minWidth: 16,
-                    height: 16,
-                    padding: "0 4px",
-                    borderRadius: 8,
-                    background: "#D9FF00",
-                    color: "#0a0a0a",
-                    fontSize: 9,
-                    fontWeight: 800,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    border: "2px solid #0a0a0a",
-                    lineHeight: 1,
-                  }}
-                >
-                  {unread > 99 ? "99+" : unread}
-                </span>
-              )}
-            </span>
+            <span style={{ lineHeight: 0 }}>{tab.icon}</span>
             <span>{tab.label}</span>
           </Tag>
         );
