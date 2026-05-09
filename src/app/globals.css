@@ -45,6 +45,15 @@ body {
   font-family: Inter, system-ui, sans-serif;
 }
 
+/* Reserve room at the bottom on phones so the fixed MobileBottomNav
+   can't cover the last row of page content. The bar is ~62px tall plus
+   the iOS safe-area inset. Mobile-only — no effect on desktop. */
+@media (max-width: 720px) {
+  body {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+  }
+}
+
 * {
   box-sizing: border-box;
 }

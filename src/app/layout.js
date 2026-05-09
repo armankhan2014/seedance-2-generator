@@ -4,6 +4,7 @@ import "./globals.css";
 import { Providers } from "@/components/Providers";
 import Navbar from "@/components/saas/Navbar";
 import SignInModal from "@/components/saas/SignInModal";
+import MobileBottomNav from "@/components/saas/MobileBottomNav";
 import TawkTo from "@/components/TawkTo";
 import VisitorTracker from "@/components/VisitorTracker";
 
@@ -34,6 +35,10 @@ export default function RootLayout({ children }) {
             <Navbar />
           </Suspense>
           {children}
+          {/* Mobile bottom nav — mirrors community's bar so users keep
+              their bearings across the subdomain. Pure server component,
+              zero runtime JS. Auto-hides above 720px. */}
+          <MobileBottomNav />
           {/* Global sign-in modal — triggered via window.dispatchEvent(new CustomEvent("openSignIn")) */}
           <SignInModal />
           {/* Tawk.to live chat */}
