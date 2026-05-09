@@ -4,7 +4,6 @@ import "./globals.css";
 import { Providers } from "@/components/Providers";
 import Navbar from "@/components/saas/Navbar";
 import SignInModal from "@/components/saas/SignInModal";
-import MobileTabBar from "@/components/saas/MobileTabBar";
 import TawkTo from "@/components/TawkTo";
 import VisitorTracker from "@/components/VisitorTracker";
 
@@ -35,10 +34,6 @@ export default function RootLayout({ children }) {
             <Navbar />
           </Suspense>
           {children}
-          {/* Persistent mobile bottom nav (mirrors the bar on
-              community.visualseffect.com so users keep their bearings
-              when crossing the subdomain). Auto-hides above 720px. */}
-          <MobileTabBar />
           {/* Global sign-in modal — triggered via window.dispatchEvent(new CustomEvent("openSignIn")) */}
           <SignInModal />
           {/* Tawk.to live chat */}
