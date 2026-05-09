@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 import { Inter } from "next/font/google";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 import Navbar from "@/components/saas/Navbar";
@@ -26,11 +28,25 @@ export const metadata = {
   robots: { index: true, follow: true },
 };
 
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  // Prefetch the session server-side so SessionProvider (and every
+  // useSession() consumer below it) renders with the right answer on
+  // the very first paint. Without this, post-login pages briefly
+  // flash the "Sign in" button while the client refetches.
+  // Wrapped in try/catch so a transient DB blip doesn't 500 the whole
+  // tree — useSession will still hydrate from /api/auth/session as a
+  // fallback in that case.
+  let session = null;
+  try {
+    session = await getServerSession(authOptions);
+  } catch {
+    // ignore — fall through to client-side hydration
+  }
+
   return (
     <html lang="en" className="h-dvh w-full" style={{ colorScheme: "dark" }}>
       <body className={inter.className} style={{ background: "#0a0a0a", color: "#FFFFFF" }}>
-        <Providers>
+        <Providers session={session}>
           <Suspense fallback={null}>
             <Navbar />
           </Suspense>
