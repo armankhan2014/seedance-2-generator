@@ -18,12 +18,28 @@ export async function POST(req) {
       return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
     }
 
-    // Cap prompt length so abusers can't spam huge payloads at MuAPI on our dime.
-    if (typeof prompt === "string" && prompt.length > 4000) {
-      return NextResponse.json(
-        { error: "Prompt is too long (max 4000 characters)." },
-        { status: 400 }
-      );
+    // Cap prompt length so abusers can't spam huge payloads at MuAPI
+    // on our dime. UI advertises a 20,000-word budget in the
+    // character counter (GenerateClient.jsx) — server enforces the
+    // same limit by word count using the identical split logic, plus
+    // a hard char ceiling that catches single-token abuse (one
+    // 50 MB string with no whitespace = 1 "word" but huge payload).
+    const MAX_PROMPT_WORDS = 20_000;
+    const MAX_PROMPT_CHARS = 200_000; // ~20K typical English words + headroom
+    if (typeof prompt === "string") {
+      if (prompt.length > MAX_PROMPT_CHARS) {
+        return NextResponse.json(
+          { error: `Prompt is too long (max ${MAX_PROMPT_WORDS.toLocaleString()} words).` },
+          { status: 400 }
+        );
+      }
+      const words = prompt.trim().split(/\s+/).filter(Boolean).length;
+      if (words > MAX_PROMPT_WORDS) {
+        return NextResponse.json(
+          { error: `Prompt is too long (max ${MAX_PROMPT_WORDS.toLocaleString()} words).` },
+          { status: 400 }
+        );
+      }
     }
 
     let result;
