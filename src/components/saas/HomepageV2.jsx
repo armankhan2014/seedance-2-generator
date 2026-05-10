@@ -3,7 +3,12 @@
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import ArmanGallery from "@/components/saas/ArmanGallery";
-import CinematicHero from "@/components/saas/CinematicHero";
+
+const STATS = [
+  { num: "12,847+", label: "Videos Generated" },
+  { num: "3,200+",  label: "Creators"          },
+  { num: "4.9★",    label: "Rating"             },
+];
 
 const STEPS = [
   {
@@ -43,8 +48,91 @@ export default function HomepageV2({ initialVideos = [] }) {
 
   return (
     <main>
-      {/* ── Hero (cinematic interactive playground) ───────────────────────── */}
-      <CinematicHero />
+      {/* ── Hero ──────────────────────────────────────────────────────────── */}
+      <section
+        style={{
+          maxWidth: 1280,
+          width: "100%",
+          margin: "0 auto",
+          padding: "96px 16px 64px",
+          textAlign: "center",
+        }}
+      >
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, ease: "easeOut" }}
+        >
+          {/* Badge */}
+          <div className="inline-flex items-center gap-2 rounded-full border border-primary-500/30 bg-primary-500/10 px-4 py-1.5 mb-6">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary-500 animate-pulse" />
+            <span className="text-[10px] font-semibold text-primary-400 uppercase tracking-widest">
+              Powered by Seedance 2.0
+            </span>
+          </div>
+
+          {/* Headline */}
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-semibold tracking-tight text-foreground leading-[1.1] max-w-3xl mx-auto mb-5">
+            Turn ideas into{" "}
+            <span className="text-primary-400">cinematic</span>{" "}
+            AI videos
+          </h1>
+
+          <p className="text-muted text-sm md:text-base max-w-md mx-auto mb-10 leading-relaxed">
+            Create the most realistic AI videos.
+          </p>
+
+          {/* CTAs */}
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            <button
+              onClick={() => router.push("/generate")}
+              className="px-7 py-3.5 bg-gradient-to-r from-primary-600 to-primary-500 text-black rounded-xl text-sm font-bold tracking-wide shadow-xl shadow-primary-500/20 border border-primary-400/40 hover:scale-[1.02] active:scale-[0.98] transition-all"
+            >
+              Generate a video
+            </button>
+            <button
+              onClick={() => document.getElementById("gallery")?.scrollIntoView({ behavior: "smooth" })}
+              className="px-7 py-3.5 bg-glass-bg border border-glass-border text-foreground rounded-xl text-sm font-medium hover:bg-glass-hover transition-all"
+            >
+              See examples
+            </button>
+          </div>
+        </motion.div>
+      </section>
+
+      {/* ── Stats bar ─────────────────────────────────────────────────────── */}
+      <div
+        style={{
+          borderTop:    "1px solid rgba(255,255,255,.05)",
+          borderBottom: "1px solid rgba(255,255,255,.05)",
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 1280,
+            margin: "0 auto",
+            display: "grid",
+            gridTemplateColumns: "repeat(3, 1fr)",
+          }}
+        >
+          {STATS.map((s, i) => (
+            <motion.div
+              key={s.label}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 + i * 0.07 }}
+              style={{
+                padding: "22px 24px",
+                textAlign: "center",
+                borderRight: i < STATS.length - 1 ? "1px solid rgba(255,255,255,.05)" : "none",
+              }}
+            >
+              <div className="text-xl md:text-2xl font-semibold text-foreground">{s.num}</div>
+              <div className="text-[10px] text-muted uppercase tracking-widest mt-1">{s.label}</div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
 
       {/* ── Gallery ───────────────────────────────────────────────────────── */}
       <div id="gallery">
