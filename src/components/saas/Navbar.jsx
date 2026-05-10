@@ -129,7 +129,7 @@ export default function Navbar() {
           objectFit: "cover",
           flexShrink: 0,
           transform: tilt ? "rotate(-6deg)" : "rotate(0deg)",
-          transition: "transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+          transition: "transform 150ms ease-out",
         }}
       />
     ) : (
@@ -139,7 +139,7 @@ export default function Navbar() {
         display: "flex", alignItems: "center", justifyContent: "center",
         fontSize: size * 0.42 + "px", fontWeight: 700, color: "#fff", flexShrink: 0,
         transform: tilt ? "rotate(-6deg)" : "rotate(0deg)",
-        transition: "transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+        transition: "transform 150ms ease-out",
       }}>
         {initials}
       </div>
@@ -180,8 +180,13 @@ export default function Navbar() {
         : hovered
         ? "0 4px 14px -6px rgba(217,255,0,0.35)"
         : "none",
+      // Snappy hover — 150 ms ease-out across the board. Apple,
+      // Linear, and Vercel all sit in this range. The previous
+      // cubic-bezier spring (0.34, 1.56, 0.64, 1, 220 ms) was an
+      // overshoot — it visually undershoots-then-settles which
+      // reads as "slow", even though the duration is short.
       transition:
-        "transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), background 200ms ease, color 200ms ease, box-shadow 200ms ease, border-color 200ms ease",
+        "transform 150ms ease-out, background 130ms ease-out, color 130ms ease-out, box-shadow 150ms ease-out, border-color 130ms ease-out",
     };
     return (
       <Tag
@@ -263,7 +268,7 @@ export default function Navbar() {
                 cursor: "pointer",
                 whiteSpace: "nowrap",
                 fontFamily: "inherit",
-                transition: "background 200ms ease, color 200ms ease",
+                transition: "background 130ms ease-out, color 130ms ease-out",
               }}>
               Contact Us
             </button>
@@ -290,7 +295,7 @@ export default function Navbar() {
                       ? "0 4px 16px -4px rgba(217,255,0,0.55), 0 0 0 1px rgba(217,255,0,0.5)"
                       : "0 0 0 1px rgba(217,255,0,0)",
                     transition:
-                      "opacity 0.4s, transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 220ms ease",
+                      "opacity 0.4s, transform 150ms ease-out, box-shadow 150ms ease-out",
                   }}>
                   {creditsRefreshing ? "⏳" : "⚡"} {displayCredits.toLocaleString()} credits
                 </span>
@@ -317,7 +322,7 @@ export default function Navbar() {
                       fontFamily: "inherit",
                       transform: profileHover && !dropdownOpen ? "translateY(-1px)" : "translateY(0)",
                       transition:
-                        "background 200ms ease, color 200ms ease, transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+                        "background 130ms ease-out, color 130ms ease-out, transform 150ms ease-out",
                     }}>
                     <Avatar size={24} tilt={profileHover && !dropdownOpen} />
                     <span>{firstName}</span>
