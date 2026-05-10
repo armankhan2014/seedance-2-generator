@@ -929,6 +929,25 @@ export default function CinematicHero() {
           overflow: hidden;
           background: radial-gradient(ellipse at center, #050a00 0%, #000 70%);
         }
+        /* Bottom-edge feather — fades the hero into pure black over the
+           last ~220px so whatever section sits below (Live Gallery on
+           the homepage) merges with no visible seam, regardless of
+           that section's exact background colour. Sits above the
+           floating props (z:80) but below the hero content (z:50 →
+           overridden up to z:90 inside) so headline + buttons stay on
+           top, while the bottom of any drifted prop/particle gracefully
+           dissolves into black. */
+        .sd-hero::after {
+          content: '';
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          height: 220px;
+          background: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.7) 60%, #000 100%);
+          pointer-events: none;
+          z-index: 6;
+        }
         .sd-hero-particle-canvas {
           position: absolute;
           inset: 0;
