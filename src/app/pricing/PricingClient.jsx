@@ -4,7 +4,10 @@ import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import toast from "@/lib/toast";
 
-const CREDITS_PER_DOLLAR = 80;
+// GBP is the price base. Custom amounts use this rate (matches the
+// Starter tier's 450 credits / £3.50 ≈ 128.6 — rounded down so a
+// custom buy never beats the worst fixed plan).
+const CREDITS_PER_POUND = 128;
 
 // Credit costs per video at 1080p + High quality (the most realistic
 // price point for serious creators — matches what users see in the
@@ -14,10 +17,15 @@ const CREDITS_PER_DOLLAR = 80;
 //   15s = ceil(320 * 1.40625) = 450
 const CREDIT_COST = { s5: 169, s10: 282, s15: 450 };
 
+// Five-tier menu, GBP. `c` = credits, `p` = price in GBP. Each plan's
+// credits = videos × 450 (1 video = one 15s 1080p high-quality render),
+// so the on-card "X full videos" hook is a clean integer.
 const PLANS = [
-  { id: "starter",  n: "Starter",      c: 3000,  p: 37.50 },
-  { id: "power",    n: "Power Engine", c: 7000,  p: 87.50, hot: true },
-  { id: "quantum",  n: "Quantum Flow", c: 18000, p: 121 },
+  { id: "starter", n: "Starter", videos: 1,  c: 450,    p: 3.50 },
+  { id: "creator", n: "Creator", videos: 3,  c: 1350,   p: 10 },
+  { id: "pro",     n: "Pro",     videos: 7,  c: 3150,   p: 23, hot: true },
+  { id: "studio",  n: "Studio",  videos: 15, c: 6750,   p: 49 },
+  { id: "agency",  n: "Agency",  videos: 35, c: 15750,  p: 115 },
 ];
 
 // Dynamically calculate video counts from credits
@@ -46,10 +54,14 @@ const CURRENCY_SYMBOLS = {
 const ZERO_DECIMAL = new Set(["JPY", "KRW", "VND", "IDR"]);
 
 function useCurrency() {
-  const [currency, setCurrency] = useState({ code: "USD", symbol: "$", rate: 1, loading: true });
+  // Base is GBP — rate is "how many <code> per 1 GBP". A US viewer
+  // gets rate ≈ 1.27 (so £3.50 → $4.45). A GBP viewer's rate is 1.0.
+  const [currency, setCurrency] = useState({ code: "GBP", symbol: "£", rate: 1, loading: true });
 
   useEffect(() => {
-    const CACHE_KEY = "sdance_currency";
+    // v2 cache key — invalidates the previous USD-base cache so
+    // returning visitors don't read a stale USD rate as GBP.
+    const CACHE_KEY = "sdance_currency_v2";
     const CACHE_TTL = 3600 * 1000; // 1 hour
 
     const cached = (() => {
@@ -69,22 +81,22 @@ function useCurrency() {
 
     (async () => {
       try {
-        // 1. Detect user's currency via IP geolocation (free, no key needed)
+        // 1. Detect viewer's currency via IP geolocation (free, no key needed)
         const geoRes = await fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(4000) });
         const geo = await geoRes.json();
-        const code = geo?.currency || "USD";
+        const code = geo?.currency || "GBP";
         const symbol = CURRENCY_SYMBOLS[code] || code + " ";
 
-        if (code === "USD") {
+        if (code === "GBP") {
           const data = { code, symbol, rate: 1 };
           try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() })); } catch {}
           setCurrency({ ...data, loading: false });
           return;
         }
 
-        // 2. Fetch live exchange rate (free, no key needed)
+        // 2. Live FX rate — base is GBP, target is the viewer's currency.
         const fxRes = await fetch(
-          `https://open.er-api.com/v6/latest/USD`,
+          `https://open.er-api.com/v6/latest/GBP`,
           { signal: AbortSignal.timeout(5000) }
         );
         const fx = await fxRes.json();
@@ -96,8 +108,8 @@ function useCurrency() {
         try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ data, ts: Date.now() })); } catch {}
         setCurrency({ ...data, loading: false });
       } catch {
-        // Silently fall back to USD
-        setCurrency({ code: "USD", symbol: "$", rate: 1, loading: false });
+        // Silently fall back to GBP
+        setCurrency({ code: "GBP", symbol: "£", rate: 1, loading: false });
       }
     })();
   }, []);
@@ -105,12 +117,20 @@ function useCurrency() {
   return currency;
 }
 
-function formatPrice(usdAmount, { code, symbol, rate }) {
-  const converted = usdAmount * rate;
+function formatPrice(gbpAmount, { code, symbol, rate }) {
+  const converted = gbpAmount * rate;
   const isZeroDecimal = ZERO_DECIMAL.has(code);
 
-  if (code === "USD") {
-    return { whole: Math.floor(converted), cents: ".00".slice(0, 3) };
+  // For GBP we want to surface pence cleanly — £3.50 reads as "£3.50",
+  // not "£3" with the .50 invisible.
+  if (code === "GBP") {
+    const rounded = Math.round(converted * 100) / 100;
+    const whole = Math.floor(rounded);
+    const decimal = Math.round((rounded - whole) * 100);
+    return {
+      whole,
+      cents: decimal === 0 ? "" : "." + String(decimal).padStart(2, "0"),
+    };
   }
 
   if (isZeroDecimal) {
@@ -141,7 +161,9 @@ export default function PricingClient() {
   const successSessionId = searchParams?.get("session_id");
 
   const cur = useCurrency();
-  const isUSD = cur.code === "USD";
+  // Renamed from isBase when the base currency flipped. `isBase` ==
+  // "viewer is in our pricing currency" — now GBP.
+  const isBase = cur.code === "GBP";
 
   const fetchLiveCredits = async () => {
     try {
@@ -172,9 +194,9 @@ export default function PricingClient() {
   }, [success, session?.user?.id]);
 
   const customAmount = parseInt(customDollars) || 0;
-  // Credits based on USD equivalent (1 USD = 80 credits regardless of display currency)
-  const customUsdEquivalent = isUSD ? customAmount : customAmount / (cur.rate || 1);
-  const customCredits = Math.floor(customUsdEquivalent * CREDITS_PER_DOLLAR);
+  // Credits based on GBP equivalent (1 GBP = 128 credits regardless of display currency).
+  const customGbpEquivalent = isBase ? customAmount : customAmount / (cur.rate || 1);
+  const customCredits = Math.floor(customGbpEquivalent * CREDITS_PER_POUND);
 
   async function buy(id) {
     if (!session) { window.dispatchEvent(new CustomEvent("openSignIn")); return; }
@@ -200,10 +222,10 @@ export default function PricingClient() {
     <div style={{ background: "#0a0a0a", minHeight: "100vh", fontFamily: "Inter,sans-serif", padding: "60px 20px" }}>
       <div style={{ maxWidth: "960px", margin: "0 auto" }}>
         <h1 style={{ textAlign: "center", color: "#fff", fontSize: "2rem", fontWeight: 900, marginBottom: 8 }}>Simple Pricing</h1>
-        <p style={{ textAlign: "center", color: "#64748b", marginBottom: !isUSD ? 8 : 40 }}>Buy credits once. No subscriptions. Never expire.</p>
+        <p style={{ textAlign: "center", color: "#64748b", marginBottom: !isBase ? 8 : 40 }}>Buy credits once. No subscriptions. Never expire.</p>
 
         {/* Local currency badge */}
-        {!cur.loading && !isUSD && (
+        {!cur.loading && !isBase && (
           <div style={{ textAlign: "center", marginBottom: 32 }}>
             <span style={{
               display: "inline-flex", alignItems: "center", gap: 6,
@@ -257,13 +279,13 @@ export default function PricingClient() {
                       {cents && <span style={{ fontSize: "1.1rem", fontWeight: 700, color: "#94a3b8", alignSelf: "flex-end", marginBottom: 4 }}>{cents}</span>}
                     </div>
                   )}
-                  {!isUSD && !cur.loading && (
-                    <div style={{ fontSize: ".68rem", color: "#475569", marginTop: 2 }}>≈ ${plan.p} USD</div>
+                  {!isBase && !cur.loading && (
+                    <div style={{ fontSize: ".68rem", color: "#475569", marginTop: 2 }}>≈ £{plan.p} GBP</div>
                   )}
                 </div>
 
-                <div style={{ fontSize: ".82rem", color: "#D9FF00", fontWeight: 600, marginBottom: !isUSD && !cur.loading ? 4 : 8 }}>{plan.c.toLocaleString()} Credits</div>
-                {!isUSD && !cur.loading && (
+                <div style={{ fontSize: ".82rem", color: "#D9FF00", fontWeight: 600, marginBottom: !isBase && !cur.loading ? 4 : 8 }}>{plan.c.toLocaleString()} Credits</div>
+                {!isBase && !cur.loading && (
                   <div style={{ fontSize: ".72rem", color: "#475569", marginBottom: 8 }}>
                     {(() => {
                       // credits per 1 local unit, calculated from this plan's actual local price
@@ -312,28 +334,28 @@ export default function PricingClient() {
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
             <div style={{ fontSize: ".75rem", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "1px" }}>Custom Amount</div>
             <div style={{ fontSize: ".68rem", fontWeight: 600, color: "#D9FF00", background: "rgba(217, 255, 0,0.12)", border: "1px solid rgba(217, 255, 0,0.25)", borderRadius: 50, padding: "2px 10px" }}>
-              {isUSD
-                ? `$1 = ${CREDITS_PER_DOLLAR} credits`
+              {isBase
+                ? `£1 = ${CREDITS_PER_POUND} credits`
                 : (() => {
-                    const perUnit = CREDITS_PER_DOLLAR / (cur.rate || 1);
+                    const perUnit = CREDITS_PER_POUND / (cur.rate || 1);
                     if (perUnit >= 1) {
                       return `${cur.symbol}1 ≈ ${Math.floor(perUnit)} credits`;
                     }
                     // High-value currencies (PKR, INR, NGN…) — flip the display
-                    return `100 credits ≈ ${cur.symbol}${Math.round(1.25 * (cur.rate || 1))}`;
+                    return `100 credits ≈ ${cur.symbol}${Math.round(0.78 * (cur.rate || 1))}`;
                   })()
               }
             </div>
           </div>
           <p style={{ fontSize: ".82rem", color: "#475569", marginBottom: 20, marginTop: 0 }}>
-            {isUSD ? `Need an exact amount? Enter any dollar value and get exactly ${CREDITS_PER_DOLLAR} credits per dollar.` : `Enter any amount in ${cur.code} and get the equivalent credits at today's rate.`}
+            {isBase ? `Need an exact amount? Enter any pound value and get exactly ${CREDITS_PER_POUND} credits per £.` : `Enter any amount in ${cur.code} and get the equivalent credits at today's rate.`}
           </p>
 
           <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
-            {/* Dollar input */}
+            {/* Amount input */}
             <div style={{ flex: "1 1 180px" }}>
               <label style={{ display: "block", fontSize: ".72rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
-                Amount ({isUSD ? "USD" : cur.code})
+                Amount ({isBase ? "GBP" : cur.code})
               </label>
               <div style={{ position: "relative" }}>
                 <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#D9FF00", fontWeight: 700, fontSize: "1rem", pointerEvents: "none" }}>{cur.symbol}</span>
@@ -344,9 +366,9 @@ export default function PricingClient() {
                   style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px 10px 28px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 9, color: "#fff", fontSize: "1rem", fontWeight: 700, fontFamily: "inherit", outline: "none" }}
                 />
               </div>
-              {!isUSD && customCredits > 0 && !cur.loading && (
+              {!isBase && customCredits > 0 && !cur.loading && (
                 <div style={{ fontSize: ".7rem", color: "#475569", marginTop: 5 }}>
-                  ≈ ${customUsdEquivalent.toFixed(2)} USD equivalent
+                  ≈ £{customGbpEquivalent.toFixed(2)} GBP equivalent
                 </div>
               )}
             </div>
@@ -378,7 +400,7 @@ export default function PricingClient() {
         </div>
 
         <p style={{ textAlign: "center", color: "#475569", fontSize: ".75rem", marginTop: 28 }}>
-          Secure payments via Stripe · Credits never expire{!isUSD && !cur.loading ? ` · Charged in ${cur.code}` : ""}
+          Secure payments via Stripe · Credits never expire{!isBase && !cur.loading ? ` · Charged in ${cur.code}` : ""}
         </p>
 
         {/* FAQ */}
@@ -392,7 +414,7 @@ export default function PricingClient() {
               { q: "What is your refund policy?", a: "We offer refunds on unused credit purchases within 7 days of the transaction, provided no credits from that purchase have been spent. If you've already used credits or it's been more than 7 days, we're unable to issue a refund. To request one, reach out to us and we'll sort it out." },
               { q: "How many credits does a video cost?", a: "The cost depends on duration, resolution, and quality. The video counts shown above assume 1080p + High quality (the best output): 169 credits for 5s, 282 for 10s, 450 for 15s. Choosing 720p or Basic quality reduces the cost so your credits go further. You can see the exact cost in the generator before you click Generate." },
               { q: "Can I top up anytime?", a: "Yes — there are no subscriptions or lock-ins. You can buy more credits at any time, in any amount, and they stack with your existing balance." },
-              { q: "What currency will I be charged in?", a: "You'll be charged in your local currency — we automatically detect your location and present prices and checkout in your currency. USD is used as the base for credit pricing, but you pay in your local currency with no conversion surprises." },
+              { q: "What currency will I be charged in?", a: "You'll be charged in your local currency — we automatically detect your location and present prices and checkout in your currency. GBP is the base for credit pricing, but you pay in your local currency with no conversion surprises." },
             ].map(({ q, a }) => <FaqItem key={q} q={q} a={a} />)}
           </div>
         </div>

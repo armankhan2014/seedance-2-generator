@@ -5,13 +5,20 @@ import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2023-10-16" });
 
-const CREDITS_PER_DOLLAR = 80;
+// GBP is the price base. Custom-amount checkouts use this rate.
+// Matches the Starter tier's credits/£ ratio (450/£3.50 ≈ 128.6) so a
+// custom buy never undercuts the worst fixed plan.
+const CREDITS_PER_POUND = 128;
 
-// Fixed plans — USD base prices (in cents)
+// Fixed plans — GBP base prices (in pence). One credit-cost reference:
+// a 15s 1080p high-quality video = 450 credits, so each plan's video
+// count is `credits / 450`.
 const PLANS = {
-  starter: { name: "Starter Manifest", credits: 3000,  usdCents: 3750  },
-  power:   { name: "Power Engine",     credits: 7000,  usdCents: 8750  },
-  quantum: { name: "Quantum Flow",     credits: 18000, usdCents: 12100 },
+  starter: { name: "Starter", credits: 450,    gbpPence: 350    },
+  creator: { name: "Creator", credits: 1350,   gbpPence: 1000   },
+  pro:     { name: "Pro",     credits: 3150,   gbpPence: 2300   },
+  studio:  { name: "Studio",  credits: 6750,   gbpPence: 4900   },
+  agency:  { name: "Agency",  credits: 15750,  gbpPence: 11500  },
 };
 
 // Stripe zero-decimal currencies (amount = whole units, not cents)
@@ -45,18 +52,20 @@ const STRIPE_CURRENCIES = new Set([
 ]);
 
 /**
- * Convert a USD-cent amount to the target currency's Stripe unit.
- * e.g. 3750 USD cents + rate 280 (PKR/USD) = 10500 PKR (whole units, zero-decimal)
+ * Convert a GBP-pence amount to the target currency's Stripe unit.
+ * Rate is GBP → target currency (e.g. 1.27 USD per GBP).
+ *   £35.00 in pence (3500) × rate 1.27 = 44.45 USD → 4445 cents
+ * For zero-decimal currencies (JPY etc) we return whole units.
  */
-function convertAmount(usdCents, currency, rate) {
+function convertAmount(gbpPence, currency, rate) {
   const cur = currency.toUpperCase();
-  const usdAmount = usdCents / 100;           // e.g. 37.50
-  const localAmount = usdAmount * rate;        // e.g. 37.50 * 280 = 10500
+  const gbpAmount = gbpPence / 100;             // e.g. 35.00
+  const localAmount = gbpAmount * rate;          // e.g. 35.00 * 1.27 = 44.45
 
   if (ZERO_DECIMAL.has(cur)) {
-    return Math.round(localAmount);            // whole units
+    return Math.round(localAmount);              // whole units
   }
-  return Math.round(localAmount * 100);        // cents/paise/fils etc.
+  return Math.round(localAmount * 100);          // cents/paise/fils etc.
 }
 
 export async function POST(req) {
@@ -69,33 +78,34 @@ export async function POST(req) {
     const body = await req.json();
     const {
       plan,
-      amount: customDollars,
+      amount: customLocal,
       currency: reqCurrency,
       rate: reqRate,
     } = body;
 
-    // Resolve charge currency — fall back to USD if unsupported
-    const rawCurrency = (reqCurrency || "USD").toLowerCase();
-    const chargeCurrency = STRIPE_CURRENCIES.has(rawCurrency) ? rawCurrency : "usd";
-    const exchangeRate   = (chargeCurrency !== "usd" && reqRate > 0) ? Number(reqRate) : 1;
+    // Resolve charge currency — fall back to GBP if unsupported.
+    // Rate is GBP → chargeCurrency (1.0 if GBP, ~1.27 for USD, etc.).
+    const rawCurrency = (reqCurrency || "GBP").toLowerCase();
+    const chargeCurrency = STRIPE_CURRENCIES.has(rawCurrency) ? rawCurrency : "gbp";
+    const exchangeRate   = (chargeCurrency !== "gbp" && reqRate > 0) ? Number(reqRate) : 1;
 
     let planData;
 
     if (plan === "custom") {
-      const localAmount = parseFloat(customDollars);
+      const localAmount = parseFloat(customLocal);
       if (!localAmount || localAmount <= 0) {
         return NextResponse.json({ error: "Please enter a valid amount" }, { status: 400 });
       }
-      // Convert local amount to USD to calculate credits (1 USD = 80 credits)
-      const usdEquivalent = chargeCurrency === "usd" ? localAmount : localAmount / exchangeRate;
-      if (usdEquivalent < 0.5) {
+      // Convert local-currency amount → GBP equivalent → credits.
+      const gbpEquivalent = chargeCurrency === "gbp" ? localAmount : localAmount / exchangeRate;
+      if (gbpEquivalent < 0.5) {
         return NextResponse.json({ error: "Minimum amount is too small" }, { status: 400 });
       }
-      const credits = Math.floor(usdEquivalent * CREDITS_PER_DOLLAR);
+      const credits = Math.floor(gbpEquivalent * CREDITS_PER_POUND);
       planData = {
         name: `Custom — ${credits.toLocaleString()} Credits`,
         credits,
-        usdCents: Math.round(usdEquivalent * 100),
+        gbpPence: Math.round(gbpEquivalent * 100),
       };
     } else {
       planData = PLANS[plan];
@@ -104,8 +114,8 @@ export async function POST(req) {
       }
     }
 
-    // Convert to charge currency
-    const stripeAmount = convertAmount(planData.usdCents, chargeCurrency, exchangeRate);
+    // Convert GBP-pence to the charge currency.
+    const stripeAmount = convertAmount(planData.gbpPence, chargeCurrency, exchangeRate);
 
     const baseUrl = process.env.NEXTAUTH_URL || "https://seedance.visualseffect.com";
 
@@ -128,7 +138,7 @@ export async function POST(req) {
         userEmail: session.user.email,
         credits: String(planData.credits),
         plan: plan,
-        usdCents: String(planData.usdCents),
+        gbpPence: String(planData.gbpPence),
         chargeCurrency,
       },
       success_url: baseUrl + "/pricing?success=true&credits=" + planData.credits + "&session_id={CHECKOUT_SESSION_ID}",
