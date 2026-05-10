@@ -1362,33 +1362,61 @@ export default function CinematicHero() {
         .sd-hero-reset-btn:hover { background: rgba(220, 255, 0, 0.2); }
 
         @media (max-width: 768px) {
-          .sd-hero-h1 { font-size: 42px; }
-          .sd-hero-morph-container { min-width: 280px; }
-          .sd-hero-morph-cursor { height: 38px; }
-          .sd-hero-stats { gap: 24px; }
-          .sd-hero-ring-wrap { width: 80px; height: 80px; }
-          .sd-hero-ring-value { font-size: 16px; }
+          /* MOBILE LAYOUT FIX — stop forcing min-height: 100vh.
+             On short viewports (iPhone SE @ 568 px, the iOS bottom
+             URL bar that appears on scroll, etc.) the centred flex
+             layout was clipping content, and the bottom feather
+             created a dark band over the stats. Letting the hero
+             be content-sized gives a clean, predictable layout
+             that doesn't reflow when the mobile browser's URL bar
+             collapses. */
+          .sd-hero {
+            min-height: auto !important;
+            padding: 96px 18px 56px !important;
+            justify-content: flex-start !important;
+          }
+          /* Drop the bottom feather on mobile — the hero is now
+             content-sized and sits flush above the (already dark)
+             gallery section. The feather was a safety net for the
+             desktop 100vh layout; on mobile it just crops content. */
+          .sd-hero::after { display: none !important; }
+          /* Skip the masked-grid overlay too — the radial mask
+             interacts badly with short viewports and adds visual
+             noise without the props to anchor the rule-of-thirds
+             feel. */
+          .sd-hero::before { display: none !important; }
 
-          /* MOBILE CLEANUP — the 7 physics props crowd the small
-             viewport and overlap the headline. Hide the whole
-             playground + its UX hints on phones. The hero stays
-             cinematic via the particle canvas, smoke blobs, grid
-             overlay, morphing word, and ring stats. */
+          .sd-hero-content { margin-top: 0 !important; }
+          .sd-hero-h1 { font-size: 38px; letter-spacing: -1.5px; }
+          .sd-hero-morph-container { min-width: 240px; }
+          .sd-hero-morph-cursor { height: 34px; }
+          .sd-hero-badge { margin-bottom: 22px; }
+          .sd-hero-subtitle { margin-bottom: 28px; font-size: 16px; }
+          .sd-hero-cta-buttons {
+            margin-bottom: 44px;
+            flex-wrap: wrap;
+          }
+          .sd-hero-btn { padding: 14px 24px; font-size: 14px; }
+          .sd-hero-stats {
+            gap: 18px;
+            flex-wrap: wrap;
+            row-gap: 24px;
+          }
+          .sd-hero-ring-wrap { width: 72px; height: 72px; }
+          .sd-hero-ring-value { font-size: 15px; }
+          .sd-hero-stat-label { font-size: 10px; letter-spacing: 2px; }
+
+          /* Hide the desktop-only physics playground + its UX hints. */
           .sd-hero .sd-hero-phys-obj { display: none !important; }
           .sd-hero-reset-btn { display: none !important; }
           .sd-hero-play-hint { display: none !important; }
 
           /* Cheaper smoke blobs on mobile — kill the cyan one and
-             halve the blur radius on the remaining two. Big blur on
-             a 600 px element is the single most expensive paint on
-             mobile GPUs. */
+             halve the blur on the remaining two. Big blur on a
+             600 px element is the most expensive mobile-GPU paint. */
           .sd-hero-smoke-2 { display: none !important; }
           .sd-hero-smoke-1,
           .sd-hero-smoke-3 { filter: blur(40px) !important; }
-
-          /* Pull headline content up — without props, the centred
-             flex layout has too much air. */
-          .sd-hero-content { margin-top: 24px; }
         }
 
         /* Reduced-motion respect: render a static cinematic hero,
