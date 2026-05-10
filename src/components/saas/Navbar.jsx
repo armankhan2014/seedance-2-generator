@@ -102,6 +102,12 @@ export default function Navbar() {
     { href: "/generate", label: "Generate" },
     { href: "/creations", label: "Gallery" },
     { href: "/pricing", label: "Pricing" },
+    // Cross-subdomain link to the community site. Rendered as a
+    // plain <a> by NavLink so the browser does a full navigation
+    // (correct since the session cookie is shared at .visualseffect.com
+    // and there's no benefit to Next's client-side routing across
+    // origins).
+    { href: "https://community.visualseffect.com", label: "Community", external: true },
   ];
 
   const handleSignIn = () => window.dispatchEvent(new CustomEvent("openSignIn"));
@@ -144,41 +150,48 @@ export default function Navbar() {
   // Hover: lift 1 px + soft lime drop-shadow + lime text. Active:
   // lime tint background + lime border + persistent lime glow.
   // Per-link motion, no global indicator — clean, tactile.
-  const NavLink = ({ href, label, active }) => {
+  //
+  // Renders <a> for external URLs (Community → community.visualseffect.com)
+  // and Next's <Link> for internal routes. Active styling is never
+  // applied to externals — they're "leaves" the user navigates AWAY
+  // through, not pages of this app.
+  const NavLink = ({ href, label, active, external }) => {
     const [hovered, setHovered] = useState(false);
+    const Tag = external ? "a" : Link;
+    const navStyle = {
+      padding: "6px 14px",
+      borderRadius: "8px",
+      fontSize: "0.82rem",
+      fontWeight: 600,
+      textDecoration: "none",
+      whiteSpace: "nowrap",
+      color: active ? "#fff" : hovered ? "#D9FF00" : "#64748b",
+      background: active
+        ? "rgba(217,255,0,0.14)"
+        : hovered
+        ? "rgba(217,255,0,0.06)"
+        : "transparent",
+      border: active
+        ? "1px solid rgba(217,255,0,0.35)"
+        : "1px solid transparent",
+      transform: hovered ? "translateY(-1px)" : "translateY(0)",
+      boxShadow: active
+        ? "0 4px 14px -4px rgba(217,255,0,0.45), 0 0 0 1px rgba(217,255,0,0.2) inset"
+        : hovered
+        ? "0 4px 14px -6px rgba(217,255,0,0.35)"
+        : "none",
+      transition:
+        "transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), background 200ms ease, color 200ms ease, box-shadow 200ms ease, border-color 200ms ease",
+    };
     return (
-      <Link
+      <Tag
         href={href}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
-        style={{
-          padding: "6px 14px",
-          borderRadius: "8px",
-          fontSize: "0.82rem",
-          fontWeight: 600,
-          textDecoration: "none",
-          whiteSpace: "nowrap",
-          color: active ? "#fff" : hovered ? "#D9FF00" : "#64748b",
-          background: active
-            ? "rgba(217,255,0,0.14)"
-            : hovered
-            ? "rgba(217,255,0,0.06)"
-            : "transparent",
-          border: active
-            ? "1px solid rgba(217,255,0,0.35)"
-            : "1px solid transparent",
-          transform: hovered ? "translateY(-1px)" : "translateY(0)",
-          boxShadow: active
-            ? "0 4px 14px -4px rgba(217,255,0,0.45), 0 0 0 1px rgba(217,255,0,0.2) inset"
-            : hovered
-            ? "0 4px 14px -6px rgba(217,255,0,0.35)"
-            : "none",
-          transition:
-            "transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), background 200ms ease, color 200ms ease, box-shadow 200ms ease, border-color 200ms ease",
-        }}
+        style={navStyle}
       >
         {label}
-      </Link>
+      </Tag>
     );
   };
 
@@ -224,7 +237,13 @@ export default function Navbar() {
           {/* Desktop nav */}
           <nav style={{ display: "flex", gap: "4px", flex: 1, justifyContent: "center" }} className="desktop-nav">
             {links.map(l => (
-              <NavLink key={l.href} href={l.href} label={l.label} active={pathname === l.href} />
+              <NavLink
+                key={l.href}
+                href={l.href}
+                label={l.label}
+                external={l.external}
+                active={!l.external && pathname === l.href}
+              />
             ))}
           </nav>
 
@@ -404,19 +423,23 @@ export default function Navbar() {
             flexDirection: "column",
             gap: "8px",
           }} className="mobile-menu">
-            {links.map(l => (
-              <Link key={l.href} href={l.href}
-                onClick={() => setMenuOpen(false)}
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: "8px",
-                  fontSize: "0.9rem",
-                  fontWeight: 600,
-                  textDecoration: "none",
-                  color: pathname === l.href ? "#fff" : "#94a3b8",
-                  background: pathname === l.href ? "rgba(217, 255, 0,0.15)" : "rgba(255,255,255,0.03)",
-                }}>{l.label}</Link>
-            ))}
+            {links.map(l => {
+              const Tag = l.external ? "a" : Link;
+              const active = !l.external && pathname === l.href;
+              return (
+                <Tag key={l.href} href={l.href}
+                  onClick={() => setMenuOpen(false)}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: "8px",
+                    fontSize: "0.9rem",
+                    fontWeight: 600,
+                    textDecoration: "none",
+                    color: active ? "#fff" : "#94a3b8",
+                    background: active ? "rgba(217, 255, 0,0.15)" : "rgba(255,255,255,0.03)",
+                  }}>{l.label}</Tag>
+              );
+            })}
             <button
               onClick={() => { setMenuOpen(false); setContactOpen(true); }}
               style={{ padding: "10px 14px", borderRadius: "8px", fontSize: "0.9rem", fontWeight: 600, textAlign: "left", cursor: "pointer", color: "#94a3b8", background: "rgba(255,255,255,0.03)", border: "none", fontFamily: "inherit" }}>
