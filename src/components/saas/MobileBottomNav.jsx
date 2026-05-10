@@ -39,16 +39,6 @@ const TABS = [
     ),
   },
   {
-    href: `${COMMUNITY_URL}/?focus=search`,
-    label: "Search",
-    icon: (
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <circle cx="11" cy="11" r="8" />
-        <path d="m21 21-4.3-4.3" />
-      </svg>
-    ),
-  },
-  {
     href: `${COMMUNITY_URL}/messages`,
     label: "Inbox",
     icon: (
