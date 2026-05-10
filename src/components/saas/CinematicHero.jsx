@@ -187,7 +187,22 @@ export default function CinematicHero() {
     resize();
     window.addEventListener("resize", resize);
 
-    const PARTICLE_COUNT = isMobile ? 30 : 80;
+    // Tuned-down particle setup. The previous 80-particle version
+    // ran createRadialGradient + 2 arcs PER PARTICLE PER FRAME =
+    // ~240 paint ops/frame at 60 fps, which was blocking the main
+    // thread badly enough to freeze hover paints on the navbar
+    // (Chrome JS exec timed out at 45 s during diagnosis).
+    //
+    // Three changes that combined cut canvas cost ~10×:
+    //   • 80 → 30 particles on desktop (matches mobile).
+    //   • Drop createRadialGradient — the most expensive op. Each
+    //     particle now renders as two solid-fill arcs (a faint
+    //     glow halo + a bright core). Visually almost identical
+    //     thanks to globalAlpha; computationally trivial.
+    //   • Cap to ~30 fps via a 33 ms minimum frame interval.
+    //     Atmospheric particles don't need 60 fps; halving the
+    //     render rate gives the rest of the page room to breathe.
+    const PARTICLE_COUNT = isMobile ? 20 : 30;
     const particles = [];
     for (let i = 0; i < PARTICLE_COUNT; i++) {
       particles.push({
@@ -204,8 +219,19 @@ export default function CinematicHero() {
       });
     }
 
-    function tick() {
+    let lastTickTs = 0;
+    const MIN_FRAME_MS = 33; // ~30 fps cap
+
+    function tick(now) {
       if (!running) return;
+      // Throttle to 30 fps. Schedule the next frame regardless so
+      // the loop doesn't stall.
+      if (now - lastTickTs < MIN_FRAME_MS) {
+        rafId = requestAnimationFrame(tick);
+        return;
+      }
+      lastTickTs = now;
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       for (const p of particles) {
         p.x += p.vx + Math.sin(p.pulse) * p.wobble * 0.15;
@@ -219,19 +245,20 @@ export default function CinematicHero() {
         if (p.x > canvas.width + 10) p.x = -10;
         const alpha = p.opacity * (Math.sin(p.pulse) * 0.3 + 0.7);
         const c = p.isWhite ? "255,255,255" : "220,255,0";
-        const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * 5);
-        grad.addColorStop(0, "rgba(" + c + "," + alpha * 0.5 + ")");
-        grad.addColorStop(0.4, "rgba(" + c + "," + alpha * 0.2 + ")");
-        grad.addColorStop(1, "rgba(" + c + ",0)");
-        ctx.fillStyle = grad;
+        // Soft halo (large + transparent) — uses globalAlpha
+        // instead of a per-particle radial gradient.
+        ctx.globalAlpha = alpha * 0.18;
+        ctx.fillStyle = "rgb(" + c + ")";
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * 5, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, p.size * 4, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = "rgba(" + c + "," + alpha + ")";
+        // Bright core
+        ctx.globalAlpha = alpha;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
         ctx.fill();
       }
+      ctx.globalAlpha = 1;
       rafId = requestAnimationFrame(tick);
     }
     rafId = requestAnimationFrame(tick);
