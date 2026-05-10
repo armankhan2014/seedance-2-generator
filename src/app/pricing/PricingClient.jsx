@@ -236,6 +236,35 @@ export default function PricingClient() {
     return () => { delete window.__initPricingTilt; };
   });
 
+  // Scroll-reveal stagger — applies to BOTH mobile and desktop. Each
+  // [data-reveal] element fades in + slides up as it enters the
+  // viewport, with a delay step driven by data-reveal-delay so groups
+  // appear sequentially (cards reveal one after the other). Respects
+  // prefers-reduced-motion: reduce by short-circuiting to "all
+  // visible" instantly.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const targets = document.querySelectorAll("[data-reveal]");
+    if (reduced) {
+      targets.forEach((el) => el.classList.add("is-visible"));
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.1, rootMargin: "0px 0px -40px 0px" }
+    );
+    targets.forEach((el) => observer.observe(el));
+    return () => observer.disconnect();
+  }, [session?.user?.id, cur.loading]);
+
   useEffect(() => {
     if (!success || !session) return;
     const purchased = parseInt(successCredits || "0");
@@ -309,7 +338,7 @@ export default function PricingClient() {
       />
       <div style={{ maxWidth: 1180, margin: "0 auto" }}>
         {/* ── Hero ────────────────────────────────────────────────── */}
-        <div style={{ textAlign: "center", marginBottom: 28 }}>
+        <div data-reveal style={{ textAlign: "center", marginBottom: 28 }}>
           <p
             style={{
               fontSize: 11,
@@ -425,23 +454,26 @@ export default function PricingClient() {
             marginBottom: 24,
           }}
         >
-          {PLANS.map((plan) => {
+          {PLANS.map((plan, idx) => {
             const { whole, cents } = formatPrice(plan.p, cur);
             const isPro = plan.hot;
             return (
-              // Outer wrapper owns the static lift (only Pro). The
-              // inner .pricing-card is what vanilla-tilt mutates, so
-              // its transform doesn't fight the translateY.
+              // Outer wrapper owns the static lift (only Pro) + the
+              // gentle float animation, plus the scroll-reveal stagger
+              // hook. The inner .pricing-card is what vanilla-tilt
+              // mutates, so its transform doesn't fight the lift.
               <div
                 key={plan.id}
+                data-reveal
+                data-reveal-delay={idx + 1}
+                className={isPro ? "pricing-card-lift pro-float" : "pricing-card-lift"}
                 style={{
-                  transform: isPro ? "translateY(-6px)" : "none",
                   position: "relative",
                   zIndex: 2,
                 }}
               >
               <div
-                className="pricing-card"
+                className={isPro ? "pricing-card pricing-card-pro" : "pricing-card"}
                 style={{
                   position: "relative",
                   // Cards sit above the cursor spotlight (z-index 1).
@@ -646,12 +678,15 @@ export default function PricingClient() {
 
         {/* ── Custom amount card ──────────────────────────────────── */}
         <div
+          data-reveal
           style={{
             background: "#0d0d0f",
             border: "1px solid rgba(217, 255, 0,0.30)",
             borderRadius: 18,
             padding: "26px 26px 24px",
             marginBottom: 28,
+            position: "relative",
+            zIndex: 2,
           }}
         >
           <div
@@ -877,6 +912,7 @@ export default function PricingClient() {
 
         {/* ── Zoom-call value prop (kept, restyled subtler) ──────── */}
         <div
+          data-reveal
           style={{
             background: "rgba(217, 255, 0, 0.04)",
             border: "1px solid rgba(217, 255, 0, 0.18)",
@@ -888,6 +924,8 @@ export default function PricingClient() {
             textAlign: "center",
             maxWidth: 720,
             margin: "0 auto 56px",
+            position: "relative",
+            zIndex: 2,
           }}
         >
           🎥 After your purchase, we&apos;ll personally walk you through the
@@ -897,7 +935,7 @@ export default function PricingClient() {
         </div>
 
         {/* ── FAQ ─────────────────────────────────────────────────── */}
-        <div>
+        <div data-reveal style={{ position: "relative", zIndex: 2 }}>
           <h2
             style={{
               textAlign: "center",
@@ -973,6 +1011,107 @@ export default function PricingClient() {
             grid-template-columns: 1fr !important;
           }
         }
+        /* ── Scroll-reveal stagger ───────────────────────────────
+           Every [data-reveal] element starts hidden + nudged 18px
+           down. The observer adds .is-visible when it enters the
+           viewport, fading + sliding it into place. data-reveal-delay
+           steps the cards so they cascade in sequence. */
+        [data-reveal] {
+          opacity: 0;
+          transform: translateY(18px);
+          transition:
+            opacity 0.55s cubic-bezier(0.22, 0.61, 0.36, 1),
+            transform 0.55s cubic-bezier(0.22, 0.61, 0.36, 1);
+          will-change: opacity, transform;
+        }
+        [data-reveal].is-visible {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        [data-reveal][data-reveal-delay="1"] { transition-delay: 0.05s; }
+        [data-reveal][data-reveal-delay="2"] { transition-delay: 0.12s; }
+        [data-reveal][data-reveal-delay="3"] { transition-delay: 0.20s; }
+        [data-reveal][data-reveal-delay="4"] { transition-delay: 0.28s; }
+        [data-reveal][data-reveal-delay="5"] { transition-delay: 0.36s; }
+
+        /* ── Pro card: gentle continuous float ──────────────────
+           Replaces the static translateY(-6px). The wrapper floats
+           between -3 and -10px so the Pro card looks alive on every
+           device — including mobile, where there's no tilt to add
+           motion. */
+        @keyframes pro-float {
+          0%, 100% { transform: translateY(-3px); }
+          50%      { transform: translateY(-10px); }
+        }
+        .pro-float {
+          animation: pro-float 4.2s ease-in-out infinite;
+        }
+
+        /* ── Pro card: rotating conic glow ──────────────────────
+           A thin lime arc that orbits the Pro card border. CSS-only,
+           ~zero CPU thanks to compositor-only transform animation.
+           Sits behind the card content via z-index: -1 on ::before. */
+        .pricing-card-pro {
+          isolation: isolate;
+        }
+        .pricing-card-pro::before {
+          content: "";
+          position: absolute;
+          inset: -2px;
+          border-radius: 20px;
+          padding: 2px;
+          background: conic-gradient(
+            from 0deg,
+            transparent 0deg,
+            rgba(217, 255, 0, 0.55) 45deg,
+            rgba(217, 255, 0, 0.95) 70deg,
+            rgba(217, 255, 0, 0.55) 95deg,
+            transparent 140deg,
+            transparent 360deg
+          );
+          -webkit-mask:
+            linear-gradient(#fff 0 0) content-box,
+            linear-gradient(#fff 0 0);
+          -webkit-mask-composite: xor;
+                  mask-composite: exclude;
+          animation: pro-glow-spin 4s linear infinite;
+          pointer-events: none;
+          z-index: -1;
+          opacity: 0.85;
+        }
+        @keyframes pro-glow-spin {
+          to { transform: rotate(360deg); }
+        }
+
+        /* ── Mobile-only tap-press feedback ─────────────────────
+           Tilt + spotlight don't run on touch devices, so the cards
+           need their own tactile cue. Tap → quick scale-down. Skipped
+           on hover-capable devices so it doesn't fight vanilla-tilt. */
+        @media (hover: none) {
+          .pricing-card {
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+          }
+          .pricing-card:active {
+            transform: scale(0.97);
+          }
+        }
+
+        /* ── Reduced-motion respect ─────────────────────────────
+           Anyone with prefers-reduced-motion: reduce gets the page
+           with all reveals already shown and the floating + spinning
+           animations disabled. */
+        @media (prefers-reduced-motion: reduce) {
+          [data-reveal] {
+            opacity: 1 !important;
+            transform: none !important;
+            transition: none !important;
+          }
+          .pro-float,
+          .pricing-card-pro::before {
+            animation: none !important;
+          }
+        }
+
         /* Cursor-following spotlight glow. */
         .cursor-spotlight {
           position: fixed;
