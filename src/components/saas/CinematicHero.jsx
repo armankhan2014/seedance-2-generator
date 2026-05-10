@@ -51,6 +51,13 @@ export default function CinematicHero() {
   useEffect(() => {
     const el = morphRef.current;
     if (!el) return;
+    // Respect reduced-motion: keep the first word, no morphing.
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
     let i = 0;
     const id = setInterval(() => {
       el.classList.add("sd-hero-morph-word--exiting");
@@ -71,6 +78,27 @@ export default function CinematicHero() {
 
   // ── Ring stats animation (triggered when stats enter viewport) ─
   useEffect(() => {
+    // Reduced-motion: render the final values immediately, no
+    // animation. Keeps the page accessible without forcing motion.
+    const reduced =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) {
+      const finals = [
+        { ring: ring1Ref.current, num: num1Ref.current, target: 12847, percent: 0.85, decimal: 0 },
+        { ring: ring2Ref.current, num: num2Ref.current, target: 3200,  percent: 0.7,  decimal: 0 },
+        { ring: ring3Ref.current, num: num3Ref.current, target: 4.9,   percent: 0.98, decimal: 1 },
+      ];
+      const C0 = 502.65;
+      finals.forEach((cfg) => {
+        if (cfg.ring) cfg.ring.style.strokeDashoffset = String(C0 * (1 - cfg.percent));
+        if (cfg.num)
+          cfg.num.textContent =
+            cfg.decimal > 0 ? cfg.target.toFixed(cfg.decimal) : cfg.target.toLocaleString();
+      });
+      return;
+    }
+
     const C = 502.65;
     const ringConfigs = [
       { ring: ring1Ref.current, num: num1Ref.current, target: 12847, percent: 0.85, decimal: 0 },
@@ -130,6 +158,27 @@ export default function CinematicHero() {
     const heroEl = heroRef.current;
     const canvas = canvasRef.current;
     if (!heroEl || !canvas) return;
+
+    // Bail entirely if the user prefers reduced motion — the static
+    // SVGs + headline + stats still render via CSS / React, but no
+    // rAF / physics / particles tick.
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+
+    // Mobile detection — phones get a calmer hero (no physics props,
+    // no drag, fewer particles). The CSS already hides the seven
+    // .sd-hero-phys-obj DOM nodes on ≤768 px, but we also skip the
+    // physics + drag wiring entirely so we're not running a rAF
+    // loop over invisible elements.
+    const isMobile =
+      typeof window !== "undefined" &&
+      (window.matchMedia("(max-width: 768px)").matches ||
+        window.matchMedia("(hover: none)").matches);
+
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
@@ -147,9 +196,11 @@ export default function CinematicHero() {
     resize();
     window.addEventListener("resize", resize);
 
-    // 80 floating bubbles, lime-yellow with a few white sparkles.
+    // Particle count tuned for device class: 30 on mobile (smaller
+    // canvases, less GPU headroom), 80 on desktop.
+    const PARTICLE_COUNT = isMobile ? 30 : 80;
     const particles = [];
-    for (let i = 0; i < 80; i++) {
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
       particles.push({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
@@ -164,8 +215,12 @@ export default function CinematicHero() {
       });
     }
 
-    // Build the physics objects from the rendered DOM.
-    const physEls = heroEl.querySelectorAll(".sd-hero-phys-obj");
+    // Build the physics objects from the rendered DOM. Skipped on
+    // mobile — the DOM nodes are display:none there, no need to
+    // measure or animate them.
+    const physEls = isMobile
+      ? []
+      : heroEl.querySelectorAll(".sd-hero-phys-obj");
     const objects = [];
     const initial = new Map();
     physEls.forEach((el) => {
@@ -394,12 +449,33 @@ export default function CinematicHero() {
     function onVis() {
       if (document.hidden) {
         running = false;
-      } else if (!running) {
+      } else if (!running && heroVisible) {
         running = true;
         rafId = requestAnimationFrame(tick);
       }
     }
     document.addEventListener("visibilitychange", onVis);
+
+    // Pause when the hero scrolls fully off-screen. The user is
+    // reading the gallery / how-it-works / FAQ — no point burning
+    // CPU + GPU cycles on a hero they can't see. Threshold 0 means
+    // we resume as soon as a single pixel comes back into view.
+    let heroVisible = true;
+    const visObs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          heroVisible = e.isIntersecting;
+          if (!heroVisible) {
+            running = false;
+          } else if (!running && !document.hidden) {
+            running = true;
+            rafId = requestAnimationFrame(tick);
+          }
+        }
+      },
+      { threshold: 0 }
+    );
+    visObs.observe(heroEl);
 
     // Drag handlers per object.
     const cleanups = [];
@@ -526,6 +602,7 @@ export default function CinematicHero() {
       cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
       document.removeEventListener("visibilitychange", onVis);
+      visObs.disconnect();
       cleanups.forEach((fn) => fn());
       if (resetBtn) resetBtn.removeEventListener("click", onReset);
     };
@@ -1291,6 +1368,40 @@ export default function CinematicHero() {
           .sd-hero-stats { gap: 24px; }
           .sd-hero-ring-wrap { width: 80px; height: 80px; }
           .sd-hero-ring-value { font-size: 16px; }
+
+          /* MOBILE CLEANUP — the 7 physics props crowd the small
+             viewport and overlap the headline. Hide the whole
+             playground + its UX hints on phones. The hero stays
+             cinematic via the particle canvas, smoke blobs, grid
+             overlay, morphing word, and ring stats. */
+          .sd-hero .sd-hero-phys-obj { display: none !important; }
+          .sd-hero-reset-btn { display: none !important; }
+          .sd-hero-play-hint { display: none !important; }
+
+          /* Cheaper smoke blobs on mobile — kill the cyan one and
+             halve the blur radius on the remaining two. Big blur on
+             a 600 px element is the single most expensive paint on
+             mobile GPUs. */
+          .sd-hero-smoke-2 { display: none !important; }
+          .sd-hero-smoke-1,
+          .sd-hero-smoke-3 { filter: blur(40px) !important; }
+
+          /* Pull headline content up — without props, the centred
+             flex layout has too much air. */
+          .sd-hero-content { margin-top: 24px; }
+        }
+
+        /* Reduced-motion respect: render a static cinematic hero,
+           skip every CSS animation. Particles + physics rAF are
+           also short-circuited from the JS side (see useEffect). */
+        @media (prefers-reduced-motion: reduce) {
+          .sd-hero *,
+          .sd-hero *::before,
+          .sd-hero *::after {
+            animation: none !important;
+            transition: none !important;
+          }
+          .sd-hero-particle-canvas { display: none; }
         }
       `}</style>
     </section>
