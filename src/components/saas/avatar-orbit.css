@@ -39,7 +39,12 @@
   position: absolute;
   transform: translate(-50%, -50%);
   font-size: var(--emoji-size, 10px);
-  filter: drop-shadow(0 0 4px rgba(217, 255, 0, 0.55));
+  /* Stronger lime glow so the emojis read clearly against the dark
+     navbar at small (~14 px) sizes. Two shadows: a tight bright
+     core + a softer outer halo. */
+  filter:
+    drop-shadow(0 0 3px rgba(217, 255, 0, 0.95))
+    drop-shadow(0 0 8px rgba(217, 255, 0, 0.45));
   user-select: none;
   display: block;
   line-height: 1;

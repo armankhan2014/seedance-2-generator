@@ -10,10 +10,10 @@ import ToastContainer from "./ToastContainer";
 import "./avatar-orbit.css";
 
 // Three film-emoji satellites that orbit the avatar (Variant A from
-// /demo/avatar-magic). Slow 16 s loop, 120° apart, drop-shadow lime
-// glow. Tweak emojis or duration here in one place.
+// /demo/avatar-magic). 120° apart, drop-shadow lime glow.
+// Tweak emojis / loop speed here in one place.
 const ORBIT_EMOJIS = ["🎬", "✨", "🎥"];
-const ORBIT_DURATION_S = 16;
+const ORBIT_DURATION_S = 10; // faster than demo's 16s so it reads as motion at nav scale
 
 export default function Navbar() {
   const { data: session } = useSession();
@@ -129,9 +129,12 @@ export default function Navbar() {
   const Avatar = ({ size = 24, tilt = false }) => {
     // Orbit math — emoji size + radius scale with the avatar so the
     // satellites stay proportional at every render (24 px nav avatar
-    // vs 28 px mobile-menu avatar).
-    const orbitR = size * 0.85;
-    const emojiSize = Math.max(9, Math.round(size * 0.4));
+    // vs 28 px mobile-menu avatar). Generous defaults so the orbit
+    // is clearly visible at the small nav scale, not lost in the
+    // chrome — emojis sit at ~14 px and float ~9 px past the
+    // avatar's edge on a 24 px avatar.
+    const orbitR = size * 1.05;
+    const emojiSize = Math.max(13, Math.round(size * 0.6));
 
     const inner = displayImage ? (
       <img
