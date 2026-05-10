@@ -1,12 +1,13 @@
 /*
  * Top-nav hover styles — pure CSS so the browser handles hover at
- * the compositor level with zero JS round-trip. Every hover state
- * was previously wired through React useState + onMouseEnter
- * handlers, which meant each cursor move triggered a re-render
- * before the style changed. If anything was blocking the main
- * thread (the cinematic hero's 80-particle rAF loop, for example)
- * the re-render queued behind it and the user perceived 100s+ of
- * ms of lag. Pure :hover sidesteps the entire pipeline.
+ * the compositor level with zero JS round-trip.
+ *
+ * INSTANT mode: no transitions. Hover state changes in a single
+ * frame, same way Apple's iOS / macOS Human Interface buttons
+ * respond. The previous 130–150 ms transitions, while short on
+ * paper, were perceptible as "fade in" and the user explicitly
+ * asked for instant. Active page → hover → active is now a
+ * straight state flip with no animation.
  *
  * Imported once at module level by Navbar.jsx so the rules ship
  * in the SSR <head> and apply before first paint — no FOUC.
@@ -25,22 +26,15 @@
   color: #64748b;
   background: transparent;
   border: 1px solid transparent;
-  transform: translateY(0);
   box-shadow: none;
   font-family: inherit;
   cursor: pointer;
-  transition:
-    transform 150ms ease-out,
-    background 130ms ease-out,
-    color 130ms ease-out,
-    box-shadow 150ms ease-out,
-    border-color 130ms ease-out;
+  transition: none;
 }
 
 .sd-nav-link:hover {
   color: #D9FF00;
   background: rgba(217, 255, 0, 0.06);
-  transform: translateY(-1px);
   box-shadow: 0 4px 14px -6px rgba(217, 255, 0, 0.35);
 }
 
@@ -52,7 +46,6 @@
   color: #fff;
   background: rgba(217, 255, 0, 0.14);
   border-color: rgba(217, 255, 0, 0.35);
-  transform: translateY(0);
   box-shadow:
     0 4px 14px -4px rgba(217, 255, 0, 0.45),
     0 0 0 1px rgba(217, 255, 0, 0.2) inset;
@@ -69,7 +62,7 @@
   cursor: pointer;
   white-space: nowrap;
   font-family: inherit;
-  transition: background 130ms ease-out, color 130ms ease-out;
+  transition: none;
 }
 .sd-nav-contact:hover {
   background: rgba(255, 255, 255, 0.10);
@@ -87,15 +80,11 @@
   font-weight: 700;
   font-family: inherit;
   white-space: nowrap;
-  transform: translateY(0);
-  box-shadow: 0 0 0 1px rgba(217, 255, 0, 0);
-  transition:
-    opacity 0.4s,
-    transform 150ms ease-out,
-    box-shadow 150ms ease-out;
+  /* Only animate the opacity (used by the credits-refresh state
+     during a webhook poll). All hover state changes are instant. */
+  transition: opacity 0.4s;
 }
 .sd-nav-credits:hover {
-  transform: translateY(-1px);
   box-shadow:
     0 4px 16px -4px rgba(217, 255, 0, 0.55),
     0 0 0 1px rgba(217, 255, 0, 0.5);
@@ -114,31 +103,20 @@
   color: #94a3b8;
   font-size: 0.78rem;
   font-family: inherit;
-  transform: translateY(0);
-  transition:
-    background 130ms ease-out,
-    color 130ms ease-out,
-    transform 150ms ease-out;
+  transition: none;
 }
 .sd-nav-profile:hover {
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
-  transform: translateY(-1px);
 }
 .sd-nav-profile.sd-nav-profile--open,
 .sd-nav-profile.sd-nav-profile--open:hover {
   background: rgba(255, 255, 255, 0.10);
   color: #fff;
-  transform: translateY(0);
 }
 
-/* Avatar inside profile pill — tilt only on hover when dropdown
-   is closed. */
-.sd-nav-profile:hover:not(.sd-nav-profile--open) .sd-nav-avatar {
-  transform: rotate(-6deg);
-}
+/* Avatar inside profile pill — instant. */
 .sd-nav-avatar {
   flex-shrink: 0;
-  transform: rotate(0deg);
-  transition: transform 150ms ease-out;
+  transition: none;
 }
