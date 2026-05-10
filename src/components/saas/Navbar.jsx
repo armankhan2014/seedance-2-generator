@@ -111,12 +111,20 @@ export default function Navbar() {
     ? session.user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
     : "?";
 
-  const Avatar = ({ size = 24 }) => (
+  const Avatar = ({ size = 24, tilt = false }) => (
     displayImage ? (
       <img
         src={displayImage}
         alt={firstName}
-        style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: "50%",
+          objectFit: "cover",
+          flexShrink: 0,
+          transform: tilt ? "rotate(-6deg)" : "rotate(0deg)",
+          transition: "transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+        }}
       />
     ) : (
       <div style={{
@@ -124,11 +132,62 @@ export default function Navbar() {
         background: "linear-gradient(135deg,#D9FF00,#A6CC00)",
         display: "flex", alignItems: "center", justifyContent: "center",
         fontSize: size * 0.42 + "px", fontWeight: 700, color: "#fff", flexShrink: 0,
+        transform: tilt ? "rotate(-6deg)" : "rotate(0deg)",
+        transition: "transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1)",
       }}>
         {initials}
       </div>
     )
   );
+
+  // Variant B (Glow + scale) treatment for desktop nav links.
+  // Hover: lift 1 px + soft lime drop-shadow + lime text. Active:
+  // lime tint background + lime border + persistent lime glow.
+  // Per-link motion, no global indicator — clean, tactile.
+  const NavLink = ({ href, label, active }) => {
+    const [hovered, setHovered] = useState(false);
+    return (
+      <Link
+        href={href}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{
+          padding: "6px 14px",
+          borderRadius: "8px",
+          fontSize: "0.82rem",
+          fontWeight: 600,
+          textDecoration: "none",
+          whiteSpace: "nowrap",
+          color: active ? "#fff" : hovered ? "#D9FF00" : "#64748b",
+          background: active
+            ? "rgba(217,255,0,0.14)"
+            : hovered
+            ? "rgba(217,255,0,0.06)"
+            : "transparent",
+          border: active
+            ? "1px solid rgba(217,255,0,0.35)"
+            : "1px solid transparent",
+          transform: hovered ? "translateY(-1px)" : "translateY(0)",
+          boxShadow: active
+            ? "0 4px 14px -4px rgba(217,255,0,0.45), 0 0 0 1px rgba(217,255,0,0.2) inset"
+            : hovered
+            ? "0 4px 14px -6px rgba(217,255,0,0.35)"
+            : "none",
+          transition:
+            "transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), background 200ms ease, color 200ms ease, box-shadow 200ms ease, border-color 200ms ease",
+        }}
+      >
+        {label}
+      </Link>
+    );
+  };
+
+  // Hover state for the right-cluster polish (Contact / Credits /
+  // Profile). Each gets its own boolean so they don't trigger
+  // re-renders for one another.
+  const [contactHover, setContactHover] = useState(false);
+  const [creditsHover, setCreditsHover] = useState(false);
+  const [profileHover, setProfileHover] = useState(false);
 
   return (
     <>
@@ -163,18 +222,9 @@ export default function Navbar() {
           </Link>
 
           {/* Desktop nav */}
-          <nav style={{ display: "flex", gap: "2px", flex: 1, justifyContent: "center" }} className="desktop-nav">
+          <nav style={{ display: "flex", gap: "4px", flex: 1, justifyContent: "center" }} className="desktop-nav">
             {links.map(l => (
-              <Link key={l.href} href={l.href} style={{
-                padding: "6px 12px",
-                borderRadius: "8px",
-                fontSize: "0.82rem",
-                fontWeight: 600,
-                textDecoration: "none",
-                color: pathname === l.href ? "#fff" : "#64748b",
-                background: pathname === l.href ? "rgba(217, 255, 0,0.15)" : "transparent",
-                whiteSpace: "nowrap",
-              }}>{l.label}</Link>
+              <NavLink key={l.href} href={l.href} label={l.label} active={pathname === l.href} />
             ))}
           </nav>
 
@@ -182,46 +232,75 @@ export default function Navbar() {
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }} className="desktop-auth">
             <button
               onClick={() => setContactOpen(true)}
-              style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: "8px", color: "#94a3b8", padding: "6px 12px", fontSize: "0.78rem", cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit" }}>
+              onMouseEnter={() => setContactHover(true)}
+              onMouseLeave={() => setContactHover(false)}
+              style={{
+                background: contactHover ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: "8px",
+                color: contactHover ? "#fff" : "#94a3b8",
+                padding: "6px 12px",
+                fontSize: "0.78rem",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                fontFamily: "inherit",
+                transition: "background 200ms ease, color 200ms ease",
+              }}>
               Contact Us
             </button>
 
             {session ? (
               <>
-                {/* Credits badge */}
-                <span style={{
-                  background: "linear-gradient(135deg, rgba(217, 255, 0,0.2), rgba(166, 204, 0,0.2))",
-                  border: "1px solid rgba(217, 255, 0,0.4)",
-                  borderRadius: "20px",
-                  color: "#D9FF00",
-                  padding: "4px 10px",
-                  fontSize: "0.75rem",
-                  fontWeight: 700,
-                  fontFamily: "inherit",
-                  whiteSpace: "nowrap",
-                  opacity: creditsRefreshing ? 0.6 : 1,
-                  transition: "opacity 0.4s",
-                }}>
+                {/* Credits badge — hover lifts 1 px + adds a lime glow ring. */}
+                <span
+                  onMouseEnter={() => setCreditsHover(true)}
+                  onMouseLeave={() => setCreditsHover(false)}
+                  style={{
+                    background: "linear-gradient(135deg, rgba(217, 255, 0,0.2), rgba(166, 204, 0,0.2))",
+                    border: "1px solid rgba(217, 255, 0,0.4)",
+                    borderRadius: "20px",
+                    color: "#D9FF00",
+                    padding: "4px 10px",
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    fontFamily: "inherit",
+                    whiteSpace: "nowrap",
+                    opacity: creditsRefreshing ? 0.6 : 1,
+                    transform: creditsHover ? "translateY(-1px)" : "translateY(0)",
+                    boxShadow: creditsHover
+                      ? "0 4px 16px -4px rgba(217,255,0,0.55), 0 0 0 1px rgba(217,255,0,0.5)"
+                      : "0 0 0 1px rgba(217,255,0,0)",
+                    transition:
+                      "opacity 0.4s, transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 220ms ease",
+                  }}>
                   {creditsRefreshing ? "⏳" : "⚡"} {displayCredits.toLocaleString()} credits
                 </span>
 
-                {/* Avatar dropdown trigger */}
+                {/* Avatar dropdown trigger — hover lifts the pill + tilts the avatar. */}
                 <div ref={dropdownRef} style={{ position: "relative" }}>
                   <button
                     onClick={() => setDropdownOpen(o => !o)}
+                    onMouseEnter={() => setProfileHover(true)}
+                    onMouseLeave={() => setProfileHover(false)}
                     style={{
                       display: "flex", alignItems: "center", gap: "6px",
-                      background: dropdownOpen ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.04)",
+                      background: dropdownOpen
+                        ? "rgba(255,255,255,0.10)"
+                        : profileHover
+                        ? "rgba(255,255,255,0.08)"
+                        : "rgba(255,255,255,0.04)",
                       border: "1px solid rgba(255,255,255,0.1)",
                       borderRadius: "8px",
                       padding: "5px 10px 5px 6px",
                       cursor: "pointer",
-                      color: "#94a3b8",
+                      color: profileHover || dropdownOpen ? "#fff" : "#94a3b8",
                       fontSize: "0.78rem",
                       fontFamily: "inherit",
-                      transition: "background 0.15s",
+                      transform: profileHover && !dropdownOpen ? "translateY(-1px)" : "translateY(0)",
+                      transition:
+                        "background 200ms ease, color 200ms ease, transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1)",
                     }}>
-                    <Avatar size={24} />
+                    <Avatar size={24} tilt={profileHover && !dropdownOpen} />
                     <span>{firstName}</span>
                     {/* Chevron */}
                     <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ marginLeft: 2, opacity: 0.5, transform: dropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
