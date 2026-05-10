@@ -1,20 +1,35 @@
 "use client";
 import { useEffect } from "react";
 
-// Tawk.to lifts itself ~80 px above the bottom edge on mobile so it
-// stops overlapping the Studio tab in MobileBottomNav (bottom-right
-// in both cases). Desktop position is untouched. The selectors cover
-// every state Tawk renders in (minimized bubble, status message,
-// chat-card popover).
+// Tawk.to with custom mobile positioning so the chat bubble doesn't
+// overlap the MobileBottomNav (Studio tab is bottom-right, Tawk
+// bubble is bottom-right — same corner).
+//
+// Two-layer fix:
+//   1. Tawk_API.customStyle.visibility — the OFFICIAL Tawk API for
+//      widget positioning. Set BEFORE the script loads. Mobile uses
+//      yOffset 90 (clear of the ~70 px bottom nav + iPhone home bar).
+//   2. CSS overrides as a belt-and-braces fallback in case the API
+//      changes or doesn't apply on first load — also catches every
+//      div/iframe Tawk renders at body level.
 
 export default function TawkTo() {
   useEffect(() => {
     if (typeof window === "undefined") return;
-    // Avoid loading twice (e.g. hot-reload)
     if (window.Tawk_API) return;
 
     window.Tawk_API = window.Tawk_API || {};
     window.Tawk_LoadStart = new Date();
+
+    // ── Layer 1: Tawk's official customStyle API ──────────────
+    // Must be set BEFORE the embed script runs. position 'br' =
+    // bottom-right; xOffset / yOffset are in pixels from that corner.
+    window.Tawk_API.customStyle = {
+      visibility: {
+        desktop: { position: "br", xOffset: 20, yOffset: 20 },
+        mobile:  { position: "br", xOffset: 10, yOffset: 90 },
+      },
+    };
 
     const s1 = document.createElement("script");
     const s0 = document.getElementsByTagName("script")[0];
@@ -24,29 +39,24 @@ export default function TawkTo() {
     s1.setAttribute("crossorigin", "*");
     s0.parentNode.insertBefore(s1, s0);
 
-    // Mobile-only positioning override. We can't style inside the
-    // Tawk iframe (cross-origin), but we CAN style the iframe element
-    // itself + its wrapper from our document. !important is required
-    // because Tawk writes positioning as inline styles on those
-    // elements, which would otherwise win.
+    // ── Layer 2: CSS belt-and-braces ─────────────────────────
+    // Broad selectors covering every variant Tawk renders. We can't
+    // style inside the cross-origin iframe but we CAN style the
+    // iframe element + any wrapper div. !important is required —
+    // Tawk writes its inline styles directly on these.
     if (document.getElementById("tawk-mobile-lift")) return;
     const styleEl = document.createElement("style");
     styleEl.id = "tawk-mobile-lift";
     styleEl.textContent = `
       @media (max-width: 720px) {
-        /* Tawk's minimised chat bubble + status message + expanded
-           card are each their own iframe with title containing "chat"
-           or "tawk". Lift them all by the mobile bottom nav's height
-           (~70 px) plus the iPhone home-bar safe area. */
         iframe[title*="chat" i],
         iframe[title*="tawk" i],
-        iframe[src*="tawk.to" i] {
-          bottom: calc(80px + env(safe-area-inset-bottom, 0px)) !important;
-        }
-        /* Some Tawk versions render a wrapper div above the iframe;
-           lift that too as a belt-and-braces safety net. */
-        div.tawk-min-container,
-        div[class*="widget-visible" i] {
+        iframe[src*="tawk" i],
+        iframe[id^="tawkchat" i],
+        body > div[id^="tawkchat" i],
+        body > div[class*="tawk" i],
+        body > div.tawk-min-container,
+        body > div[class*="widget-visible" i] {
           bottom: calc(80px + env(safe-area-inset-bottom, 0px)) !important;
         }
       }
