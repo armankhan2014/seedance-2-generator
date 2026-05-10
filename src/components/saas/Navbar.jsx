@@ -5,15 +5,6 @@ import { signIn, signOut, useSession } from "next-auth/react";
 import { useState, useEffect, useRef } from "react";
 import ContactModal from "./ContactModal";
 import ToastContainer from "./ToastContainer";
-// Real CSS file (not styled-jsx) so the orbit keyframes ship in
-// the SSR <head> and apply before first paint — no FOUC.
-import "./avatar-orbit.css";
-
-// Three film-emoji satellites that orbit the avatar (Variant A from
-// /demo/avatar-magic). 120° apart, drop-shadow lime glow.
-// Tweak emojis / loop speed here in one place.
-const ORBIT_EMOJIS = ["🎬", "✨", "🎥"];
-const ORBIT_DURATION_S = 10; // faster than demo's 16s so it reads as motion at nav scale
 
 export default function Navbar() {
   const { data: session } = useSession();
@@ -126,17 +117,8 @@ export default function Navbar() {
     ? session.user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
     : "?";
 
-  const Avatar = ({ size = 24, tilt = false }) => {
-    // Orbit math — emoji size + radius scale with the avatar so the
-    // satellites stay proportional at every render (24 px nav avatar
-    // vs 28 px mobile-menu avatar). Generous defaults so the orbit
-    // is clearly visible at the small nav scale, not lost in the
-    // chrome — emojis sit at ~14 px and float ~9 px past the
-    // avatar's edge on a 24 px avatar.
-    const orbitR = size * 1.05;
-    const emojiSize = Math.max(13, Math.round(size * 0.6));
-
-    const inner = displayImage ? (
+  const Avatar = ({ size = 24, tilt = false }) => (
+    displayImage ? (
       <img
         src={displayImage}
         alt={firstName}
@@ -148,8 +130,6 @@ export default function Navbar() {
           flexShrink: 0,
           transform: tilt ? "rotate(-6deg)" : "rotate(0deg)",
           transition: "transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1)",
-          position: "relative",
-          zIndex: 1,
         }}
       />
     ) : (
@@ -160,43 +140,11 @@ export default function Navbar() {
         fontSize: size * 0.42 + "px", fontWeight: 700, color: "#fff", flexShrink: 0,
         transform: tilt ? "rotate(-6deg)" : "rotate(0deg)",
         transition: "transform 280ms cubic-bezier(0.34, 1.56, 0.64, 1)",
-        position: "relative",
-        zIndex: 1,
       }}>
         {initials}
       </div>
-    );
-
-    return (
-      <span
-        className="sd-avatar-orbit-wrap"
-        style={{ width: size, height: size }}
-        aria-hidden="false"
-      >
-        {inner}
-        {ORBIT_EMOJIS.map((e, i) => {
-          // Stagger each satellite by 1/3 of the loop so they're
-          // spaced 120° apart at any given moment.
-          const delay = (i / ORBIT_EMOJIS.length) * -ORBIT_DURATION_S;
-          return (
-            <span
-              key={i}
-              className="sd-avatar-orbit-emoji"
-              style={{
-                ["--orbit-r"]: `${orbitR}px`,
-                ["--orbit-duration"]: `${ORBIT_DURATION_S}s`,
-                ["--emoji-size"]: `${emojiSize}px`,
-                animationDelay: `${delay}s`,
-              }}
-              aria-hidden="true"
-            >
-              <span>{e}</span>
-            </span>
-          );
-        })}
-      </span>
-    );
-  };
+    )
+  );
 
   // Variant B (Glow + scale) treatment for desktop nav links.
   // Hover: lift 1 px + soft lime drop-shadow + lime text. Active:
