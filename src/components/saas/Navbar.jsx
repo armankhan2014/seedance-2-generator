@@ -139,10 +139,12 @@ export default function Navbar() {
         borderBottom: "1px solid rgba(255,255,255,0.08)",
         position: "sticky",
         top: 0,
-        // Bumped 50 → 100 because the cinematic hero's headline +
-        // CTAs use z:60, and on scroll they were flowing in front of
-        // the sticky navbar instead of disappearing behind it.
-        zIndex: 100,
+        // 9000 keeps the navbar above every page-level z-index
+        // (cinematic hero h1 is z:60, pricing cards are z:2, etc.)
+        // while still staying below modals (9990+) so dialogs can
+        // cover it. Bumped from 100 because text was still flowing
+        // in front of it on some routes.
+        zIndex: 9000,
         fontFamily: "Inter,sans-serif",
       }}>
         <div style={{
