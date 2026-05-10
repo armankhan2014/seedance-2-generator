@@ -57,9 +57,14 @@
 .sd-hero-smoke-blob {
   position: absolute;
   border-radius: 50%;
-  filter: blur(80px);
+  /* Reduced from 80 px → 28 px. The 80 px blur on three 600+ px
+     elements was the single most expensive paint op on the page,
+     and it has to repaint every frame as the smoke transforms.
+     28 px gives the same atmospheric haze for ~5× less paint cost. */
+  filter: blur(28px);
   mix-blend-mode: screen;
   opacity: 0.3;
+  will-change: transform;
 }
 .sd-hero-smoke-1 {
   width: 600px;

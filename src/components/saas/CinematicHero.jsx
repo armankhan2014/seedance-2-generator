@@ -263,12 +263,23 @@ export default function CinematicHero() {
     }
     rafId = requestAnimationFrame(tick);
 
+    let cursorOnNav = false;
+
+    function shouldRun() {
+      return heroVisible && !document.hidden && !cursorOnNav;
+    }
+    function maybeStart() {
+      if (!running && shouldRun()) {
+        running = true;
+        rafId = requestAnimationFrame(tick);
+      }
+    }
+
     function onVis() {
       if (document.hidden) {
         running = false;
-      } else if (!running && heroVisible) {
-        running = true;
-        rafId = requestAnimationFrame(tick);
+      } else {
+        maybeStart();
       }
     }
     document.addEventListener("visibilitychange", onVis);
@@ -277,22 +288,37 @@ export default function CinematicHero() {
       (entries) => {
         for (const e of entries) {
           heroVisible = e.isIntersecting;
-          if (!heroVisible) {
-            running = false;
-          } else if (!running && !document.hidden) {
-            running = true;
-            rafId = requestAnimationFrame(tick);
-          }
+          if (!heroVisible) running = false;
+          else maybeStart();
         }
       },
       { threshold: 0 }
     );
     visObs.observe(heroEl);
 
+    // Pause the canvas + smoke + word morph the moment the cursor
+    // enters the top-of-viewport navbar zone. The user reported
+    // hover lag — diagnosed via Chrome MCP as the main thread
+    // being saturated by canvas paints. Pausing while hovering the
+    // nav guarantees their hover paints land in the same frame.
+    // Resumes once cursor leaves the navbar zone.
+    function onMouseMove(e) {
+      const inNav = e.clientY <= 64; // navbar height in Navbar.jsx
+      if (inNav === cursorOnNav) return; // no transition, no work
+      cursorOnNav = inNav;
+      if (cursorOnNav) {
+        running = false;
+      } else {
+        maybeStart();
+      }
+    }
+    window.addEventListener("mousemove", onMouseMove, { passive: true });
+
     return () => {
       running = false;
       cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
+      window.removeEventListener("mousemove", onMouseMove);
       document.removeEventListener("visibilitychange", onVis);
       visObs.disconnect();
     };
