@@ -139,7 +139,10 @@ export default function Navbar() {
         borderBottom: "1px solid rgba(255,255,255,0.08)",
         position: "sticky",
         top: 0,
-        zIndex: 50,
+        // Bumped 50 → 100 because the cinematic hero's headline +
+        // CTAs use z:60, and on scroll they were flowing in front of
+        // the sticky navbar instead of disappearing behind it.
+        zIndex: 100,
         fontFamily: "Inter,sans-serif",
       }}>
         <div style={{

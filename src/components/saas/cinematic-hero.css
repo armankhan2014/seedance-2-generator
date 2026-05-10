@@ -19,6 +19,11 @@
   padding: 40px 20px 80px;
   overflow: hidden;
   background: radial-gradient(ellipse at center, #050a00 0%, #000 70%);
+  /* Containment — creates a new stacking context so the hero's
+     internal z-indexes (content z:50, h1 z:60, etc.) stay relative
+     to the hero only and can't escape upward to overlap the sticky
+     navbar on scroll. */
+  isolation: isolate;
 }
 
 /* Bottom-edge feather → seamless merge into the gallery section. */
