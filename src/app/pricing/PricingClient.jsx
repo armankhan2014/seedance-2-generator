@@ -2,6 +2,7 @@
 import { useSession, signIn } from "next-auth/react";
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
+import Script from "next/script";
 import toast from "@/lib/toast";
 
 // GBP is the price base. Custom amounts use this rate (matches the
@@ -186,6 +187,55 @@ export default function PricingClient() {
 
   useEffect(() => { if (session) fetchLiveCredits(); }, [session]);
 
+  // Cursor spotlight — follows the pointer with a soft lime glow.
+  // Disabled on touch devices via `(hover: hover)`. The element itself
+  // is rendered in the JSX below (id="cursorSpotlight").
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!window.matchMedia("(hover: hover)").matches) return;
+    const spotlight = document.getElementById("cursorSpotlight");
+    if (!spotlight) return;
+    const onMove = (e) => {
+      // 300 = half of the 600px spotlight box, so the radial centre
+      // sits exactly under the cursor.
+      spotlight.style.transform = `translate(${e.clientX - 300}px, ${e.clientY - 300}px)`;
+    };
+    document.addEventListener("mousemove", onMove);
+    return () => document.removeEventListener("mousemove", onMove);
+  }, []);
+
+  // 3D tilt — fires once vanilla-tilt has loaded from the CDN. Skipped
+  // on touch devices. Re-runs on every render to catch any newly-
+  // mounted cards (e.g. when the success message appears after
+  // checkout).
+  const tiltInitialised = useRef(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!window.matchMedia("(hover: hover)").matches) return;
+    const init = () => {
+      if (!window.VanillaTilt) return;
+      const cards = document.querySelectorAll(".pricing-card");
+      // Guard so we don't double-init the same elements; vanilla-tilt
+      // stores its instance on `__vanilla-tilt`.
+      const fresh = Array.from(cards).filter((el) => !el["vanillaTilt"]);
+      if (fresh.length === 0) return;
+      window.VanillaTilt.init(fresh, {
+        max: 10,
+        speed: 400,
+        glare: true,
+        "max-glare": 0.3,
+        perspective: 1000,
+        scale: 1.02,
+      });
+      tiltInitialised.current = true;
+    };
+    // Try immediately in case the script already loaded; otherwise the
+    // Script's onLoad below will call this.
+    init();
+    window.__initPricingTilt = init;
+    return () => { delete window.__initPricingTilt; };
+  });
+
   useEffect(() => {
     if (!success || !session) return;
     const purchased = parseInt(successCredits || "0");
@@ -237,8 +287,26 @@ export default function PricingClient() {
         padding: "72px 20px 40px",
         backgroundImage:
           "radial-gradient(1100px 600px at 50% -10%, rgba(217,255,0,0.08), transparent 60%), radial-gradient(800px 400px at 80% 20%, rgba(167,139,250,0.05), transparent 60%)",
+        position: "relative",
       }}
     >
+      {/* Cursor-following spotlight glow. pointer-events: none so it
+          never blocks clicks on cards or buttons; @media (hover:none)
+          hides it on touch devices via the global style block below. */}
+      <div className="cursor-spotlight" id="cursorSpotlight" />
+
+      {/* vanilla-tilt CDN. Tilts the .pricing-card elements only on
+          devices that support hover (desktop). The onLoad calls our
+          init helper stashed on window from the useEffect above. */}
+      <Script
+        src="https://cdnjs.cloudflare.com/ajax/libs/vanilla-tilt/1.8.1/vanilla-tilt.min.js"
+        strategy="afterInteractive"
+        onLoad={() => {
+          if (typeof window !== "undefined" && window.__initPricingTilt) {
+            window.__initPricingTilt();
+          }
+        }}
+      />
       <div style={{ maxWidth: 1180, margin: "0 auto" }}>
         {/* ── Hero ────────────────────────────────────────────────── */}
         <div style={{ textAlign: "center", marginBottom: 28 }}>
@@ -361,10 +429,26 @@ export default function PricingClient() {
             const { whole, cents } = formatPrice(plan.p, cur);
             const isPro = plan.hot;
             return (
+              // Outer wrapper owns the static lift (only Pro). The
+              // inner .pricing-card is what vanilla-tilt mutates, so
+              // its transform doesn't fight the translateY.
               <div
                 key={plan.id}
                 style={{
+                  transform: isPro ? "translateY(-6px)" : "none",
                   position: "relative",
+                  zIndex: 2,
+                }}
+              >
+              <div
+                className="pricing-card"
+                style={{
+                  position: "relative",
+                  // Cards sit above the cursor spotlight (z-index 1).
+                  zIndex: 1,
+                  // Required for vanilla-tilt's perspective + glare.
+                  transformStyle: "preserve-3d",
+                  transition: "transform 0.3s ease",
                   background: isPro
                     ? "linear-gradient(180deg, rgba(217,255,0,0.10) 0%, rgba(217,255,0,0.02) 60%, #0d0d0f 100%)"
                     : "#0d0d0f",
@@ -376,7 +460,6 @@ export default function PricingClient() {
                   boxShadow: isPro
                     ? "0 0 0 1px rgba(217,255,0,0.18), 0 22px 48px -14px rgba(217,255,0,0.20), 0 18px 60px -20px rgba(0,0,0,0.6)"
                     : "0 4px 14px -8px rgba(0,0,0,0.4)",
-                  transform: isPro ? "translateY(-6px)" : "none",
                   display: "flex",
                   flexDirection: "column",
                   minHeight: 280,
@@ -555,6 +638,7 @@ export default function PricingClient() {
                       : "Buy"
                     : "Sign in to buy"}
                 </button>
+              </div>
               </div>
             );
           })}
@@ -888,6 +972,31 @@ export default function PricingClient() {
           .pricing-grid {
             grid-template-columns: 1fr !important;
           }
+        }
+        /* Cursor-following spotlight glow. */
+        .cursor-spotlight {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 600px;
+          height: 600px;
+          background: radial-gradient(circle, rgba(220, 255, 0, 0.08) 0%, transparent 60%);
+          border-radius: 50%;
+          pointer-events: none;
+          z-index: 1;
+          transform: translate(-9999px, -9999px); /* off-screen until first mousemove */
+          transition: transform 0.1s ease-out;
+          will-change: transform;
+        }
+        @media (hover: none) {
+          .cursor-spotlight { display: none; }
+        }
+        /* vanilla-tilt's glare overlay needs to respect the card's
+           rounded corners so the highlight doesn't leak past the
+           border. */
+        .pricing-card .js-tilt-glare {
+          border-radius: 18px !important;
+          overflow: hidden !important;
         }
       `}</style>
     </div>
