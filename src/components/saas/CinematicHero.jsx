@@ -243,6 +243,15 @@ export default function CinematicHero() {
       el.style.left = x + "px";
       el.style.top = y + "px";
 
+      // Reveal: clear the inline opacity:0 / pointer-events:none
+      // FOUC guards put on the JSX so the CSS rules can take over.
+      // Empty string removes the inline declaration; the .sd-hero-
+      // phys-obj rule then provides the resting opacity 0.7 + auto
+      // pointer events. On mobile this useEffect doesn't run, so
+      // those JSX inline styles stay → props remain invisible.
+      el.style.opacity = "";
+      el.style.pointerEvents = "";
+
       const rect = el.getBoundingClientRect();
       const obj = {
         el,
@@ -638,8 +647,14 @@ export default function CinematicHero() {
         <div className="sd-hero-smoke-blob sd-hero-smoke-3" />
       </div>
 
-      {/* ═══ CAR ═══ */}
-      <div className="sd-hero-phys-obj sd-hero-car sd-hero-car--driving" data-car="true" id="sd-hero-car" ref={carRef} style={{ left: 80, top: 90 }}>
+      {/* ═══ CAR ═══
+          Inline opacity:0 + pointerEvents:none is the FOUC guard —
+          even before any styled-jsx CSS hydrates, the prop is
+          invisible. Desktop JS clears these inline styles after
+          positioning; mobile JS never runs the physics block, so
+          the props stay invisible there forever (and the CSS @media
+          rule below also hides them via display:none). */}
+      <div className="sd-hero-phys-obj sd-hero-car sd-hero-car--driving" data-car="true" id="sd-hero-car" ref={carRef} style={{ left: 80, top: 90, opacity: 0, pointerEvents: "none" }}>
         <svg width="240" height="90" viewBox="0 0 240 90" fill="none" stroke="#dcff00" strokeWidth="1.8" strokeLinejoin="round" strokeLinecap="round">
           <ellipse cx="120" cy="80" rx="105" ry="3.5" fill="#dcff00" fillOpacity="0.18" stroke="none" />
           <path d="M 26 60 Q 25 50 33 47 L 48 44 Q 58 38 70 35 Q 95 26 125 26 Q 155 26 180 34 Q 195 38 205 44 L 215 50 Q 220 53 218 60 Z" fill="#dcff00" fillOpacity="0.22" stroke="#dcff00" strokeWidth="2.2" />
@@ -700,7 +715,7 @@ export default function CinematicHero() {
       </div>
 
       {/* ═══ CINEMA CAMERA ═══ */}
-      <div className="sd-hero-phys-obj" data-start-x="83%" data-start-y="12%">
+      <div className="sd-hero-phys-obj" data-start-x="83%" data-start-y="12%" style={{ opacity: 0, pointerEvents: "none" }}>
         <svg className="sd-hero-camera-svg" width="200" height="150" viewBox="0 0 220 160" fill="none" stroke="#dcff00" strokeWidth="2" strokeLinejoin="round">
           <path d="M 70 15 L 70 8 L 165 8 L 165 15" strokeLinecap="round" />
           <rect x="70" y="6" width="95" height="4" rx="1" fill="#dcff00" fillOpacity="0.4" />
@@ -777,7 +792,7 @@ export default function CinematicHero() {
       </div>
 
       {/* ═══ CLAPPERBOARD ═══ */}
-      <div className="sd-hero-phys-obj" data-start-x="5%" data-start-y="8%">
+      <div className="sd-hero-phys-obj" data-start-x="5%" data-start-y="8%" style={{ opacity: 0, pointerEvents: "none" }}>
         <svg className="sd-hero-clapper-svg" width="130" height="115" viewBox="0 0 160 145" fill="none" stroke="#dcff00" strokeWidth="2.2" strokeLinejoin="round">
           <rect x="20" y="50" width="120" height="85" rx="3" fill="#dcff00" fillOpacity="0.1" stroke="#dcff00" strokeWidth="2.2" />
           <line x1="30" y1="70" x2="130" y2="70" strokeOpacity="0.6" />
@@ -808,7 +823,7 @@ export default function CinematicHero() {
       </div>
 
       {/* ═══ CINEMA LENS ═══ */}
-      <div className="sd-hero-phys-obj" data-start-x="3%" data-start-y="55%">
+      <div className="sd-hero-phys-obj" data-start-x="3%" data-start-y="55%" style={{ opacity: 0, pointerEvents: "none" }}>
         <svg className="sd-hero-lens-svg" width="120" height="120" viewBox="0 0 130 130" fill="none" stroke="#dcff00" strokeWidth="2.4">
           <circle cx="65" cy="65" r="60" fill="#dcff00" fillOpacity="0.06" stroke="#dcff00" strokeWidth="2.6" />
           <g className="sd-hero-focus-ring">
@@ -844,7 +859,7 @@ export default function CinematicHero() {
       </div>
 
       {/* ═══ DIRECTOR'S CHAIR ═══ */}
-      <div className="sd-hero-phys-obj" data-start-x="88%" data-start-y="68%">
+      <div className="sd-hero-phys-obj" data-start-x="88%" data-start-y="68%" style={{ opacity: 0, pointerEvents: "none" }}>
         <svg className="sd-hero-director-svg" width="90" height="115" viewBox="0 0 110 140" fill="none" stroke="#dcff00" strokeWidth="2.4">
           <g className="sd-hero-chair-back">
             <rect x="22" y="15" width="66" height="26" rx="2" fill="#dcff00" fillOpacity="0.2" stroke="#dcff00" strokeWidth="2.2" />
@@ -865,7 +880,7 @@ export default function CinematicHero() {
       </div>
 
       {/* ═══ FILM REEL ═══ */}
-      <div className="sd-hero-phys-obj" data-start-x="78%" data-start-y="42%">
+      <div className="sd-hero-phys-obj" data-start-x="78%" data-start-y="42%" style={{ opacity: 0, pointerEvents: "none" }}>
         <svg className="sd-hero-reel-svg" width="110" height="110" viewBox="0 0 130 130" fill="none" stroke="#dcff00" strokeWidth="2.4">
           <g className="sd-hero-reel-spin">
             <circle cx="65" cy="65" r="55" fill="#dcff00" fillOpacity="0.08" stroke="#dcff00" strokeWidth="2.4" />
@@ -893,7 +908,7 @@ export default function CinematicHero() {
       </div>
 
       {/* ═══ STUDIO LIGHT ═══ */}
-      <div className="sd-hero-phys-obj" data-start-x="91%" data-start-y="48%">
+      <div className="sd-hero-phys-obj" data-start-x="91%" data-start-y="48%" style={{ opacity: 0, pointerEvents: "none" }}>
         <svg className="sd-hero-light-svg" width="90" height="135" viewBox="0 0 100 150" fill="none" stroke="#dcff00" strokeWidth="2.2">
           <g className="sd-hero-light-cone">
             <path d="M 30 35 L 5 130 L 95 130 L 70 35 Z" fill="#dcff00" fillOpacity="0.18" stroke="none" />
@@ -926,7 +941,7 @@ export default function CinematicHero() {
       </div>
 
       {/* ═══ SLATE ═══ */}
-      <div className="sd-hero-phys-obj" data-start-x="14%" data-start-y="68%">
+      <div className="sd-hero-phys-obj" data-start-x="14%" data-start-y="68%" style={{ opacity: 0, pointerEvents: "none" }}>
         <svg className="sd-hero-slate-svg" width="115" height="90" viewBox="0 0 145 110" fill="none" stroke="#dcff00" strokeWidth="2.2">
           <rect x="12" y="14" width="120" height="18" rx="2" fill="#dcff00" fillOpacity="0.1" />
           <polygon points="17,32 28,14 39,32" fill="#dcff00" fillOpacity="0.45" />
