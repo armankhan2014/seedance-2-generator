@@ -1,0 +1,144 @@
+/*
+ * Top-nav hover styles — pure CSS so the browser handles hover at
+ * the compositor level with zero JS round-trip. Every hover state
+ * was previously wired through React useState + onMouseEnter
+ * handlers, which meant each cursor move triggered a re-render
+ * before the style changed. If anything was blocking the main
+ * thread (the cinematic hero's 80-particle rAF loop, for example)
+ * the re-render queued behind it and the user perceived 100s+ of
+ * ms of lag. Pure :hover sidesteps the entire pipeline.
+ *
+ * Imported once at module level by Navbar.jsx so the rules ship
+ * in the SSR <head> and apply before first paint — no FOUC.
+ *
+ * All selectors prefixed `sd-nav-*` to avoid global collisions.
+ */
+
+/* ── Generate / Gallery / Pricing / Community link buttons ── */
+.sd-nav-link {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  color: #64748b;
+  background: transparent;
+  border: 1px solid transparent;
+  transform: translateY(0);
+  box-shadow: none;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    transform 150ms ease-out,
+    background 130ms ease-out,
+    color 130ms ease-out,
+    box-shadow 150ms ease-out,
+    border-color 130ms ease-out;
+}
+
+.sd-nav-link:hover {
+  color: #D9FF00;
+  background: rgba(217, 255, 0, 0.06);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px -6px rgba(217, 255, 0, 0.35);
+}
+
+/* Active link (current route) — persistent lime tint + glow.
+   Specificity beats :hover so the active page never loses its
+   identity as you sweep the cursor across the nav. */
+.sd-nav-link.sd-nav-link--active,
+.sd-nav-link.sd-nav-link--active:hover {
+  color: #fff;
+  background: rgba(217, 255, 0, 0.14);
+  border-color: rgba(217, 255, 0, 0.35);
+  transform: translateY(0);
+  box-shadow:
+    0 4px 14px -4px rgba(217, 255, 0, 0.45),
+    0 0 0 1px rgba(217, 255, 0, 0.2) inset;
+}
+
+/* ── Contact Us button ── */
+.sd-nav-contact {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #94a3b8;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: background 130ms ease-out, color 130ms ease-out;
+}
+.sd-nav-contact:hover {
+  background: rgba(255, 255, 255, 0.10);
+  color: #fff;
+}
+
+/* ── Credits badge — hover lift + lime ring ── */
+.sd-nav-credits {
+  background: linear-gradient(135deg, rgba(217, 255, 0, 0.2), rgba(166, 204, 0, 0.2));
+  border: 1px solid rgba(217, 255, 0, 0.4);
+  border-radius: 20px;
+  color: #D9FF00;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-family: inherit;
+  white-space: nowrap;
+  transform: translateY(0);
+  box-shadow: 0 0 0 1px rgba(217, 255, 0, 0);
+  transition:
+    opacity 0.4s,
+    transform 150ms ease-out,
+    box-shadow 150ms ease-out;
+}
+.sd-nav-credits:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 4px 16px -4px rgba(217, 255, 0, 0.55),
+    0 0 0 1px rgba(217, 255, 0, 0.5);
+}
+
+/* ── Profile pill (avatar + name + chevron) ── */
+.sd-nav-profile {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 5px 10px 5px 6px;
+  cursor: pointer;
+  color: #94a3b8;
+  font-size: 0.78rem;
+  font-family: inherit;
+  transform: translateY(0);
+  transition:
+    background 130ms ease-out,
+    color 130ms ease-out,
+    transform 150ms ease-out;
+}
+.sd-nav-profile:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  transform: translateY(-1px);
+}
+.sd-nav-profile.sd-nav-profile--open,
+.sd-nav-profile.sd-nav-profile--open:hover {
+  background: rgba(255, 255, 255, 0.10);
+  color: #fff;
+  transform: translateY(0);
+}
+
+/* Avatar inside profile pill — tilt only on hover when dropdown
+   is closed. */
+.sd-nav-profile:hover:not(.sd-nav-profile--open) .sd-nav-avatar {
+  transform: rotate(-6deg);
+}
+.sd-nav-avatar {
+  flex-shrink: 0;
+  transform: rotate(0deg);
+  transition: transform 150ms ease-out;
+}

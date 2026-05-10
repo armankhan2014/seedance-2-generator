@@ -5,6 +5,12 @@ import { signIn, signOut, useSession } from "next-auth/react";
 import { useState, useEffect, useRef } from "react";
 import ContactModal from "./ContactModal";
 import ToastContainer from "./ToastContainer";
+// Pure-CSS :hover styles for every nav element. Loaded as a real
+// CSS file so the rules ship in the SSR <head>. Replacing the
+// previous useState-driven hover (which routed every cursor move
+// through React's render cycle and queued behind any main-thread
+// work — the source of the perceived lag).
+import "./top-nav.css";
 
 export default function Navbar() {
   const { data: session } = useSession();
@@ -117,95 +123,57 @@ export default function Navbar() {
     ? session.user.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
     : "?";
 
-  const Avatar = ({ size = 24, tilt = false }) => (
+  // Avatar — visual only. Hover tilt is driven by the parent
+  // .sd-nav-profile's :hover via the .sd-nav-avatar class, so no
+  // tilt prop is needed here.
+  const Avatar = ({ size = 24 }) => (
     displayImage ? (
       <img
         src={displayImage}
         alt={firstName}
+        className="sd-nav-avatar"
         style={{
           width: size,
           height: size,
           borderRadius: "50%",
           objectFit: "cover",
-          flexShrink: 0,
-          transform: tilt ? "rotate(-6deg)" : "rotate(0deg)",
-          transition: "transform 150ms ease-out",
         }}
       />
     ) : (
-      <div style={{
+      <div className="sd-nav-avatar" style={{
         width: size, height: size, borderRadius: "50%",
         background: "linear-gradient(135deg,#D9FF00,#A6CC00)",
         display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: size * 0.42 + "px", fontWeight: 700, color: "#fff", flexShrink: 0,
-        transform: tilt ? "rotate(-6deg)" : "rotate(0deg)",
-        transition: "transform 150ms ease-out",
+        fontSize: size * 0.42 + "px", fontWeight: 700, color: "#fff",
       }}>
         {initials}
       </div>
     )
   );
 
-  // Variant B (Glow + scale) treatment for desktop nav links.
-  // Hover: lift 1 px + soft lime drop-shadow + lime text. Active:
-  // lime tint background + lime border + persistent lime glow.
-  // Per-link motion, no global indicator — clean, tactile.
+  // Pure-CSS hover handled by .sd-nav-link in top-nav.css. No
+  // useState, no React re-render on mouseenter — the browser
+  // handles hover at the compositor level. .sd-nav-link--active
+  // class wins specificity-wise so the current page keeps its
+  // lime tint as the cursor sweeps across.
   //
   // Renders <a> for external URLs (Community → community.visualseffect.com)
   // and Next's <Link> for internal routes. Active styling is never
-  // applied to externals — they're "leaves" the user navigates AWAY
-  // through, not pages of this app.
+  // applied to externals — they're outbound links, not pages of
+  // this app.
   const NavLink = ({ href, label, active, external }) => {
-    const [hovered, setHovered] = useState(false);
     const Tag = external ? "a" : Link;
-    const navStyle = {
-      padding: "6px 14px",
-      borderRadius: "8px",
-      fontSize: "0.82rem",
-      fontWeight: 600,
-      textDecoration: "none",
-      whiteSpace: "nowrap",
-      color: active ? "#fff" : hovered ? "#D9FF00" : "#64748b",
-      background: active
-        ? "rgba(217,255,0,0.14)"
-        : hovered
-        ? "rgba(217,255,0,0.06)"
-        : "transparent",
-      border: active
-        ? "1px solid rgba(217,255,0,0.35)"
-        : "1px solid transparent",
-      transform: hovered ? "translateY(-1px)" : "translateY(0)",
-      boxShadow: active
-        ? "0 4px 14px -4px rgba(217,255,0,0.45), 0 0 0 1px rgba(217,255,0,0.2) inset"
-        : hovered
-        ? "0 4px 14px -6px rgba(217,255,0,0.35)"
-        : "none",
-      // Snappy hover — 150 ms ease-out across the board. Apple,
-      // Linear, and Vercel all sit in this range. The previous
-      // cubic-bezier spring (0.34, 1.56, 0.64, 1, 220 ms) was an
-      // overshoot — it visually undershoots-then-settles which
-      // reads as "slow", even though the duration is short.
-      transition:
-        "transform 150ms ease-out, background 130ms ease-out, color 130ms ease-out, box-shadow 150ms ease-out, border-color 130ms ease-out",
-    };
     return (
       <Tag
         href={href}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        style={navStyle}
+        className={
+          active ? "sd-nav-link sd-nav-link--active" : "sd-nav-link"
+        }
       >
         {label}
       </Tag>
     );
   };
-
-  // Hover state for the right-cluster polish (Contact / Credits /
-  // Profile). Each gets its own boolean so they don't trigger
-  // re-renders for one another.
-  const [contactHover, setContactHover] = useState(false);
-  const [creditsHover, setCreditsHover] = useState(false);
-  const [profileHover, setProfileHover] = useState(false);
 
   return (
     <>
@@ -256,75 +224,30 @@ export default function Navbar() {
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }} className="desktop-auth">
             <button
               onClick={() => setContactOpen(true)}
-              onMouseEnter={() => setContactHover(true)}
-              onMouseLeave={() => setContactHover(false)}
-              style={{
-                background: contactHover ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.06)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: "8px",
-                color: contactHover ? "#fff" : "#94a3b8",
-                padding: "6px 12px",
-                fontSize: "0.78rem",
-                cursor: "pointer",
-                whiteSpace: "nowrap",
-                fontFamily: "inherit",
-                transition: "background 130ms ease-out, color 130ms ease-out",
-              }}>
+              className="sd-nav-contact"
+            >
               Contact Us
             </button>
 
             {session ? (
               <>
-                {/* Credits badge — hover lifts 1 px + adds a lime glow ring. */}
+                {/* Credits badge — hover handled by .sd-nav-credits CSS. */}
                 <span
-                  onMouseEnter={() => setCreditsHover(true)}
-                  onMouseLeave={() => setCreditsHover(false)}
-                  style={{
-                    background: "linear-gradient(135deg, rgba(217, 255, 0,0.2), rgba(166, 204, 0,0.2))",
-                    border: "1px solid rgba(217, 255, 0,0.4)",
-                    borderRadius: "20px",
-                    color: "#D9FF00",
-                    padding: "4px 10px",
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    fontFamily: "inherit",
-                    whiteSpace: "nowrap",
-                    opacity: creditsRefreshing ? 0.6 : 1,
-                    transform: creditsHover ? "translateY(-1px)" : "translateY(0)",
-                    boxShadow: creditsHover
-                      ? "0 4px 16px -4px rgba(217,255,0,0.55), 0 0 0 1px rgba(217,255,0,0.5)"
-                      : "0 0 0 1px rgba(217,255,0,0)",
-                    transition:
-                      "opacity 0.4s, transform 150ms ease-out, box-shadow 150ms ease-out",
-                  }}>
+                  className="sd-nav-credits"
+                  style={{ opacity: creditsRefreshing ? 0.6 : 1 }}
+                >
                   {creditsRefreshing ? "⏳" : "⚡"} {displayCredits.toLocaleString()} credits
                 </span>
 
-                {/* Avatar dropdown trigger — hover lifts the pill + tilts the avatar. */}
+                {/* Avatar dropdown trigger — hover handled by .sd-nav-profile CSS;
+                    open state added via class so the dropdown's persistent
+                    "elevated" look wins over :hover. */}
                 <div ref={dropdownRef} style={{ position: "relative" }}>
                   <button
                     onClick={() => setDropdownOpen(o => !o)}
-                    onMouseEnter={() => setProfileHover(true)}
-                    onMouseLeave={() => setProfileHover(false)}
-                    style={{
-                      display: "flex", alignItems: "center", gap: "6px",
-                      background: dropdownOpen
-                        ? "rgba(255,255,255,0.10)"
-                        : profileHover
-                        ? "rgba(255,255,255,0.08)"
-                        : "rgba(255,255,255,0.04)",
-                      border: "1px solid rgba(255,255,255,0.1)",
-                      borderRadius: "8px",
-                      padding: "5px 10px 5px 6px",
-                      cursor: "pointer",
-                      color: profileHover || dropdownOpen ? "#fff" : "#94a3b8",
-                      fontSize: "0.78rem",
-                      fontFamily: "inherit",
-                      transform: profileHover && !dropdownOpen ? "translateY(-1px)" : "translateY(0)",
-                      transition:
-                        "background 130ms ease-out, color 130ms ease-out, transform 150ms ease-out",
-                    }}>
-                    <Avatar size={24} tilt={profileHover && !dropdownOpen} />
+                    className={dropdownOpen ? "sd-nav-profile sd-nav-profile--open" : "sd-nav-profile"}
+                  >
+                    <Avatar size={24} />
                     <span>{firstName}</span>
                     {/* Chevron */}
                     <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ marginLeft: 2, opacity: 0.5, transform: dropdownOpen ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
