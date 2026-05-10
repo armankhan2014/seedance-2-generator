@@ -1,17 +1,18 @@
 // Pure-presentation bottom navigation that mirrors community.visualseffect
 // .com's bar so users keep their bearings when crossing the subdomain into
 // Studio. ZERO client-side logic by design — no hooks, no fetch, no event
-// handlers. Just static HTML + CSS that compiles to ~600 bytes of markup.
+// handlers. Just static HTML + CSS that compiles to ~700 bytes of markup.
 //
 // Visual contract MUST stay 1:1 with
 // seedance-community/src/components/shell/MobileTabBar.jsx
-// (icons, sizes, gap, colors, padding, font weights). Change them in
-// lockstep on both sides.
+// (icons, sizes, gap, colors, padding, font weights, AND the lime
+// pill-slide treatment). Change them in lockstep on both sides.
 //
-// Why no "use client": this component has no client-side state. Plain
-// <a> anchors handle navigation natively — no Next.js Link is needed
-// either, since 4 of 5 tabs cross the subdomain boundary (which forces
-// a full page load anyway, the same thing <a> does).
+// Why no "use client": this component has no client-side state — the
+// active tab is *always* Studio when this side of the subdomain is
+// rendered, so the pill can be statically positioned with no JS.
+// Plain <a> anchors handle navigation natively; 3 of 4 tabs cross
+// the subdomain (which forces a full page load anyway).
 
 const COMMUNITY_URL = "https://community.visualseffect.com";
 
@@ -60,6 +61,11 @@ const TABS = [
   },
 ];
 
+// Studio is always the rightmost tab (TABS.length - 1) and always
+// "active" on this side of the subdomain — so the pill is a fixed
+// CSS placement, not a JS-driven translateX like on community.
+const ACTIVE_IDX = TABS.length - 1;
+
 export default function MobileBottomNav() {
   return (
     <nav
@@ -81,6 +87,34 @@ export default function MobileBottomNav() {
         fontFamily: "Inter, sans-serif",
       }}
     >
+      {/* Lime pill behind the Studio tab — same visual treatment as
+          the community pill-slide animation. Statically positioned
+          here because Studio is always the active tab on this side
+          (no slide needed). The translateX in style + matching CSS
+          transition means if we ever do switch this to a client
+          component with active-tab tracking, the same animation
+          will Just Work. */}
+      <span
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          top: 8,
+          bottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+          left: 4,
+          width: `calc((100% - 8px) / ${TABS.length})`,
+          background:
+            "linear-gradient(180deg, rgba(217,255,0,0.16), rgba(217,255,0,0.06))",
+          border: "1px solid rgba(217,255,0,0.28)",
+          borderRadius: 14,
+          transform: `translateX(${ACTIVE_IDX * 100}%)`,
+          transition:
+            "transform 380ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+          pointerEvents: "none",
+          boxShadow: "0 0 18px -4px rgba(217,255,0,0.35)",
+          willChange: "transform",
+        }}
+      />
+
       {TABS.map((tab) => (
         <a
           key={tab.label}
@@ -98,9 +132,22 @@ export default function MobileBottomNav() {
             fontWeight: 700,
             letterSpacing: "0.06em",
             textTransform: "uppercase",
+            position: "relative",
+            zIndex: 1,
+            transition: "color 240ms ease",
           }}
         >
-          <span style={{ lineHeight: 0 }}>{tab.icon}</span>
+          <span
+            style={{
+              lineHeight: 0,
+              display: "block",
+              transform: tab.isStudio ? "scale(1.08)" : "scale(1)",
+              transition:
+                "transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+            }}
+          >
+            {tab.icon}
+          </span>
           <span>{tab.label}</span>
         </a>
       ))}
