@@ -49,6 +49,13 @@ model User {
   creations     Creation[]
   sessions      Session[]
   payments      Payment[]
+  comments      Comment[]
+  following     Follow[]   @relation("Follower")
+  followers     Follow[]   @relation("Following")
+  notifications     Notification[] @relation("NotifRecipient")
+  notificationsSent Notification[] @relation("NotifActor")
+  posts             Post[]
+  reactions         Reaction[]
 }
 
 model Creation {
@@ -69,10 +76,106 @@ model Creation {
   inputImages String[]
   featured    Boolean  @default(false)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments    Comment[]
+  notifications Notification[]
 
   @@index([userId])
   @@index([userId, createdAt(sort: Desc)])
   @@index([status])
+}
+
+// Community follow graph — Instagram-style follower / following relationships.
+// Owned by seedance-community at community.visualseffect.com.
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+  follower    User     @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+// Community comments — added by seedance-community at community.visualseffect.com.
+// Polymorphic: attached to a Creation (video) OR a community Post. Exactly
+// one of creationId / postId is set; enforced at the community API layer.
+model Comment {
+  id         String    @id @default(cuid())
+  body       String
+  userId     String
+  creationId String?
+  postId     String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creation   Creation? @relation(fields: [creationId], references: [id], onDelete: Cascade)
+  post       Post?     @relation(fields: [postId],     references: [id], onDelete: Cascade)
+  notifications Notification[]
+  reactions     Reaction[]
+
+  @@index([creationId, createdAt(sort: Desc)])
+  @@index([postId,     createdAt(sort: Desc)])
+  @@index([userId])
+}
+
+// Community-native posts — text + optional image, distinct from
+// Creations (AI-generated videos owned by Seedance).
+model Post {
+  id        String     @id @default(cuid())
+  body      String?
+  imageUrl  String?
+  userId    String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reactions Reaction[]
+  comments  Comment[]
+
+  @@index([userId])
+  @@index([createdAt(sort: Desc)])
+}
+
+// Polymorphic reactions — exactly one of postId / commentId is set.
+// Type is "like" | "love" (Facebook-style two-button affordance).
+model Reaction {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  postId    String?
+  commentId String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post?    @relation(fields: [postId],    references: [id], onDelete: Cascade)
+  comment   Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId, type])
+  @@unique([userId, commentId, type])
+  @@index([postId])
+  @@index([commentId])
+}
+
+// Inbox-style notifications — Instagram/Facebook pattern.
+// type values: "comment" | "follow" | "new_post"
+model Notification {
+  id         String   @id @default(cuid())
+  userId     String   // recipient
+  actorId    String   // user who triggered the action
+  type       String
+  creationId String?
+  commentId  String?
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  user     User      @relation("NotifRecipient", fields: [userId],     references: [id], onDelete: Cascade)
+  actor    User      @relation("NotifActor",     fields: [actorId],    references: [id], onDelete: Cascade)
+  creation Creation? @relation(fields: [creationId], references: [id], onDelete: Cascade)
+  comment  Comment?  @relation(fields: [commentId],  references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, read])
 }
 
 model VerificationToken {
