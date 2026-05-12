@@ -460,13 +460,12 @@ export default function Home() {
 
   const MODES = [
     // Arman's exact wording (2026-05-12): "X To video" — capital T on
-    // "To", lowercase "video". Keep that casing verbatim. Short labels
-    // are kept for mobile (≤ sm) so the 4-up row doesn't wrap on phones.
+    // "To", lowercase "video". Story stays as just "Story" with the
+    // inline NEW pill.
     { id: "text-to-video", label: "Text", fullLabel: "Text To video", icon: FaBolt },
     { id: "image-to-video", label: "Image", fullLabel: "Image To video", icon: IoImageOutline },
     { id: "reference-to-video", label: "Reference", fullLabel: "Reference To video", icon: FaSyncAlt },
-    // Story = multi-shot video with cast face-locked across every shot.
-    { id: "story", label: "Story", fullLabel: "Story To video", icon: FaVideo, badge: "NEW" },
+    { id: "story", label: "Story", fullLabel: "Story", icon: FaVideo, badge: "NEW" },
   ];
 
   // FIX 1: Show thumbnail immediately from local file, handle both MuAPI response formats
@@ -1062,34 +1061,38 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="grid grid-cols-4 p-1 bg-glass-hover rounded-md border border-glass-border">
+          {/* Mode buttons — independent floating pills (replaced the
+              segmented control 2026-05-12). On mobile they wrap to 2×2,
+              on desktop they sit in a single row of 4. Active button has
+              a green gradient + soft glow shadow + subtle scale-up;
+              inactive pills are dark glass that light to the accent on
+              hover. NEW indicator on Story is an inline pill, not a
+              floating corner sticker. */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {MODES.map((m) => {
-              const Icon = m.icon;
+              const active = mode === m.id;
               return (
                 <button
                   key={m.id}
                   onClick={() => setMode(m.id)}
-                  className={`py-2 px-1 rounded-md text-[10px] sm:text-sm font-medium transition-colors flex items-center justify-center gap-1 sm:gap-2 leading-tight text-center relative ${
-                    mode === m.id
-                      ? "bg-primary-500 text-black shadow-sm"
-                      : "text-muted hover:text-foreground"
+                  className={`relative py-2.5 px-3 rounded-xl text-[11px] sm:text-[12.5px] font-bold tracking-wide transition-all duration-200 active:scale-[0.97] flex items-center justify-center gap-1.5 ${
+                    active
+                      ? "bg-gradient-to-br from-primary-400 to-primary-600 text-black shadow-[0_4px_24px_-6px_rgba(200,241,53,0.6)] ring-1 ring-primary-400/40 scale-[1.02]"
+                      : "bg-glass-hover border border-glass-border text-muted hover:text-foreground hover:border-primary-500/40 hover:bg-primary-500/[0.04]"
                   }`}
                 >
-                  {/* Icon hidden — the long labels ("Reference To video")
-                      need every pixel inside the segmented control. */}
-                  <span className="sm:hidden">{m.label}</span>
+                  <span className="sm:hidden whitespace-nowrap">{m.label}</span>
                   <span className="hidden sm:inline whitespace-nowrap">{m.fullLabel}</span>
-                  {/* Subtle inline dot indicator on Story instead of a
-                      floating corner badge — keeps the segmented control
-                      visually balanced without a sticker pasted on top. */}
                   {m.badge && (
                     <span
-                      aria-label="new"
-                      title="New feature"
-                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                        mode === m.id ? "bg-black" : "bg-primary-500"
+                      className={`text-[8.5px] font-extrabold tracking-wider px-1.5 py-px rounded ${
+                        active
+                          ? "bg-black/25 text-black"
+                          : "bg-primary-500/15 text-primary-500 border border-primary-500/30"
                       }`}
-                    />
+                    >
+                      {m.badge}
+                    </span>
                   )}
                 </button>
               );
