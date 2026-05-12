@@ -1075,7 +1075,7 @@ export default function Home() {
                 <button
                   key={m.id}
                   onClick={() => setMode(m.id)}
-                  className={`relative py-2.5 px-3 rounded-xl text-[11px] sm:text-[12.5px] font-bold tracking-wide transition-all duration-200 active:scale-[0.97] flex items-center justify-center gap-1.5 ${
+                  className={`relative py-2.5 px-2 sm:px-2.5 rounded-xl text-[10.5px] sm:text-[11px] font-bold tracking-tight transition-all duration-200 active:scale-[0.97] flex items-center justify-center gap-1 ${
                     active
                       ? "bg-gradient-to-br from-primary-400 to-primary-600 text-black shadow-[0_4px_24px_-6px_rgba(200,241,53,0.6)] ring-1 ring-primary-400/40 scale-[1.02]"
                       : "bg-glass-hover border border-glass-border text-muted hover:text-foreground hover:border-primary-500/40 hover:bg-primary-500/[0.04]"
@@ -1085,7 +1085,7 @@ export default function Home() {
                   <span className="hidden sm:inline whitespace-nowrap">{m.fullLabel}</span>
                   {m.badge && (
                     <span
-                      className={`text-[8.5px] font-extrabold tracking-wider px-1.5 py-px rounded ${
+                      className={`text-[8px] font-extrabold tracking-wider px-1 py-px rounded ${
                         active
                           ? "bg-black/25 text-black"
                           : "bg-primary-500/15 text-primary-500 border border-primary-500/30"
