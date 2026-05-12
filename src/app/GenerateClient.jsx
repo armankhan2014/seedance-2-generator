@@ -20,6 +20,7 @@ import ArmanGallery from "@/components/saas/ArmanGallery";
 import toast from "@/lib/toast";
 import PromptBuilder from "@/components/saas/PromptBuilder";
 import ImageBuilder from "@/components/saas/ImageBuilder";
+import SmartPrompt from "@/components/saas/SmartPrompt";
 
 export const dynamic = "force-dynamic";
 
@@ -567,13 +568,13 @@ export default function Home() {
                   <label className="text-[10px] font-medium text-muted uppercase tracking-wider">
                     Prompt
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowBuilder(true)}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold text-primary-500 bg-primary-500/10 border border-primary-500/20 hover:bg-primary-500/20 transition-colors"
-                  >
-                    ✨ Build my prompt
-                  </button>
+                  {/* "✨ Build my prompt" replaced by SmartPrompt's
+                      inline ✦ Expand button below. The old modal +
+                      its `showBuilder` state stays mounted as dead
+                      code so we can revive the feature instantly if
+                      needed without a code restore — just by re-
+                      adding this button. Removed per Arman's brief
+                      on 2026-05-12. */}
                   <button
                     type="button"
                     onClick={() => setShowImageBuilder(true)}
@@ -582,29 +583,29 @@ export default function Home() {
                     🎨 Build my reference
                   </button>
                 </div>
-                <span className={`text-[10px] font-medium tabular-nums transition-colors whitespace-nowrap ${
-                  prompt.trim().split(/\s+/).filter(Boolean).length >= 18000 ? "text-red-400" :
-                  prompt.trim().split(/\s+/).filter(Boolean).length >= 15000 ? "text-amber-400" :
-                  "text-muted"
-                }`}>
-                  <span className="sm:hidden">
-                    {prompt.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} / 20K
-                  </span>
-                  <span className="hidden sm:inline">
-                    {prompt.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} / 20,000 words
-                  </span>
-                </span>
+                {/* External word counter removed — SmartPrompt now
+                    renders the count inside its own footer bar. */}
               </div>
-              <textarea
+              {/* SmartPrompt — one textarea, inline ✦ Expand my idea
+                  button, AI-aware expansion via /api/prompt/expand.
+                  Same controlled `prompt` / `setPrompt` state as the
+                  old textarea so nothing else in this component had
+                  to change. */}
+              <SmartPrompt
                 value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                
+                onChange={setPrompt}
+                duration={duration}
                 placeholder={
                   mode === "reference-to-video"
-                    ? "Use @image1, @video1, @audio1 to reference your files... \nExample: @video1 in the style of @image1 with @audio1"
-                    : "Describe your video..."
+                    ? "Use @image1, @video1, @audio1 to reference your files…\nExample: @video1 in the style of @image1 with @audio1"
+                    : "Describe your video…"
                 }
-                className="w-full h-32 bg-glass-bg border border-glass-border rounded-md p-2 text-sm outline-none focus:border-primary-500/40 resize-none transition-colors custom-scrollbar"
+                onUpgrade={() => {
+                  // No credits — surface a toast, the user can buy
+                  // credits from the existing /billing page.
+                  toast.error?.("You're out of credits. Buy more to keep expanding prompts.") ||
+                    toast("You're out of credits. Buy more to keep expanding prompts.");
+                }}
               />
             </div>
 
