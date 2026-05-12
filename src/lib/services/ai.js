@@ -49,17 +49,46 @@ export const AIService = {
       //      image as the first frames before transitioning.
       //   2) Face lock — generated faces only loosely matched the
       //      uploaded photo. Needs to be IDENTICAL across every frame.
+      //      Multi-character (2+ references): each face must stay
+      //      anchored to its OWN reference — no swap between characters.
       // Both are also enforced by Claude in /api/prompt/expand, but
       // a user who types their own prompt or pastes one bypasses
       // that layer. We re-inject both here on every reference-mode
       // submit so the Seedance call ALWAYS carries both safeties.
+      //
+      // Mirrored from /api/prompt/expand/route.js — keep these two
+      // builders in sync. Dynamic per image count so a two-person
+      // scene gets a multi-character lock string instead of the
+      // single-image text that only protects the first face.
+      const buildFaceLock = (imageCount) => {
+        if (imageCount <= 1) {
+          return (
+            "FACE LOCK: the character's face MUST match 【@image1】 EXACTLY in every single frame — " +
+            "identical facial structure, identical eyes, identical nose, identical mouth, identical jawline, " +
+            "identical skin tone and texture, identical hairline and hair texture. " +
+            "No drift, no morphing, no 'similar', no 'inspired by' — IDENTITY-PRESERVING reproduction throughout the entire clip."
+          );
+        }
+        const pairs = Array.from({ length: imageCount }, (_, i) => {
+          const letter = String.fromCharCode(65 + i);
+          return `Character ${letter} → 【@image${i + 1}】`;
+        }).join(", ");
+        return (
+          "FACE LOCK (multi-character): each character's face MUST match its assigned reference EXACTLY in every frame they appear — " +
+          `${pairs}. ` +
+          "Identical facial structure, identical eyes, identical nose, identical mouth, identical jawline, " +
+          "identical skin tone and texture, identical hairline and hair texture per character. " +
+          "NO face-swap between characters, NO blending, NO morphing, NO 'similar' — " +
+          "keep each face anchored to its source reference for every frame that character appears."
+        );
+      };
+
       const ANTI_FLASH =
         "Generate cinematically from FRAME 1. Do NOT show, flash, transition from, or include the reference image(s) as a visible frame at any point — the reference is for character likeness and styling ONLY.";
-      const FACE_LOCK =
-        "FACE LOCK: the character's face MUST match 【@image1】 EXACTLY in every single frame — identical facial structure, identical eyes, identical nose, identical mouth, identical jawline, identical skin tone and texture, identical hairline and hair texture. No drift, no morphing, no 'similar', no 'inspired by' — IDENTITY-PRESERVING reproduction throughout the entire clip.";
 
       let finalPrompt = prompt;
       if (type === "reference" && images_list.length > 0) {
+        const FACE_LOCK = buildFaceLock(images_list.length);
         const insertAfterFirstLine = (body, sentence) => {
           const idx = body.indexOf("\n");
           if (idx === -1) return `${body}\n${sentence}`;

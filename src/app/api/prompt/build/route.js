@@ -59,12 +59,19 @@ When reference images (【@image1】, 【@image2】, …) are referenced:
 - The first beat of the SHOT BREAKDOWN must describe scene action starting at 0s, not the reference image.
 - In CHARACTER, frame references as "Use 【@image1】 EXACTLY for face, build, and outfit" — never "open on 【@image1】" or "the video starts with 【@image1】".
 
-## CRITICAL — FACE LOCK (100% MATCH)
-When reference images contain a person (face visible):
-- ALWAYS include this sentence verbatim near the top of the CHARACTER section:
+## CRITICAL — FACE LOCK (100% MATCH, MULTI-CHARACTER AWARE)
+When reference images contain people (faces visible):
+
+- SINGLE PERSON (1 reference image):
+  Include this verbatim near the top of CHARACTER:
   "FACE LOCK: the character's face MUST match 【@image1】 EXACTLY in every single frame — identical facial structure, identical eyes, identical nose, identical mouth, identical jawline, identical skin tone and texture, identical hairline and hair texture. No drift, no morphing, no 'similar', no 'inspired by' — IDENTITY-PRESERVING reproduction throughout the entire clip."
-- If multiple person-images are referenced, write a separate FACE LOCK line for each (FACE LOCK on @image1 for character A, FACE LOCK on @image2 for character B, etc.).
-- Throughout the SHOT BREAKDOWN when describing the face, anchor every reference back to the photo (e.g. "the SAME face from 【@image1】, never altered").`;
+
+- MULTI-CHARACTER (2+ reference images of different people):
+  Write a SEPARATE CHARACTER block for each person, each labelled with their image reference, then include this combined lock sentence:
+  "FACE LOCK (multi-character): each character's face MUST match its assigned reference EXACTLY in every frame they appear — Character A → 【@image1】, Character B → 【@image2】 [, Character C → 【@image3】, …]. Identical facial structure, identical eyes, identical nose, identical mouth, identical jawline, identical skin tone and texture, identical hairline and hair texture per character. NO face-swap between characters, NO blending, NO morphing, NO 'similar' — keep each face anchored to its source reference for every frame that character appears."
+
+- In the SHOT BREAKDOWN, for every beat that shows a character's face, EXPLICITLY tag which reference it locks to (e.g. "Character A (face locked to 【@image1】)"). Repeating the anchor every beat keeps the model from drifting mid-clip or swapping which face goes on which body.
+- Never describe alternative facial features — anchor every reference back to the source photo. Phrases like "similar to" or "inspired by" are BANNED.`;
 
 export async function POST(req) {
   try {

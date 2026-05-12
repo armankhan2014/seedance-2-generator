@@ -96,14 +96,85 @@ When reference images are present:
 - The first beat of the SHOT BREAKDOWN must describe the scene action starting at 0s, not the reference image. Example correct opening: "0–2s: Camera dolly-in on the character mid-stride…" Example WRONG opening: "0–1s: The reference photo dissolves into…"
 - In the CHARACTER section, frame references as "Use 【@image1】 EXACTLY for face, build, and outfit" — never "open on 【@image1】" or "the video starts with 【@image1】".
 
-## CRITICAL — FACE LOCK (100% MATCH)
-This is the second rule Arman flagged on 2026-05-12. Seedance was producing characters with the right outfit / setting but the FACE was only loosely similar to the reference — different jawline, slightly different eyes, drift across frames. He needs the rendered face to be a precise match to the uploaded photo.
+## CRITICAL — FACE LOCK (100% MATCH, MULTI-CHARACTER AWARE)
+This is the second rule Arman flagged on 2026-05-12. Seedance was producing characters with the right outfit / setting but the FACE was only loosely similar to the reference. He also wants multi-character scenes (two men in one story) to keep EACH face locked to its own reference — no face-swap, no blending between Character A and Character B.
 
-When reference images contain a person (face visible):
-- ALWAYS include this sentence verbatim near the top of the CHARACTER section (or right after the anti-flash sentence if no CHARACTER section yet):
+When reference images contain people (faces visible):
+
+- SINGLE PERSON (1 reference image):
+  Include this verbatim near the top of CHARACTER:
   "FACE LOCK: the character's face MUST match 【@image1】 EXACTLY in every single frame — identical facial structure, identical eyes, identical nose, identical mouth, identical jawline, identical skin tone and texture, identical hairline and hair texture. No drift, no morphing, no 'similar', no 'inspired by' — IDENTITY-PRESERVING reproduction throughout the entire clip."
-- If multiple person-images are referenced, write a separate FACE LOCK line for each (FACE LOCK on @image1 for character A, FACE LOCK on @image2 for character B, etc.).
-- Throughout the SHOT BREAKDOWN, when describing the character's face / head, repeat the identity anchor (e.g. "the SAME face from 【@image1】, never altered"). Don't describe alternative facial features — anchor every reference back to the photo.`;
+
+- MULTI-CHARACTER (2+ reference images of different people):
+  Write a SEPARATE CHARACTER block for each person, each labelled with their image reference, then include this combined lock sentence:
+  "FACE LOCK (multi-character): each character's face MUST match its assigned reference EXACTLY in every frame they appear — Character A → 【@image1】, Character B → 【@image2】 [, Character C → 【@image3】, …]. Identical facial structure, identical eyes, identical nose, identical mouth, identical jawline, identical skin tone and texture, identical hairline and hair texture per character. NO face-swap between characters, NO blending, NO morphing, NO 'similar' — keep each face anchored to its source reference for every frame that character appears."
+
+- In the SHOT BREAKDOWN, for every beat that shows a character's face, EXPLICITLY tag which reference it locks to. Example: "0–2s: Character A (face locked to 【@image1】) sits at the table — Character B (face locked to 【@image2】) stands behind, shoulder visible…" Repeating the anchor every beat keeps the model from drifting mid-clip or accidentally swapping which face goes on which body.
+
+- Never describe alternative facial features — anchor every reference back to the source photo. Phrases like "similar to" or "inspired by" are BANNED.`;
+
+// ── Reference-mode safety injector ──────────────────────────────────────────
+// Defence-in-depth: even when the SYSTEM prompt already tells Claude to
+// include the anti-flash + FACE LOCK sentences, the model occasionally drops
+// one or both. We re-inject server-side on every prompt that ships with
+// reference images so the Seedance call ALWAYS carries the safety lines.
+//
+// Dynamic per image count so a two-person scene gets a multi-character
+// lock (Character A → 【@image1】, Character B → 【@image2】 …) instead of
+// the single-image text that only protects the first face. Arman flagged
+// on 2026-05-12 that uploading two reference photos was producing
+// face-swap between the two characters mid-clip — this generator stops
+// that by naming every reference slot in the lock sentence itself.
+//
+// Mirrored in /lib/services/ai.js for the layer-3 catch (user typing
+// their own prompt straight into the textarea bypasses this route).
+function buildFaceLock(imageCount) {
+  if (imageCount <= 1) {
+    return (
+      "FACE LOCK: the character's face MUST match 【@image1】 EXACTLY in every single frame — " +
+      "identical facial structure, identical eyes, identical nose, identical mouth, identical jawline, " +
+      "identical skin tone and texture, identical hairline and hair texture. " +
+      "No drift, no morphing, no 'similar', no 'inspired by' — IDENTITY-PRESERVING reproduction throughout the entire clip."
+    );
+  }
+  // Multi-character: name every reference slot explicitly so Claude / Seedance
+  // can't lose track of which face belongs on which body.
+  const pairs = Array.from({ length: imageCount }, (_, i) => {
+    const letter = String.fromCharCode(65 + i); // A, B, C, ...
+    return `Character ${letter} → 【@image${i + 1}】`;
+  }).join(", ");
+  return (
+    "FACE LOCK (multi-character): each character's face MUST match its assigned reference EXACTLY in every frame they appear — " +
+    `${pairs}. ` +
+    "Identical facial structure, identical eyes, identical nose, identical mouth, identical jawline, " +
+    "identical skin tone and texture, identical hairline and hair texture per character. " +
+    "NO face-swap between characters, NO blending, NO morphing, NO 'similar' — " +
+    "keep each face anchored to its source reference for every frame that character appears."
+  );
+}
+
+function injectReferenceSafeties(prompt, imageCount) {
+  if (!prompt || imageCount < 1) return prompt;
+
+  const ANTI_FLASH =
+    "Generate cinematically from FRAME 1. Do NOT show, flash, transition from, or include the reference image(s) as a visible frame at any point — the reference is for character likeness and styling ONLY.";
+  const FACE_LOCK = buildFaceLock(imageCount);
+
+  const insertAfterFirstLine = (body, sentence) => {
+    const idx = body.indexOf("\n");
+    if (idx === -1) return `${body}\n${sentence}`;
+    return `${body.slice(0, idx)}\n${sentence}${body.slice(idx)}`;
+  };
+
+  let out = prompt;
+  if (!/do\s+not\s+show.*reference\s+image/i.test(out)) {
+    out = insertAfterFirstLine(out, ANTI_FLASH);
+  }
+  if (!/FACE\s+LOCK/i.test(out)) {
+    out = insertAfterFirstLine(out, FACE_LOCK);
+  }
+  return out;
+}
 
 export async function POST(req) {
   try {
@@ -278,28 +349,13 @@ export async function POST(req) {
     //   1) Reference-image flashing as the first frames before the
     //      scene starts.
     //   2) Generated face only loosely matching the reference photo
-    //      ("similar but not the same person").
-    // SYSTEM prompt now instructs Claude to include both safety
-    // sentences in every prompt. If the model ever forgets either,
-    // we force-inject server-side. Only fires when reference images
-    // are actually present — text-only prompts skip both.
-    const ANTI_FLASH =
-      "Generate cinematically from FRAME 1. Do NOT show, flash, transition from, or include the reference image(s) as a visible frame at any point — the reference is for character likeness and styling ONLY.";
-    const FACE_LOCK =
-      "FACE LOCK: the character's face MUST match 【@image1】 EXACTLY in every single frame — identical facial structure, identical eyes, identical nose, identical mouth, identical jawline, identical skin tone and texture, identical hairline and hair texture. No drift, no morphing, no 'similar', no 'inspired by' — IDENTITY-PRESERVING reproduction throughout the entire clip.";
-
+    //      ("similar but not the same person"), AND with multiple
+    //      references the faces could swap between characters.
+    // SYSTEM prompt now instructs Claude to include the right
+    // safety sentences in every prompt. If the model ever forgets,
+    // we force-inject server-side, dynamically per image count.
     if (imageBlocks.length > 0) {
-      const insertAfterFirstLine = (body, sentence) => {
-        const idx = body.indexOf("\n");
-        if (idx === -1) return `${body}\n${sentence}`;
-        return `${body.slice(0, idx)}\n${sentence}${body.slice(idx)}`;
-      };
-      if (!/do\s+not\s+show.*reference\s+image/i.test(prompt)) {
-        prompt = insertAfterFirstLine(prompt, ANTI_FLASH);
-      }
-      if (!/FACE\s+LOCK/i.test(prompt)) {
-        prompt = insertAfterFirstLine(prompt, FACE_LOCK);
-      }
+      prompt = injectReferenceSafeties(prompt, imageBlocks.length);
     }
 
     return NextResponse.json({ prompt });
