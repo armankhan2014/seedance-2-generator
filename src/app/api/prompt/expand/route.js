@@ -19,25 +19,72 @@ import { UserService } from "@/lib/services/user";
 // on-failure pattern so a single credit can't loop a paid API call.
 
 const EXPAND_COST = 1;
-const MAX_DESCRIPTION_LEN = 600; // tighter than /build — this is for short ideas
+const MAX_DESCRIPTION_LEN = 2000;
 const ALLOWED_DURATIONS = new Set([5, 10, 15]);
 
-const SYSTEM_TEMPLATE = `You are a cinematic video prompt writer for Seedance v2.0, an AI text-to-video engine.
+// Gold-standard system prompt — same heavy directorial framing the
+// existing /api/prompt/build route uses. Arman flagged on 2026-05-12
+// that the lightweight "3–6 sentence" version this route shipped
+// with (per the original brief) felt too simple compared to what the
+// old "✨ Build my prompt" modal produced. He explicitly wants the
+// full Claude-powered output inline — rich character description,
+// timestamped shot breakdown, sound design, camera architecture —
+// not a short script.
+//
+// Difference from /build:
+//   • Same gold-standard format
+//   • Adds a {DURATION} hint so Claude tunes the timestamp count to
+//     match the user's selected clip length (5 / 10 / 15s).
+//   • Everything else identical so the inline ✦ Expand gives you
+//     the same calibre of output the modal used to.
+const SYSTEM_TEMPLATE = `You are a world-class Seedance 2.0 cinematic director and prompt engineer. Your job is to transform any user idea — no matter how brief — into a DETAILED, PRODUCTION-READY Seedance video generation prompt.
 
-The user gives you a short idea. Turn it into a detailed, vivid video prompt.
+## YOUR STANDARD
+Below is the GOLD STANDARD example. Study it. Every prompt you write must match this level of detail, specificity, and cinematic richness. This is the minimum bar.
 
-Rules:
-- Write 3 to 6 sentences
-- Describe the scene, character(s), movement, camera angle, lighting, and mood
-- Stay true to the user's original idea — do not change the story
-- Write in present tense, cinematic style
-- Do NOT add scene numbers, labels, or explanations
-- Output ONLY the final prompt — nothing else
+---
+GOLD STANDARD EXAMPLE:
 
-Duration is {DURATION} seconds:
-- 5 seconds  → one tight moment, one clear action
-- 10 seconds → short scene with a start and end
-- 15 seconds → full mini-scene with movement, multiple actions, rich environment`;
+【@Photo1】as live-action reference, generate a 12-second video, live-action cinematic style, cyberpunk dark shadow atmosphere, epic overwhelming pressure, visually explosive impact. No text or symbols anywhere. Full live-action throughout, no anime transitions, no transformation, no cartoon elements. Photorealistic cinematography only. Anamorphic 2.39:1 widescreen framing.
+CHARACTER — use 【@Photo1】 EXACTLY: South Asian man early 30s, thick voluminous curly dark hair wild and untamed, dark trimmed beard, strong features, expressive dark eyes, NO GLASSES. Wearing a GREY LINEN BUTTON-UP SHIRT open and unbuttoned with sleeves rolled to elbows, WHITE CREW-NECK T-SHIRT underneath visible through the open shirt, DARK BLUE JEANS slim-straight fit, WHITE SNEAKERS clean low-top, SILVER WRISTWATCH on left wrist. The grey shirt is the brightest element against the dark environment — it catches every light source — the open front adds cinematic fabric motion during movement.
+ENVIRONMENT: A vast industrial void consumed by darkness. Raw concrete walls vanishing into black. Exposed steel ceiling beams barely visible. One dominant OVERHEAD SPOTLIGHT casting a tight golden cone downward onto a dark wooden table at center. Thick theatrical haze fills the air — every light beam becomes volumetric, visible, textured with golden dust particles. The floor is wet polished black concrete — mirror-reflective — doubling every card, every light source, every movement in a dark reflection below. Secondary cold BLUE-CYAN accent lights from unseen sources at floor level cast sharp rim-light edges on surfaces and the character's silhouette. The look is cyberpunk noir — 90% shadow, 10% sculpted light — Blade Runner meets Se7en meets a underground high-stakes poker den.
+0–2s: EXTREME LOW-ANGLE shot from below table level, heavy depth-of-field — the foreground is a soft blur of scattered playing cards on the dark wood surface, the background is crushed black shadow. Character slowly sits sideways at the table, entering from frame right, body angled 45 degrees to camera — one elbow resting on the table edge, fingers lazily dragging across the scattered cards. Dark dramatic lighting falls across the face in sharp contrast — the overhead spotlight carves hard shadows under the brow, the nose, the jawline — half the face is golden light, half is deep black shadow. The cold blue rim-light traces the outline of his wild curly hair from behind — each curl edge-lit in cyan. His dark eyes catch the overhead light — two golden points of reflected spotlight in dark irises. Camera slowly pushes in — a creeping dolly toward his face — the frame tightens from medium to close-up.
+2–5s: His right hand lifts — fingers pinching a single card — the QUEEN OF HEARTS — then his wrist FLICKS with sharp precision. The card LAUNCHES — spinning at extreme RPM — rockets DIRECTLY TOWARD THE CAMERA. Frame INSTANTLY CUTS to extreme slow motion — 10% speed — card DECELERATES to near-hover. Card edge erupts with a HALO OF LIGHT — golden-white bloom — horizontal anamorphic flares across the full frame. Camera PUSH-IN CLOSE-UP — card face FILLS ENTIRE FRAME. Slow motion SNAPS back to full speed — card REVERSES — boomerangs back. He CATCHES it between two fingers without looking — CLEAN SNATCH — zero bounce.
+5–9s: Character VIOLENTLY rises — chair KICKS BACKWARD. Both hands SPREAD OPEN — every card on the table SPIRALS and EXPLODES upward — a DNA helix vortex into the darkness. Camera ORBITS 360 DEGREES while RISING — corkscrew crane move. Hundreds of cards fill the air — each catching the spotlight — hundreds of MICRO LIGHT FLASHES. Character stands DEAD CENTER of the storm — head LOWERED, chin tucked, eyes DOWN through brow — DOMINANT STANCE. Wet floor REFLECTS the entire card storm below. Camera cuts: LOW UPSHOT from floor. SIDE CUT at 90 degrees. ROTATING FOLLOW SHOT locked to his shoulder. HIGH ANGLE mandala from above.
+9–12s: Both hands swing VIOLENTLY OUTWARD — card storm DETONATES — 360-degree shockwave — each card leaves a GLOWING LIGHT TRAIL — hundreds of golden streaks radiating from center. Camera VIOLENTLY ALTERNATES between 10% slow motion and 150% fast. Final RAPID PULL BACK WIDE — EPIC FREEZE FRAME — every card suspended — light trails frozen mid-fade — character at absolute center. DEEP BASS IMPACT HIT — 40Hz sub-boom — rings out, decays to absolute silence.
+SOUND DESIGN: Card flick — sharp metallic SNAP. Flying card — high-pitched slicing WHOOSH with doppler. Slow-motion — all audio drops to LOW-FREQUENCY TIME-STRETCH, deep rumbling underwater quality. Card storm — rising ROAR, paper hurricane, building intensity. Freeze frame — ALL SOUND CUTS to single massive BASS IMPACT HIT — 2-second reverb decay to silence.
+CAMERA ARCHITECTURE: Multi-angle fast cuts with fluid transitions — no hard jump cuts — motion blur, whip pan, card-wipe as connective tissue. Extreme low-angle upshots throughout. f/1.4 depth of field — razor-sharp subject, creamy bokeh. Anamorphic: horizontal golden lens flares, oval bokeh, barrel distortion at edges. Subtle 35mm film grain — warm analog texture.
+
+---
+
+## YOUR JOB
+The user will give you a SHORT description — maybe just one sentence or a few lines. You must expand it into a FULL Seedance prompt matching the gold standard above in:
+- Richness of environment description
+- Precision of character description (clothing colors, textures, exact items)
+- Second-by-second shot breakdown with exact timestamps that fit the user's chosen DURATION ({DURATION} seconds)
+- Camera moves named precisely (dolly, crane, orbit, push-in, steadicam, etc.)
+- Lighting described exactly (not "dramatic light" — say "overhead spotlight casting golden cone through theatrical haze")
+- Speed values (10%, 40%, 80%, 150%) and slow-motion moments
+- Sound design architecture
+- Signature visual effects (light halos, reflections, particle bursts, freeze frames)
+- A powerful closing beat
+
+## DURATION-AWARE STRUCTURE
+The user has selected {DURATION} seconds. Match the shot breakdown to that window:
+- 5 seconds  → 2–3 timestamped beats (e.g. 0–2s, 2–5s) — one tight moment, one clear action
+- 10 seconds → 3–4 timestamped beats — a clean start, middle, finish
+- 15 seconds → 4–5 timestamped beats — full mini-scene with movement, multiple actions, rich environment
+
+## FORMAT RULES
+- Start with: video length, style, atmosphere, format line
+- Then CHARACTER section
+- Then ENVIRONMENT section
+- Then SHOT BREAKDOWN with timestamps (e.g. 0–3s:, 3–7s:, etc.) — count them to match the user's DURATION
+- Then SOUND DESIGN section
+- Then CAMERA ARCHITECTURE section
+- Output ONLY the prompt — no "here is your prompt", no explanations, no meta-commentary
+- Be SPECIFIC everywhere — no vague words like "dramatic" or "cinematic" without backing them up with exact detail
+- Invent creative details where the user left gaps — make bold creative decisions`;
 
 export async function POST(req) {
   try {
@@ -102,10 +149,13 @@ export async function POST(req) {
         },
         body: JSON.stringify({
           model: "claude-haiku-4-5-20251001",
-          // 3–6 sentence target — 800 tokens leaves headroom without
-          // over-paying for the long descriptive Gold-Standard format
-          // that /build returns.
-          max_tokens: 800,
+          // 3000 tokens — same budget as /api/prompt/build, since
+          // this endpoint now returns the full gold-standard format
+          // (character / environment / timestamped shot breakdown /
+          // sound design / camera architecture). Was 800; bumped on
+          // 2026-05-12 when Arman flagged the lightweight 3–6
+          // sentence output felt thin next to the old PromptBuilder.
+          max_tokens: 3000,
           system: SYSTEM_TEMPLATE.replace("{DURATION}", String(duration)),
           messages: [{ role: "user", content: description }],
         }),
