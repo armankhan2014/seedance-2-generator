@@ -17,7 +17,7 @@
 // Page deletes itself the moment Arman signs off and we port to
 // GenerateClient.jsx.
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import SmartPrompt from "@/components/saas/SmartPrompt";
 
 const MODES = [
@@ -47,8 +47,13 @@ export default function DemoFullGeneratePage() {
   const [duration, setDuration] = useState(5);
   const [quality, setQuality] = useState("basic");
 
-  // ── Image upload (mock) ───────────────────────────────────────
-  const [images, setImages] = useState([]); // [{ url, label }]
+  // ── Image upload ──────────────────────────────────────────────
+  // Real file picker — reads files locally with FileReader and shows
+  // a data URL preview. No R2 upload from the demo (we're just
+  // verifying layout). On the real /generate page the same picker
+  // exists already and uploads to R2 via /api/upload.
+  const [images, setImages] = useState([]); // [{ url, label, name }]
+  const fileInputRef = useRef(null);
 
   // ── Onboarding card visibility ────────────────────────────────
   const [showOnboarding, setShowOnboarding] = useState(true);
@@ -77,16 +82,41 @@ export default function DemoFullGeneratePage() {
     );
   }
 
-  function addMockImage() {
-    if (images.length >= 5) return;
-    const idx = images.length + 1;
-    setImages([
-      ...images,
-      {
-        url: `https://placehold.co/200x200/1a1a1a/c8f135?text=%40image${idx}`,
-        label: `@image${idx}`,
-      },
-    ]);
+  function openFilePicker() {
+    if (images.length >= 9) return;
+    fileInputRef.current?.click();
+  }
+
+  async function handleFilesPicked(event) {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+    // Cap how many new files we'll accept so the cap of 9 holds.
+    const room = 9 - images.length;
+    const toAdd = files.slice(0, room);
+    const reads = toAdd.map(
+      (f) =>
+        new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () =>
+            resolve({
+              url: reader.result,
+              label: `@image${images.length + 1}`,
+              name: f.name,
+            });
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(f);
+        })
+    );
+    const results = (await Promise.all(reads)).filter(Boolean);
+    // Re-label sequentially so @image1, @image2, … stays consistent
+    // when the user adds a batch.
+    setImages((prev) => {
+      const merged = [...prev, ...results];
+      return merged.map((img, i) => ({ ...img, label: `@image${i + 1}` }));
+    });
+    // Reset the input so picking the same file twice still fires
+    // the change event.
+    event.target.value = "";
   }
 
   return (
@@ -249,8 +279,21 @@ export default function DemoFullGeneratePage() {
                     {mode === "image-to-video" ? "IMAGE" : "IMAGES"} ({images.length}/9)
                   </label>
                 </div>
-                <button type="button" onClick={addMockImage} style={S.uploadBtn} disabled={images.length >= 9}>
-                  📷 {images.length >= 9 ? "Max reached" : "Upload image"}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  hidden
+                  onChange={handleFilesPicked}
+                />
+                <button
+                  type="button"
+                  onClick={openFilePicker}
+                  style={S.uploadBtn}
+                  disabled={images.length >= 9}
+                >
+                  📷 {images.length >= 9 ? "Max reached (9/9)" : "Upload image"}
                 </button>
                 {images.length > 0 && (
                   <div style={S.imageGrid}>
@@ -259,7 +302,13 @@ export default function DemoFullGeneratePage() {
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={img.url} alt="" style={S.imageThumb} />
                         <button
-                          onClick={() => setImages(images.filter((_, idx) => idx !== i))}
+                          onClick={() =>
+                            setImages((prev) =>
+                              prev
+                                .filter((_, idx) => idx !== i)
+                                .map((img, idx) => ({ ...img, label: `@image${idx + 1}` }))
+                            )
+                          }
                           style={S.removeBtn}
                           aria-label="Remove"
                         >
@@ -271,8 +320,9 @@ export default function DemoFullGeneratePage() {
                   </div>
                 )}
                 <p style={{ margin: "8px 0 0", fontSize: 10.5, color: "#666" }}>
-                  Demo upload — adds a placeholder tile. On the real page this opens a
-                  file picker, compresses to ≤ 2048 px, uploads to R2.
+                  Demo upload — your photos stay on this device (we just preview
+                  the layout). On the real /generate page the picker compresses
+                  to ≤ 2048 px and uploads to R2 via /api/upload.
                 </p>
               </div>
             )}
