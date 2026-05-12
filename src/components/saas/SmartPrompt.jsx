@@ -64,6 +64,18 @@ export default function SmartPrompt({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // Track the SHORT idea the user expanded from so they can
+  // re-expand later — typically after uploading an image AFTER the
+  // first expansion. Without this, the original short idea would be
+  // lost the moment expansion replaced the textarea, and the user
+  // would have to re-type it from memory to get an image-aware
+  // version. Arman flagged this on 2026-05-12.
+  const [lastIdea, setLastIdea] = useState(null);
+  // Snapshot of images at the time of the last expansion. If the
+  // user uploads / removes images since then, we surface a
+  // "Re-expand with new image(s)" affordance so the prompt can
+  // pick up the new context.
+  const [lastImagesKey, setLastImagesKey] = useState(null);
 
   const wordCount = useMemo(() => {
     if (!value) return 0;
@@ -71,14 +83,48 @@ export default function SmartPrompt({
     return m ? m.length : 0;
   }, [value]);
 
-  // Button visibility rules from the brief:
+  // Stable key for the current image set — used to detect when
+  // images have changed since the last expand.
+  const imagesKey = useMemo(() => (images || []).join("|"), [images]);
+
+  // Button visibility rules:
   //   • 0 words      → hide (nothing to expand)
-  //   • 1–29 words   → show (typical use case)
-  //   • 30+ words    → hide (user clearly knows what they want)
-  const showExpand = wordCount >= 1 && wordCount <= 29;
+  //   • 1–29 words   → show "✦ Expand my idea" (typical first-pass)
+  //   • 30+ words AND we have a stored lastIdea AND the image set
+  //     has changed since last expand → show "✦ Re-expand with new
+  //     image(s)" using the original short idea. Covers the common
+  //     "expand → notice you should upload an image → upload →
+  //     re-expand" workflow without forcing the user to re-type.
+  //   • 30+ words otherwise → hide (user knows what they want).
+  const showFirstExpand = wordCount >= 1 && wordCount <= 29;
+  const showReExpand =
+    !showFirstExpand &&
+    wordCount > 0 &&
+    lastIdea &&
+    lastImagesKey !== null &&
+    imagesKey !== lastImagesKey &&
+    (images?.length || 0) > 0;
+  const showExpand = showFirstExpand || showReExpand;
+
+  // Label adapts so the user knows what Claude will see BEFORE
+  // they tap. Matches the parent's mode awareness.
+  const imageCount = images?.length || 0;
+  let buttonLabel;
+  if (busy) {
+    buttonLabel = "Expanding…";
+  } else if (showReExpand) {
+    buttonLabel = `✦ Re-expand with ${imageCount === 1 ? "image" : `${imageCount} images`}`;
+  } else if (imageCount > 0) {
+    buttonLabel = `✦ Expand my idea (with ${imageCount === 1 ? "image" : `${imageCount} images`})`;
+  } else {
+    buttonLabel = "✦ Expand my idea";
+  }
 
   async function handleExpand() {
     if (busy || !showExpand) return;
+    // For re-expand, send the stored short idea instead of the
+    // current expanded text. First expand sends value verbatim.
+    const sourceIdea = showReExpand ? lastIdea : value.trim();
     setBusy(true);
     setError(null);
     try {
@@ -86,7 +132,7 @@ export default function SmartPrompt({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          description: value.trim(),
+          description: sourceIdea,
           duration,
           // Forward any uploaded image URLs so the server can fetch
           // them and pass them to Claude vision. Parent typically
@@ -103,6 +149,11 @@ export default function SmartPrompt({
       }
       if (data.prompt) {
         onChange?.(data.prompt);
+        // Remember what we expanded from + which images were in play.
+        // Powers the Re-expand button when the user adds/removes
+        // images after the first expansion.
+        setLastIdea(sourceIdea);
+        setLastImagesKey(imagesKey);
       }
     } catch (err) {
       setError(err.message || "Couldn't expand — try again.");
@@ -196,6 +247,13 @@ export default function SmartPrompt({
             type="button"
             onClick={handleExpand}
             disabled={busy || disabled}
+            title={
+              showReExpand
+                ? `Re-expand using your original idea: "${lastIdea}" plus the ${imageCount} image${imageCount === 1 ? "" : "s"} now uploaded.`
+                : imageCount > 0
+                  ? `Expand using your idea plus the ${imageCount} image${imageCount === 1 ? "" : "s"} you uploaded.`
+                  : "Expand your short idea into a full cinematic prompt."
+            }
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -218,13 +276,10 @@ export default function SmartPrompt({
             {busy ? (
               <>
                 <Spinner />
-                <span>Expanding…</span>
+                <span>{buttonLabel}</span>
               </>
             ) : (
-              <>
-                <span style={{ fontSize: 14, lineHeight: 1 }}>✦</span>
-                <span>Expand my idea</span>
-              </>
+              <span>{buttonLabel}</span>
             )}
           </button>
         ) : null}
