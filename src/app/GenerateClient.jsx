@@ -24,31 +24,131 @@ import SmartPrompt from "@/components/saas/SmartPrompt";
 
 export const dynamic = "force-dynamic";
 
-const RECENT_IMAGES_KEY = "seedance_recent_images";
-const MAX_RECENT = 12;
-
-function saveRecentImage(url) {
-  try {
-    const existing = JSON.parse(localStorage.getItem(RECENT_IMAGES_KEY) || "[]");
-    const updated = [url, ...existing.filter(u => u !== url)].slice(0, MAX_RECENT);
-    localStorage.setItem(RECENT_IMAGES_KEY, JSON.stringify(updated));
-    return updated;
-  } catch { return []; }
-}
+// ── Recent images library (v2) ──────────────────────────────────────────────
+// v1 stored URLs as a flat string[] under `seedance_recent_images`.
+// v2 stores rich rows so each image carries a user-editable name + timestamp:
+//   { url: string, name: string, addedAt: number }[]
+//
+// On load we read v2 first, then migrate any v1 leftovers in-place so users
+// who saved images on the old strip don't see them disappear. v1 entries get
+// auto-named "Image 1", "Image 2"… in their original order (newest first).
+const RECENT_IMAGES_KEY_V1 = "seedance_recent_images";
+const RECENT_IMAGES_KEY = "seedance_recent_images_v2";
+const MAX_RECENT = 24;
 
 function loadRecentImages() {
   try {
-    return JSON.parse(localStorage.getItem(RECENT_IMAGES_KEY) || "[]");
+    const v2raw = localStorage.getItem(RECENT_IMAGES_KEY);
+    if (v2raw) {
+      const arr = JSON.parse(v2raw);
+      if (Array.isArray(arr)) {
+        // Defensive: discard rows missing a url.
+        return arr.filter((r) => r && typeof r.url === "string");
+      }
+    }
+    // Migrate v1 → v2 on first read.
+    const v1raw = localStorage.getItem(RECENT_IMAGES_KEY_V1);
+    if (v1raw) {
+      const urls = JSON.parse(v1raw);
+      if (Array.isArray(urls) && urls.length > 0) {
+        const now = Date.now();
+        const migrated = urls
+          .filter((u) => typeof u === "string")
+          .map((url, i) => ({
+            url,
+            name: `Image ${i + 1}`,
+            // Stagger fake timestamps so the time-ago caption reads
+            // newest-first without all rows saying "just now".
+            addedAt: now - i * 60_000,
+          }));
+        localStorage.setItem(RECENT_IMAGES_KEY, JSON.stringify(migrated));
+        localStorage.removeItem(RECENT_IMAGES_KEY_V1);
+        return migrated;
+      }
+    }
+    return [];
+  } catch { return []; }
+}
+
+function writeRecentImages(rows) {
+  try {
+    localStorage.setItem(RECENT_IMAGES_KEY, JSON.stringify(rows));
+  } catch {}
+  return rows;
+}
+
+// Push a URL into the library. If it already exists, surface it to the top
+// without losing the user's saved name. New entries get an auto-name
+// ("Image N") that the user can rename inline later.
+function saveRecentImage(url) {
+  try {
+    const existing = loadRecentImages();
+    const hit = existing.find((r) => r.url === url);
+    if (hit) {
+      const updated = [hit, ...existing.filter((r) => r.url !== url)].slice(0, MAX_RECENT);
+      return writeRecentImages(updated);
+    }
+    // Auto-name: scan for the highest "Image N" already used so we don't
+    // collide. Users who rename their entries won't trip this — only
+    // un-renamed auto-names increment.
+    const nums = existing
+      .map((r) => {
+        const m = /^Image (\d+)$/.exec(r.name || "");
+        return m ? parseInt(m[1], 10) : 0;
+      })
+      .filter((n) => n > 0);
+    const next = (nums.length ? Math.max(...nums) : 0) + 1;
+    const row = { url, name: `Image ${next}`, addedAt: Date.now() };
+    const updated = [row, ...existing].slice(0, MAX_RECENT);
+    return writeRecentImages(updated);
   } catch { return []; }
 }
 
 function removeRecentImage(url) {
   try {
-    const existing = JSON.parse(localStorage.getItem(RECENT_IMAGES_KEY) || "[]");
-    const updated = existing.filter(u => u !== url);
-    localStorage.setItem(RECENT_IMAGES_KEY, JSON.stringify(updated));
-    return updated;
+    const existing = loadRecentImages();
+    return writeRecentImages(existing.filter((r) => r.url !== url));
   } catch { return []; }
+}
+
+function renameRecentImage(url, name) {
+  try {
+    const existing = loadRecentImages();
+    const updated = existing.map((r) => (r.url === url ? { ...r, name: name.trim() || r.name } : r));
+    return writeRecentImages(updated);
+  } catch { return []; }
+}
+
+function timeAgo(ts) {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+// Small inline magnifier icon — react-icons would work too, but the
+// library import list above is already long. Keeping it inline avoids
+// pulling in another package + matches the visual weight of the
+// surrounding 12px-text UI.
+function FaSearchIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="12"
+      height="12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted pointer-events-none"
+    >
+      <circle cx="11" cy="11" r="7" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  );
 }
 
 // Resize/re-encode an image in the browser before uploading.
@@ -190,7 +290,14 @@ export default function Home() {
   const [duration, setDuration] = useState(DURATIONS[0].value);
   const [quality, setQuality] = useState(QUALITIES[0].value);
   const [imagesList, setImagesList] = useState([]); // Max 9 URLs for I2V/Reference
-  const [recentImages, setRecentImages] = useState([]); // Recently uploaded image URLs
+  // Library of previously-uploaded images. v2 schema: { url, name, addedAt }[]
+  // (was a flat URL[] under "Recent" before 2026-05-12 — auto-migrated on load).
+  const [recentImages, setRecentImages] = useState([]);
+  // Search query for the library — filters by name (case-insensitive substring).
+  const [librarySearch, setLibrarySearch] = useState("");
+  // Inline-rename state. editingUrl tracks which row's name field is active.
+  const [libraryEditingUrl, setLibraryEditingUrl] = useState(null);
+  const [libraryDraftName, setLibraryDraftName] = useState("");
   const [videoFiles, setVideoFiles] = useState([]); // Max 3 URLs for Reference
   const [audioFiles, setAudioFiles] = useState([]); // Max 3 URLs for Reference
   const [newVideoUrl, setNewVideoUrl] = useState("");
@@ -679,58 +786,175 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* Recent images strip */}
-                {recentImages.length > 0 && (
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-medium text-muted uppercase tracking-wider flex items-center gap-1">
-                      <FaSyncAlt className="text-[8px]" /> Recent
-                    </label>
-                    <div className="flex gap-2 overflow-x-auto pb-1 custom-scrollbar">
-                      {recentImages.map((url, idx) => {
-                        const alreadyAdded = imagesList.includes(url);
-                        return (
-                          <div
-                            key={idx}
-                            className="relative flex-shrink-0 w-12 h-12 rounded-md overflow-hidden border border-glass-border hover:border-primary-500/60 transition-all group"
-                          >
+                {/* Image library — searchable, named, scrollable. Replaces the
+                    old horizontal "Recent" strip (2026-05-12). Each row carries
+                    a user-editable name + time-ago caption. localStorage v1
+                    auto-migrates to v2 on first load — see loadRecentImages(). */}
+                {recentImages.length > 0 && (() => {
+                  const q = librarySearch.trim().toLowerCase();
+                  const filtered = q
+                    ? recentImages.filter((r) => (r.name || "").toLowerCase().includes(q))
+                    : recentImages;
+                  return (
+                    <div className="bg-glass-bg border border-glass-border rounded-lg overflow-hidden">
+                      {/* Header: title + count + search */}
+                      <div className="px-3 pt-3 pb-2 border-b border-glass-border">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-[10px] font-medium text-muted uppercase tracking-wider flex items-center gap-1">
+                            <FaSyncAlt className="text-[8px]" /> Your image library ({recentImages.length})
+                          </label>
+                          {librarySearch && (
                             <button
                               type="button"
-                              onClick={() => {
-                                if (!alreadyAdded && imagesList.length < 9) {
-                                  setImagesList(prev => [...prev, url]);
-                                }
-                              }}
-                              disabled={alreadyAdded || imagesList.length >= 9}
-                              title={alreadyAdded ? "Already added" : "Add to images"}
-                              className="block w-full h-full disabled:opacity-40 disabled:cursor-not-allowed"
+                              onClick={() => setLibrarySearch("")}
+                              className="text-[11px] text-muted hover:text-white transition-colors"
                             >
-                              <img src={url} className="w-full h-full object-cover" alt="" />
-                              {!alreadyAdded && (
-                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
-                                  <FaPlus className="text-white text-[10px]" />
-                                </div>
-                              )}
-                              {alreadyAdded && (
-                                <div className="absolute inset-0 bg-primary-500/30 flex items-center justify-center pointer-events-none">
-                                  <span className="text-white text-[10px] font-bold">✓</span>
-                                </div>
-                              )}
+                              clear
                             </button>
+                          )}
+                        </div>
+                        <div className="relative">
+                          <FaSearchIcon />
+                          <input
+                            type="text"
+                            value={librarySearch}
+                            onChange={(e) => setLibrarySearch(e.target.value)}
+                            placeholder="Search by name…"
+                            className="w-full bg-black/40 border border-glass-border rounded-md pl-8 pr-7 py-1.5 text-xs outline-none focus:border-primary-500/40 placeholder:text-muted/70"
+                          />
+                          {librarySearch && (
                             <button
                               type="button"
-                              onClick={() => setRecentImages(removeRecentImage(url))}
-                              title="Remove from recent"
-                              aria-label="Remove from recent"
-                              className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-black/70 border border-white/20 text-white text-[10px] leading-none flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-red-500 hover:border-red-400 transition-all"
+                              onClick={() => setLibrarySearch("")}
+                              aria-label="Clear search"
+                              className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted hover:text-white text-xs"
                             >
                               ×
                             </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Scroll body */}
+                      <div className="max-h-[280px] overflow-y-auto custom-scrollbar">
+                        {filtered.length === 0 ? (
+                          <div className="px-4 py-6 text-center text-xs text-muted">
+                            No images named “{librarySearch}”.
                           </div>
-                        );
-                      })}
+                        ) : (
+                          <ul className="divide-y divide-glass-border/60">
+                            {filtered.map((row) => {
+                              const inTray = imagesList.includes(row.url);
+                              const isEditing = libraryEditingUrl === row.url;
+                              const trayFull = imagesList.length >= 9;
+                              return (
+                                <li
+                                  key={row.url}
+                                  className={`flex items-center gap-3 px-3 py-2 ${
+                                    inTray ? "bg-primary-500/[0.04]" : ""
+                                  }`}
+                                >
+                                  {/* Thumbnail */}
+                                  <div
+                                    className={`relative flex-shrink-0 w-11 h-11 rounded-md overflow-hidden border ${
+                                      inTray ? "border-primary-500/40" : "border-glass-border"
+                                    }`}
+                                  >
+                                    <img src={row.url} className="w-full h-full object-cover" alt="" />
+                                    {inTray && (
+                                      <div className="absolute inset-0 bg-primary-500/20 flex items-center justify-center text-primary-500 font-bold text-sm pointer-events-none">
+                                        ✓
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Name + time-ago */}
+                                  <div className="flex-1 min-w-0">
+                                    {isEditing ? (
+                                      <input
+                                        autoFocus
+                                        value={libraryDraftName}
+                                        onChange={(e) => setLibraryDraftName(e.target.value)}
+                                        onBlur={() => {
+                                          setRecentImages(renameRecentImage(row.url, libraryDraftName));
+                                          setLibraryEditingUrl(null);
+                                          setLibraryDraftName("");
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") {
+                                            setRecentImages(renameRecentImage(row.url, libraryDraftName));
+                                            setLibraryEditingUrl(null);
+                                            setLibraryDraftName("");
+                                          } else if (e.key === "Escape") {
+                                            setLibraryEditingUrl(null);
+                                            setLibraryDraftName("");
+                                          }
+                                        }}
+                                        maxLength={60}
+                                        className="w-full bg-black/60 border border-primary-500/40 rounded-md px-2 py-1 text-xs outline-none"
+                                      />
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setLibraryEditingUrl(row.url);
+                                          setLibraryDraftName(row.name || "");
+                                        }}
+                                        title="Click to rename"
+                                        className="block w-full text-left text-xs font-medium text-white truncate hover:text-primary-500 transition-colors cursor-text"
+                                      >
+                                        {row.name || "Untitled"}
+                                      </button>
+                                    )}
+                                    <div className="text-[10px] text-muted mt-0.5">
+                                      {timeAgo(row.addedAt || Date.now())}
+                                    </div>
+                                  </div>
+
+                                  {/* Actions */}
+                                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                                    {inTray ? (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setImagesList((prev) => prev.filter((u) => u !== row.url))
+                                        }
+                                        className="px-2 py-1 text-[11px] font-semibold rounded-md border border-glass-border text-muted hover:text-white hover:border-white/30 transition-colors"
+                                      >
+                                        In tray
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (!trayFull) setImagesList((prev) => [...prev, row.url]);
+                                        }}
+                                        disabled={trayFull}
+                                        title={trayFull ? "Tray is full (9/9)" : "Add to images"}
+                                        className="px-2 py-1 text-[11px] font-semibold rounded-md bg-primary-500 text-black hover:brightness-110 disabled:bg-transparent disabled:border disabled:border-glass-border disabled:text-muted disabled:cursor-not-allowed transition-all"
+                                      >
+                                        Add
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => setRecentImages(removeRecentImage(row.url))}
+                                      aria-label="Remove from library"
+                                      title="Remove from library"
+                                      className="w-6 h-6 rounded-md border border-glass-border text-muted hover:text-red-400 hover:border-red-400/40 transition-colors flex items-center justify-center text-sm leading-none"
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
               </div>
             )}
 
