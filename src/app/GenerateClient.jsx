@@ -459,16 +459,14 @@ export default function Home() {
   const [error, setError] = useState(null);
 
   const MODES = [
-    // `label` is shown on mobile (≤ sm), `fullLabel` on tablet+ — keeps
-    // the 4-up pill row readable on phones while spelling out the full
-    // mode name on desktop where Arman likes the longer phrasing.
-    { id: "text-to-video", label: "Text", fullLabel: "Text to Video", icon: FaBolt },
-    { id: "image-to-video", label: "Image", fullLabel: "Image to Video", icon: IoImageOutline },
-    { id: "reference-to-video", label: "Reference", fullLabel: "Reference to Video", icon: FaSyncAlt },
+    // Short, uniform labels for the 4-up pill row. Long names ("Text to
+    // Video", "Reference to Video") made the row look unbalanced —
+    // Reference is 3× longer than Story. Consistent short labels +
+    // icons give the segmented control a clean professional rhythm.
+    { id: "text-to-video", label: "Text", fullLabel: "Text", icon: FaBolt },
+    { id: "image-to-video", label: "Image", fullLabel: "Image", icon: IoImageOutline },
+    { id: "reference-to-video", label: "Reference", fullLabel: "Reference", icon: FaSyncAlt },
     // Story = multi-shot video with cast face-locked across every shot.
-    // Each shot calls /api/seedance with reference-to-video under the hood,
-    // so the existing FACE LOCK + anti-flash injections in /lib/services/ai.js
-    // protect cast consistency automatically.
     { id: "story", label: "Story", fullLabel: "Story", icon: FaVideo, badge: "NEW" },
   ];
 
@@ -1079,21 +1077,18 @@ export default function Home() {
                   }`}
                 >
                   <Icon className="shrink-0 hidden sm:inline" />
-                  {/* Short label on phones, full label on tablet+. */}
-                  <span className="sm:hidden">{m.label}</span>
-                  <span className="hidden sm:inline">{m.fullLabel}</span>
-                  {/* "NEW" badge on Story until users have seen it for a
-                      while — promotes discovery without a separate banner. */}
+                  <span>{m.fullLabel}</span>
+                  {/* Subtle inline dot indicator on Story instead of a
+                      floating corner badge — keeps the segmented control
+                      visually balanced without a sticker pasted on top. */}
                   {m.badge && (
                     <span
-                      className={`absolute -top-1.5 -right-1.5 text-[8.5px] font-extrabold px-1 py-px rounded leading-none ${
-                        mode === m.id
-                          ? "bg-black text-primary-500"
-                          : "bg-primary-500 text-black"
+                      aria-label="new"
+                      title="New feature"
+                      className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                        mode === m.id ? "bg-black" : "bg-primary-500"
                       }`}
-                    >
-                      {m.badge}
-                    </span>
+                    />
                   )}
                 </button>
               );
