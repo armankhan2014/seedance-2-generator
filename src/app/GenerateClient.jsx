@@ -21,6 +21,12 @@ import toast from "@/lib/toast";
 import PromptBuilder from "@/components/saas/PromptBuilder";
 import ImageBuilder from "@/components/saas/ImageBuilder";
 import SmartPrompt from "@/components/saas/SmartPrompt";
+import {
+  StoryBuilder,
+  StoryReelPreview,
+  letterFor as storyLetterFor,
+  estimateCreditsPerShot as storyEstimateCreditsPerShot,
+} from "@/components/saas/StoryBuilder";
 
 export const dynamic = "force-dynamic";
 
@@ -125,6 +131,53 @@ function timeAgo(ts) {
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86400)}d ago`;
+}
+
+// ── Story (mode 4) persistence ──────────────────────────────────────────────
+// Story state survives refresh so users don't lose half-written scripts.
+// Schema: { title, cast: [{id,name,imageUrl}], shots: [{id, duration,
+// castIds, prompt, status, videoUrl, requestId, error}] }
+const STORY_KEY = "seedance_story_v1";
+
+function loadStory() {
+  try {
+    const raw = localStorage.getItem(STORY_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (!s || typeof s !== "object") return null;
+    return {
+      title: typeof s.title === "string" ? s.title : "",
+      cast: Array.isArray(s.cast) ? s.cast.filter((c) => c && c.id && c.imageUrl) : [],
+      shots: Array.isArray(s.shots) ? s.shots.filter((sh) => sh && sh.id) : [],
+    };
+  } catch { return null; }
+}
+
+function saveStory(payload) {
+  try { localStorage.setItem(STORY_KEY, JSON.stringify(payload)); } catch {}
+}
+
+// Auto-name helper for new cast: scans existing names for "Character X"
+// and bumps to the next free letter. Lets users rename to anything; this
+// only assigns the initial placeholder.
+function nextCastAutoName(existing) {
+  const used = new Set(
+    existing
+      .map((c) => /^Character ([A-Z])$/.exec(c.name || ""))
+      .filter(Boolean)
+      .map((m) => m[1])
+  );
+  for (let i = 0; i < 26; i++) {
+    const letter = String.fromCharCode(65 + i);
+    if (!used.has(letter)) return `Character ${letter}`;
+  }
+  return `Character ${existing.length + 1}`;
+}
+
+let _storyIdSeed = 0;
+function newStoryId(prefix) {
+  _storyIdSeed += 1;
+  return `${prefix}-${Date.now().toString(36)}-${_storyIdSeed}`;
 }
 
 // Small inline magnifier icon — react-icons would work too, but the
@@ -298,6 +351,26 @@ export default function Home() {
   // Inline-rename state. editingUrl tracks which row's name field is active.
   const [libraryEditingUrl, setLibraryEditingUrl] = useState(null);
   const [libraryDraftName, setLibraryDraftName] = useState("");
+
+  // ── Story mode (mode 4) state ─────────────────────────────────────────
+  // Each shot calls /api/seedance under the hood with mode=reference-to-video
+  // so the existing FACE LOCK system keeps cast faces consistent across
+  // shots. We persist all of this to localStorage so a refresh doesn't
+  // throw away a half-written script.
+  const [storyTitle, setStoryTitle] = useState("");
+  const [storyCast, setStoryCast] = useState([]); // {id,name,imageUrl}[]
+  const [storyShots, setStoryShots] = useState([]); // {id,duration,castIds,prompt,status,videoUrl,requestId,error}[]
+  const [castEditingId, setCastEditingId] = useState(null);
+  const [castDraftName, setCastDraftName] = useState("");
+  const [isUploadingCast, setIsUploadingCast] = useState(false);
+  // Currently-generating shot id (single shot run OR active shot inside a
+  // "Generate all" loop). Used to disable the right buttons + show the
+  // "Generating…" label on the right card.
+  const [generatingShotId, setGeneratingShotId] = useState(null);
+  // True while ANY story-mode generation is running (single OR batch). Mirrors
+  // the existing `loading` flag for the other 3 modes.
+  const [storyLoading, setStoryLoading] = useState(false);
+  const [storyStatusMsg, setStoryStatusMsg] = useState("");
   const [videoFiles, setVideoFiles] = useState([]); // Max 3 URLs for Reference
   const [audioFiles, setAudioFiles] = useState([]); // Max 3 URLs for Reference
   const [newVideoUrl, setNewVideoUrl] = useState("");
@@ -324,6 +397,19 @@ export default function Home() {
     setImagesList((prev) => (prev.includes(url) ? prev : [...prev, url].slice(0, 9)));
     setRecentImages(saveRecentImage(url));
   }, []);
+
+  // Hydrate Story state on mount + persist on every change.
+  useEffect(() => {
+    const s = loadStory();
+    if (s) {
+      setStoryTitle(s.title);
+      setStoryCast(s.cast);
+      setStoryShots(s.shots);
+    }
+  }, []);
+  useEffect(() => {
+    saveStory({ title: storyTitle, cast: storyCast, shots: storyShots });
+  }, [storyTitle, storyCast, storyShots]);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const progressIntervalRef = useRef(null);
@@ -373,9 +459,14 @@ export default function Home() {
   const [error, setError] = useState(null);
 
   const MODES = [
-    { id: "text-to-video", label: "Text", fullLabel: "Text to Video", icon: FaBolt },
-    { id: "image-to-video", label: "Image", fullLabel: "Image to Video", icon: IoImageOutline },
-    { id: "reference-to-video", label: "Reference", fullLabel: "Reference to Video", icon: FaSyncAlt },
+    { id: "text-to-video", label: "Text", fullLabel: "Text", icon: FaBolt },
+    { id: "image-to-video", label: "Image", fullLabel: "Image", icon: IoImageOutline },
+    { id: "reference-to-video", label: "Reference", fullLabel: "Reference", icon: FaSyncAlt },
+    // Story = multi-shot video with cast face-locked across every shot.
+    // Each shot calls /api/seedance with reference-to-video under the hood,
+    // so the existing FACE LOCK + anti-flash injections in /lib/services/ai.js
+    // protect cast consistency automatically.
+    { id: "story", label: "Story", fullLabel: "Story", icon: FaVideo, badge: "NEW" },
   ];
 
   // FIX 1: Show thumbnail immediately from local file, handle both MuAPI response formats
@@ -565,6 +656,298 @@ export default function Home() {
     }
   };
 
+  // ── Story mode helpers ────────────────────────────────────────────────────
+  // Cast file picker is owned by StoryBuilder; we reuse the live image upload
+  // pipeline (compress → /api/upload) so the same R2 URL the rest of the page
+  // uses ends up on the cast member.
+  const handleUploadCastFile = async (file) => {
+    if (!session) { signIn(); return; }
+    if (!file) return;
+    try {
+      setIsUploadingCast(true);
+      setError(null);
+      let uploadFile = file;
+      try { uploadFile = await compressImage(file); } catch {}
+      if (uploadFile.size > 4_000_000) {
+        throw new Error("Image is too large even after compression. Please pick a smaller photo.");
+      }
+      const formData = new FormData();
+      formData.append("file", uploadFile);
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      let data = {};
+      try { data = await res.json(); } catch {}
+      if (!res.ok) throw new Error(data.error || `Upload failed (HTTP ${res.status})`);
+      const uploadedUrl = data.url || data.data?.url;
+      if (!uploadedUrl) throw new Error("No URL returned from upload service");
+      const next = [
+        ...storyCast,
+        { id: newStoryId("c"), name: nextCastAutoName(storyCast), imageUrl: uploadedUrl },
+      ];
+      setStoryCast(next);
+      // Also save to the image library so the same photo is discoverable
+      // later from the Reference / Image modes — names default to
+      // "Image N", users can rename inline there too.
+      setRecentImages(saveRecentImage(uploadedUrl));
+      toast.success("Character added");
+    } catch (err) {
+      const msg = err?.message || "Upload failed.";
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setIsUploadingCast(false);
+    }
+  };
+
+  const handleRenameCast = (id, name) => {
+    setStoryCast((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, name: name.trim() || c.name } : c))
+    );
+  };
+  const handleRemoveCast = (id) => {
+    setStoryCast((prev) => prev.filter((c) => c.id !== id));
+    setStoryShots((prev) =>
+      prev.map((s) => ({ ...s, castIds: s.castIds.filter((cid) => cid !== id) }))
+    );
+  };
+
+  const handleAddShot = () => {
+    setStoryShots((prev) => [
+      ...prev,
+      {
+        id: newStoryId("s"),
+        duration: 5,
+        castIds: storyCast.map((c) => c.id), // default: all cast in this shot
+        prompt: "",
+        status: "ready",
+        videoUrl: null,
+        requestId: null,
+        error: null,
+      },
+    ]);
+  };
+  const handleRemoveShot = (id) =>
+    setStoryShots((prev) => prev.filter((s) => s.id !== id));
+  const handlePatchShot = (id, patch) =>
+    setStoryShots((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  const handleToggleShotCast = (shotId, castId) =>
+    setStoryShots((prev) =>
+      prev.map((s) =>
+        s.id !== shotId
+          ? s
+          : {
+              ...s,
+              castIds: s.castIds.includes(castId)
+                ? s.castIds.filter((c) => c !== castId)
+                : [...s.castIds, castId],
+            }
+      )
+    );
+  const handleMoveShot = (id, direction) => {
+    setStoryShots((prev) => {
+      const idx = prev.findIndex((s) => s.id === id);
+      if (idx < 0) return prev;
+      const swap = direction === "up" ? idx - 1 : idx + 1;
+      if (swap < 0 || swap >= prev.length) return prev;
+      const copy = prev.slice();
+      [copy[idx], copy[swap]] = [copy[swap], copy[idx]];
+      return copy;
+    });
+  };
+
+  // Build the per-shot prompt sent to Seedance. We prepend a CAST header
+  // naming every character in this shot and binding them to the image
+  // index they'll occupy in images_list. /lib/services/ai.js's FACE LOCK
+  // injection then adds the multi-character anchor sentence on top so
+  // each face stays glued to its source photo across every frame.
+  const buildShotPrompt = (shot) => {
+    const shotCast = shot.castIds
+      .map((cid) => storyCast.find((c) => c.id === cid))
+      .filter(Boolean);
+    if (shotCast.length === 0) return shot.prompt.trim();
+    const castLines = shotCast
+      .map((c, i) => `- Character ${storyLetterFor(i)}: ${c.name} (face locked to 【@image${i + 1}】)`)
+      .join("\n");
+    return `CAST in this shot:\n${castLines}\n\nSHOT:\n${shot.prompt.trim()}`;
+  };
+
+  // Poll a single shot until /api/seedance/check-status reports done/fail.
+  // Mirrors the existing pollStatus loop but returns a promise so the batch
+  // runner can await one shot at a time.
+  const pollShotUntilDone = (shotId, requestId) =>
+    new Promise((resolve, reject) => {
+      const tick = async () => {
+        try {
+          const res = await fetch("/api/seedance/check-status", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ requestId }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Status check failed.");
+          if (data.status === "completed") {
+            setStoryShots((prev) =>
+              prev.map((s) =>
+                s.id === shotId ? { ...s, status: "done", videoUrl: data.imageUrl } : s
+              )
+            );
+            resolve(data.imageUrl);
+          } else if (data.status === "failed") {
+            reject(new Error("Generation failed."));
+          } else {
+            setTimeout(tick, 3000);
+          }
+        } catch (err) {
+          reject(err);
+        }
+      };
+      tick();
+    });
+
+  // Generate a single shot. Used by the "▶ This shot" button on each card.
+  const handleGenerateOneShot = async (shotId) => {
+    if (!session) { signIn(); return; }
+    const shot = storyShots.find((s) => s.id === shotId);
+    if (!shot) return;
+    if (!shot.prompt.trim()) {
+      toast.error("Add a prompt before generating.");
+      return;
+    }
+    const shotCast = shot.castIds
+      .map((cid) => storyCast.find((c) => c.id === cid))
+      .filter(Boolean);
+    if (shotCast.length === 0) {
+      toast.error("Tag at least one cast member in this shot first.");
+      return;
+    }
+    try {
+      setStoryLoading(true);
+      setGeneratingShotId(shotId);
+      setStoryStatusMsg(`Generating shot ${storyShots.findIndex((s) => s.id === shotId) + 1}…`);
+      setStoryShots((prev) =>
+        prev.map((s) =>
+          s.id === shotId ? { ...s, status: "generating", error: null, videoUrl: null } : s
+        )
+      );
+      const res = await fetch("/api/seedance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "reference-to-video",
+          prompt: buildShotPrompt(shot),
+          aspect_ratio: aspectRatio,
+          resolution,
+          duration: shot.duration,
+          quality,
+          images_list: shotCast.map((c) => c.imageUrl),
+          video_files: [],
+          audio_files: [],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Request failed.");
+      setStoryShots((prev) =>
+        prev.map((s) => (s.id === shotId ? { ...s, requestId: data.request_id } : s))
+      );
+      await pollShotUntilDone(shotId, data.request_id);
+      toast.success("Shot ready! 🎬");
+    } catch (err) {
+      setStoryShots((prev) =>
+        prev.map((s) =>
+          s.id === shotId ? { ...s, status: "failed", error: err.message } : s
+        )
+      );
+      toast.error(err.message || "Shot failed.");
+    } finally {
+      setStoryLoading(false);
+      setGeneratingShotId(null);
+      setStoryStatusMsg("");
+    }
+  };
+
+  // Generate every shot in order. We run sequentially so one failure halts
+  // the rest — protects credits and lets the user fix the bad prompt
+  // before re-trying.
+  const handleGenerateAllShots = async () => {
+    if (!session) { signIn(); return; }
+    if (storyShots.length === 0) return;
+    if (storyCast.length === 0) {
+      toast.error("Add at least one cast member first.");
+      return;
+    }
+    const missingCast = storyShots.find((s) => s.castIds.length === 0);
+    if (missingCast) {
+      toast.error("Every shot needs at least one cast chip tagged.");
+      return;
+    }
+    const missingPrompt = storyShots.find((s) => !s.prompt.trim());
+    if (missingPrompt) {
+      toast.error("Every shot needs a prompt.");
+      return;
+    }
+    setStoryLoading(true);
+    // Mark all shots as queued so the right column lights up.
+    setStoryShots((prev) =>
+      prev.map((s) => (s.status === "done" ? s : { ...s, status: "queued", error: null }))
+    );
+    try {
+      for (let i = 0; i < storyShots.length; i++) {
+        const shot = storyShots[i];
+        // Skip already-done shots so the user can re-run partial batches.
+        if (shot.status === "done") continue;
+        setGeneratingShotId(shot.id);
+        setStoryStatusMsg(`Generating shot ${i + 1} of ${storyShots.length}…`);
+        setStoryShots((prev) =>
+          prev.map((s) =>
+            s.id === shot.id ? { ...s, status: "generating", error: null, videoUrl: null } : s
+          )
+        );
+        const shotCast = shot.castIds
+          .map((cid) => storyCast.find((c) => c.id === cid))
+          .filter(Boolean);
+        const res = await fetch("/api/seedance", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "reference-to-video",
+            prompt: buildShotPrompt(shot),
+            aspect_ratio: aspectRatio,
+            resolution,
+            duration: shot.duration,
+            quality,
+            images_list: shotCast.map((c) => c.imageUrl),
+            video_files: [],
+            audio_files: [],
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Request failed.");
+        setStoryShots((prev) =>
+          prev.map((s) => (s.id === shot.id ? { ...s, requestId: data.request_id } : s))
+        );
+        await pollShotUntilDone(shot.id, data.request_id);
+      }
+      toast.success("All shots ready! 🎬");
+    } catch (err) {
+      setStoryShots((prev) =>
+        prev.map((s) =>
+          s.id === generatingShotId
+            ? { ...s, status: "failed", error: err.message }
+            : (s.status === "queued" ? { ...s, status: "ready" } : s)
+        )
+      );
+      toast.error(err.message || "Story generation halted.");
+    } finally {
+      setStoryLoading(false);
+      setGeneratingShotId(null);
+      setStoryStatusMsg("");
+    }
+  };
+
+  const handleDownloadShot = (shot) => {
+    if (!shot.videoUrl) return;
+    downloadMedia(shot.videoUrl, `story-shot-${shot.id}.mp4`);
+  };
+
   const getAvailableDurations = () => {
     if (mode === "reference-to-video") {
       return Array.from({ length: 8 }, (_, i) => ({
@@ -609,6 +992,15 @@ export default function Home() {
     return Math.ceil(base * mult);
   })();
 
+  // Sum the per-shot cost for the Story-mode "Generate all" button.
+  // Skips shots already done so partial-batch retries don't double-bill.
+  const storyTotalCredits = storyShots.reduce(
+    (sum, s) =>
+      s.status === "done" ? sum : sum + storyEstimateCreditsPerShot(s.duration, resolution, quality),
+    0
+  );
+  const storyTotalDuration = storyShots.reduce((sum, s) => sum + s.duration, 0);
+
   return (
     <>
     <div className="flex-1 w-full flex flex-col items-center p-4 md:p-8 overflow-y-auto custom-scrollbar">
@@ -648,14 +1040,14 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 p-1 bg-glass-hover rounded-md border border-glass-border">
+          <div className="grid grid-cols-4 p-1 bg-glass-hover rounded-md border border-glass-border">
             {MODES.map((m) => {
               const Icon = m.icon;
               return (
                 <button
                   key={m.id}
                   onClick={() => setMode(m.id)}
-                  className={`py-2 px-1 rounded-md text-[10px] sm:text-sm font-medium transition-colors flex items-center justify-center gap-1 sm:gap-2 leading-tight text-center ${
+                  className={`py-2 px-1 rounded-md text-[10px] sm:text-sm font-medium transition-colors flex items-center justify-center gap-1 sm:gap-2 leading-tight text-center relative ${
                     mode === m.id
                       ? "bg-primary-500 text-black shadow-sm"
                       : "text-muted hover:text-foreground"
@@ -663,13 +1055,58 @@ export default function Home() {
                 >
                   <Icon className="shrink-0 hidden sm:inline" />
                   <span>{m.fullLabel}</span>
+                  {/* "NEW" badge on Story until users have seen it for a
+                      while — promotes discovery without a separate banner. */}
+                  {m.badge && (
+                    <span
+                      className={`absolute -top-1.5 -right-1.5 text-[8.5px] font-extrabold px-1 py-px rounded leading-none ${
+                        mode === m.id
+                          ? "bg-black text-primary-500"
+                          : "bg-primary-500 text-black"
+                      }`}
+                    >
+                      {m.badge}
+                    </span>
+                  )}
                 </button>
               );
             })}
           </div>
 
           <div className="space-y-4">
-            <div className="space-y-1.5">
+            {/* ── STORY MODE BODY ───────────────────────────────────────────
+                Replaces the prompt + image upload + reference upload blocks
+                below when mode === "story". Renders the cast strip and
+                vertical shot list. Settings grid (aspect / resolution /
+                quality) still renders below, applied globally to every shot. */}
+            {mode === "story" && (
+              <StoryBuilder
+                title={storyTitle}
+                onTitleChange={setStoryTitle}
+                cast={storyCast}
+                shots={storyShots}
+                editingCastId={castEditingId}
+                setEditingCastId={setCastEditingId}
+                castDraftName={castDraftName}
+                setCastDraftName={setCastDraftName}
+                onUploadCastFile={handleUploadCastFile}
+                onRemoveCast={handleRemoveCast}
+                onRenameCast={handleRenameCast}
+                isUploadingCast={isUploadingCast}
+                onAddShot={handleAddShot}
+                onRemoveShot={handleRemoveShot}
+                onPatchShot={handlePatchShot}
+                onToggleShotCast={handleToggleShotCast}
+                onMoveShot={handleMoveShot}
+                onGenerateOneShot={handleGenerateOneShot}
+                generatingShotId={generatingShotId}
+                globalLoading={storyLoading}
+                resolution={resolution}
+                quality={quality}
+              />
+            )}
+
+            {mode !== "story" && <div className="space-y-1.5">
               <div className="flex items-center justify-between flex-wrap gap-y-2 gap-x-2">
                 <div className="flex items-center gap-2 flex-wrap">
                   <label className="text-[10px] font-medium text-muted uppercase tracking-wider">
@@ -720,9 +1157,9 @@ export default function Home() {
                     toast("You're out of credits. Buy more to keep expanding prompts.");
                 }}
               />
-            </div>
+            </div>}
 
-            {mode !== "text-to-video" && (
+            {mode !== "text-to-video" && mode !== "story" && (
               <div className="space-y-3">
                 <label className="text-[10px] font-medium text-muted uppercase tracking-wider">
                   Images ({imagesList.length}/9)
@@ -1119,6 +1556,11 @@ export default function Home() {
               </div>
             )}
 
+            {mode === "story" && (
+              <div className="text-[10px] font-medium text-muted uppercase tracking-wider -mb-1">
+                Global settings · applied to every shot
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-4">
               <CustomSelect
                 label="Aspect Ratio"
@@ -1132,12 +1574,23 @@ export default function Home() {
                 options={RESOLUTIONS}
                 onChange={setResolution}
               />
-              <CustomSelect
-                label="Duration"
-                value={duration}
-                options={getAvailableDurations()}
-                onChange={setDuration}
-              />
+              {mode === "story" ? (
+                <div className="px-3 py-2 bg-glass-hover border border-glass-border rounded-md">
+                  <div className="text-[9.5px] font-medium text-muted uppercase tracking-wider">
+                    Total duration
+                  </div>
+                  <div className="text-sm font-bold text-foreground mt-0.5">
+                    {storyTotalDuration}s · {storyShots.length} shot{storyShots.length === 1 ? "" : "s"}
+                  </div>
+                </div>
+              ) : (
+                <CustomSelect
+                  label="Duration"
+                  value={duration}
+                  options={getAvailableDurations()}
+                  onChange={setDuration}
+                />
+              )}
               <CustomSelect
                 label="Quality"
                 value={quality}
@@ -1147,7 +1600,29 @@ export default function Home() {
             </div>
           </div>
 
-          {loading ? (
+          {mode === "story" ? (
+            // Story mode runs N generations in sequence. We don't drive the
+            // existing progress bar (which is per-clip) — instead we show a
+            // status pill + the big batch-cost button. The right column's
+            // <StoryReelPreview> shows each shot's state ("queued" /
+            // "generating…" / "done") individually.
+            <button
+              onClick={handleGenerateAllShots}
+              disabled={
+                storyLoading ||
+                storyShots.length === 0 ||
+                storyCast.length === 0
+              }
+              className="w-full bg-primary-500 text-black rounded-md py-2 text-sm font-medium hover:bg-primary-600 active:scale-[0.98] transition-all disabled:opacity-60"
+            >
+              <span className="flex items-center justify-center gap-2">
+                {storyLoading
+                  ? (storyStatusMsg || "Generating story…")
+                  : `▶ Generate all ${storyShots.length} shot${storyShots.length === 1 ? "" : "s"} (${storyTotalCredits} credits)`
+                }
+              </span>
+            </button>
+          ) : loading ? (
             <div
               role="progressbar"
               aria-valuenow={Math.floor(progress)}
@@ -1203,8 +1678,17 @@ export default function Home() {
         {/* Right: Preview */}
         <div className="bg-glass-bg border border-glass-border rounded-lg p-6 flex flex-col gap-4 min-h-[500px]">
           <h2 className="text-[10px] font-medium text-muted uppercase tracking-wider">
-            Preview
+            {mode === "story" ? "Reel Preview" : "Preview"}
           </h2>
+          {mode === "story" ? (
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1">
+              <StoryReelPreview
+                shots={storyShots}
+                cast={storyCast}
+                onDownloadShot={handleDownloadShot}
+              />
+            </div>
+          ) : (
           <div className="flex-1 flex flex-col items-center justify-center bg-glass-hover rounded-md border border-glass-border relative overflow-hidden group">
             {resultUrl ? (
               <div className="w-full h-full flex flex-col items-center justify-center p-4 gap-4">
@@ -1272,6 +1756,7 @@ export default function Home() {
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
 
