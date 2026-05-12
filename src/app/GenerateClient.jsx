@@ -679,11 +679,24 @@ export default function Home() {
       if (!res.ok) throw new Error(data.error || `Upload failed (HTTP ${res.status})`);
       const uploadedUrl = data.url || data.data?.url;
       if (!uploadedUrl) throw new Error("No URL returned from upload service");
-      const next = [
-        ...storyCast,
-        { id: newStoryId("c"), name: nextCastAutoName(storyCast), imageUrl: uploadedUrl },
-      ];
-      setStoryCast(next);
+      const newCast = {
+        id: newStoryId("c"),
+        name: nextCastAutoName(storyCast),
+        imageUrl: uploadedUrl,
+      };
+      setStoryCast([...storyCast, newCast]);
+      // If the user added shots BEFORE adding their first cast member,
+      // those shots have an empty castIds array — generating would then
+      // bail with "Every shot needs at least one cast chip tagged".
+      // Auto-tag this new cast into every empty-cast shot so the user's
+      // existing shots immediately become generatable. Shots that already
+      // have OTHER cast tagged are left alone (we don't want a silent
+      // additive tag if the user deliberately curated their cast list).
+      setStoryShots((prev) =>
+        prev.map((s) =>
+          s.castIds.length === 0 ? { ...s, castIds: [newCast.id] } : s
+        )
+      );
       // Also save to the image library so the same photo is discoverable
       // later from the Reference / Image modes — names default to
       // "Image N", users can rename inline there too.
@@ -816,7 +829,13 @@ export default function Home() {
       .map((cid) => storyCast.find((c) => c.id === cid))
       .filter(Boolean);
     if (shotCast.length === 0) {
-      toast.error("Tag at least one cast member in this shot first.");
+      // Surface BOTH cases that lead here: no cast at all (top-level fix)
+      // vs. cast exists but none tagged in THIS shot (just tap a chip).
+      if (storyCast.length === 0) {
+        toast.error("Add at least one character above before generating this shot.");
+      } else {
+        toast.error("Tap a character chip in this shot to add them, then try again.");
+      }
       return;
     }
     try {
@@ -874,14 +893,17 @@ export default function Home() {
       toast.error("Add at least one cast member first.");
       return;
     }
-    const missingCast = storyShots.find((s) => s.castIds.length === 0);
-    if (missingCast) {
-      toast.error("Every shot needs at least one cast chip tagged.");
+    // Point to the offending shot so the user knows where to look.
+    const missingCastIdx = storyShots.findIndex((s) => s.castIds.length === 0);
+    if (missingCastIdx >= 0) {
+      toast.error(
+        `Shot ${missingCastIdx + 1} has no cast tagged — tap a character chip in that shot to add one.`
+      );
       return;
     }
-    const missingPrompt = storyShots.find((s) => !s.prompt.trim());
-    if (missingPrompt) {
-      toast.error("Every shot needs a prompt.");
+    const missingPromptIdx = storyShots.findIndex((s) => !s.prompt.trim());
+    if (missingPromptIdx >= 0) {
+      toast.error(`Shot ${missingPromptIdx + 1} is missing a prompt.`);
       return;
     }
     setStoryLoading(true);

@@ -344,33 +344,44 @@ function ShotCard({
       {/* Body */}
       <div className="p-3 space-y-2.5">
         {/* Cast chips */}
-        {cast.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {cast.map((c, ci) => {
-              const on = shot.castIds.includes(c.id);
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => onToggleCast(c.id)}
-                  disabled={disabled}
-                  title={on ? `Remove ${c.name}` : `Add ${c.name}`}
-                  className={`inline-flex items-center gap-1 pl-1 pr-2 py-0.5 rounded-full text-[11px] font-bold border transition-colors disabled:cursor-not-allowed ${
-                    on
-                      ? "bg-primary-500/10 border-primary-500/40 text-foreground"
-                      : "bg-transparent border-glass-border text-muted hover:text-foreground"
-                  }`}
-                >
-                  <img
-                    src={c.imageUrl}
-                    alt=""
-                    className="w-[18px] h-[18px] rounded-full object-cover"
-                  />
-                  <span className="font-extrabold">{letterFor(ci)}</span>
-                  <span className="font-semibold">{c.name}</span>
-                </button>
-              );
-            })}
+        {cast.length > 0 ? (
+          <div>
+            <div className="flex flex-wrap gap-1.5">
+              {cast.map((c, ci) => {
+                const on = shot.castIds.includes(c.id);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => onToggleCast(c.id)}
+                    disabled={disabled}
+                    title={on ? `Remove ${c.name}` : `Add ${c.name}`}
+                    className={`inline-flex items-center gap-1 pl-1 pr-2 py-0.5 rounded-full text-[11px] font-bold border transition-colors disabled:cursor-not-allowed ${
+                      on
+                        ? "bg-primary-500/10 border-primary-500/40 text-foreground"
+                        : "bg-transparent border-glass-border text-muted hover:text-foreground"
+                    }`}
+                  >
+                    <img
+                      src={c.imageUrl}
+                      alt=""
+                      className="w-[18px] h-[18px] rounded-full object-cover"
+                    />
+                    <span className="font-extrabold">{letterFor(ci)}</span>
+                    <span className="font-semibold">{c.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {shot.castIds.length === 0 && (
+              <div className="mt-1.5 text-[10.5px] text-amber-400/90 font-semibold">
+                ⚠ Tap a character above to add them to this shot.
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-[10.5px] text-amber-400/90 font-semibold">
+            ⚠ Add a character above first so this shot can stay face-locked.
           </div>
         )}
 
