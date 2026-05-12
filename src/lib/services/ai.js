@@ -210,14 +210,67 @@ export const AIService = {
           headers: { "x-api-key": apiKey },
         });
         const text = await res.text();
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch {}
         if (res.ok) {
-          return JSON.parse(text);
+          return parsed;
+        }
+        // 4xx with a parseable error body — MuAPI returns content-policy
+        // rejections this way (e.g. "Face detected in uploaded image.").
+        // Without this branch, pollMuAPI returned null and the caller
+        // saw "processing" forever even though MuAPI had already rejected
+        // the job. Arman flagged 2026-05-12.
+        if (parsed && (parsed.error || parsed.detail)) {
+          return { status: "failed", error: parsed.error || parsed.detail };
         }
       } catch (e) {
         console.error("[AI_POLL_FETCH_ERROR]", url, e.message);
       }
     }
     return null;
+  },
+
+  // Best-guess cost for an existing Creation. Mode isn't stored on the
+  // Creation row (would require a migration) so we infer from the kinds
+  // of references attached. Bias toward the LOWER mode when ambiguous so
+  // an accidental refund never exceeds what was originally charged.
+  estimateCostFromCreation(creation) {
+    if (!creation) return 0;
+    let mode = "text-to-video";
+    const hasVid = (creation.videoFiles?.length || 0) > 0;
+    const hasAud = (creation.audioFiles?.length || 0) > 0;
+    const hasImg = (creation.inputImages?.length || 0) > 0;
+    if (hasVid || hasAud) mode = "reference-to-video";
+    else if (hasImg) mode = "image-to-video";
+    return this.getCreditCost(mode, creation.duration, creation.quality, creation.resolution);
+  },
+
+  // Atomically transition processing → failed and refund credits exactly
+  // once. The conditional updateMany acts as a compare-and-swap so the
+  // webhook and the polling path can't both refund the same creation if
+  // they fire concurrently. Returns true if THIS caller did the
+  // transition (and refunded), false if someone else got there first.
+  async failAndRefund(creation, errMsg) {
+    const updated = await prisma.creation.updateMany({
+      where: { id: creation.id, status: "processing" },
+      data: { status: "failed", error: errMsg },
+    });
+    if (updated.count !== 1) return false;
+    try {
+      const cost = this.estimateCostFromCreation(creation);
+      if (cost > 0) {
+        await UserService.addCredits(creation.userId, cost);
+        console.log(
+          "[AI_REFUND_ASYNC] Refunded", cost,
+          "credits to user", creation.userId,
+          "for failed creation", creation.requestId,
+          "| reason:", errMsg
+        );
+      }
+    } catch (refundErr) {
+      console.error("[AI_REFUND_ASYNC_FAILED]", refundErr.message);
+    }
+    return true;
   },
 
   async checkStatus(requestId, userId) {
@@ -236,53 +289,62 @@ export const AIService = {
     }
 
     const apiKey = config.ai.seedance.apiKey;
-    if (apiKey) {
-      try {
-        const result = await this.pollMuAPI(requestId, apiKey);
+    if (!apiKey) return { status: "processing" };
 
-        const outputs = result?.outputs || result?.output || [];
-        const outputArr = Array.isArray(outputs) ? outputs : (outputs ? [outputs] : []);
-        const imageUrl = outputArr[0] || null;
+    // Network call ONLY in try-catch. Failure-handling lives OUTSIDE so
+    // the throw at the end actually surfaces to the route (and the
+    // frontend toast) instead of being swallowed by the local catch
+    // and silently returning "processing" — which was the original bug
+    // that left users staring at a spinner after MuAPI rejected their
+    // generation for content policy. Arman flagged 2026-05-12.
+    let result;
+    try {
+      result = await this.pollMuAPI(requestId, apiKey);
+    } catch (e) {
+      console.error("[AI_POLL_ERROR]", e.message);
+      return { status: "processing" };
+    }
+    if (!result) return { status: "processing" };
 
-        const statusStr = result?.status?.toLowerCase() || "";
-        const hasError = result?.error && result.error !== "" && result.error !== null;
-        const isCompleted = outputArr.length > 0 || statusStr === "succeeded" || statusStr === "completed" || statusStr === "success";
-        const isFailed = hasError || statusStr === "failed" || statusStr === "error";
+    const outputs = result?.outputs || result?.output || [];
+    const outputArr = Array.isArray(outputs) ? outputs : (outputs ? [outputs] : []);
+    const imageUrl = outputArr[0] || null;
+    const statusStr = result?.status?.toLowerCase() || "";
+    const hasError = result?.error && result.error !== "" && result.error !== null;
+    const isCompleted =
+      outputArr.length > 0 ||
+      statusStr === "succeeded" ||
+      statusStr === "completed" ||
+      statusStr === "success";
+    const isFailed = hasError || statusStr === "failed" || statusStr === "error";
 
-
-        if (result && isCompleted && imageUrl) {
-          // Upload to R2 if configured — fall back to MuAPI URL on failure
-          let finalUrl = imageUrl;
-          if (isR2Configured()) {
-            try {
-              const creation = await prisma.creation.findUnique({ where: { requestId } });
-              if (creation) {
-                const ext = imageUrl.includes(".webm") ? "webm" : "mp4";
-                const key = `videos/${creation.id}.${ext}`;
-                finalUrl = await uploadVideoFromUrl(imageUrl, key);
-              }
-            } catch (e) {
-              console.error("[AI_POLL] R2 upload failed, using MuAPI URL:", e.message);
-              finalUrl = imageUrl;
-            }
-          }
-          await prisma.creation.update({
-            where: { requestId },
-            data: { status: "completed", imageUrl: finalUrl },
-          });
-          return { status: "completed", imageUrl: finalUrl };
+    if (isCompleted && imageUrl) {
+      // Upload to R2 if configured — fall back to MuAPI URL on failure
+      let finalUrl = imageUrl;
+      if (isR2Configured()) {
+        try {
+          const ext = imageUrl.includes(".webm") ? "webm" : "mp4";
+          const key = `videos/${creation.id}.${ext}`;
+          finalUrl = await uploadVideoFromUrl(imageUrl, key);
+        } catch (e) {
+          console.error("[AI_POLL] R2 upload failed, using MuAPI URL:", e.message);
+          finalUrl = imageUrl;
         }
-        if (result && isFailed) {
-          const errMsg = result.error || result.detail || "Generation failed";
-          await prisma.creation.update({
-            where: { requestId },
-            data: { status: "failed", error: errMsg },
-          });
-          throw new Error(errMsg);
-        }
-      } catch (e) {
-        console.error("[AI_POLL_ERROR]", e.message);
       }
+      await prisma.creation.update({
+        where: { requestId },
+        data: { status: "completed", imageUrl: finalUrl },
+      });
+      return { status: "completed", imageUrl: finalUrl };
+    }
+
+    if (isFailed) {
+      const errMsg = result.error || result.detail || "Generation failed";
+      // Atomic transition + refund. Idempotent vs. the webhook — only
+      // one caller (this one OR /api/webhook/muapi) will get the
+      // count===1 result, so credits are refunded exactly once.
+      await this.failAndRefund(creation, errMsg);
+      throw new Error(errMsg);
     }
 
     return { status: "processing" };

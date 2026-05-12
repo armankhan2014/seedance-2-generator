@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { AIService } from "@/lib/services/ai";
 import crypto from "crypto";
 
 export async function POST(req) {
@@ -41,10 +42,13 @@ export async function POST(req) {
     const hasError = data.error && data.error !== "" && data.error !== null;
 
     if (hasError) {
-      await prisma.creation.update({
-        where: { id: creation.id },
-        data: { status: "failed", error: data.error },
-      });
+      // Atomic transition + refund. failAndRefund uses a conditional
+      // updateMany so if the polling path raced us to mark this creation
+      // failed, only one of us gets count===1 and refunds — never both.
+      // This is what surfaces "Face detected" and similar content-policy
+      // rejections to the user instead of leaving them stuck at
+      // "processing" while keeping their credits. Arman flagged 2026-05-12.
+      await AIService.failAndRefund(creation, data.error);
     } else {
       await prisma.creation.update({
         where: { id: creation.id },
