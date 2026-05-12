@@ -459,15 +459,14 @@ export default function Home() {
   const [error, setError] = useState(null);
 
   const MODES = [
-    // Short, uniform labels for the 4-up pill row. Long names ("Text to
-    // Video", "Reference to Video") made the row look unbalanced —
-    // Reference is 3× longer than Story. Consistent short labels +
-    // icons give the segmented control a clean professional rhythm.
-    { id: "text-to-video", label: "Text", fullLabel: "Text", icon: FaBolt },
-    { id: "image-to-video", label: "Image", fullLabel: "Image", icon: IoImageOutline },
-    { id: "reference-to-video", label: "Reference", fullLabel: "Reference", icon: FaSyncAlt },
+    // Arman's exact wording (2026-05-12): "X To video" — capital T on
+    // "To", lowercase "video". Keep that casing verbatim. Short labels
+    // are kept for mobile (≤ sm) so the 4-up row doesn't wrap on phones.
+    { id: "text-to-video", label: "Text", fullLabel: "Text To video", icon: FaBolt },
+    { id: "image-to-video", label: "Image", fullLabel: "Image To video", icon: IoImageOutline },
+    { id: "reference-to-video", label: "Reference", fullLabel: "Reference To video", icon: FaSyncAlt },
     // Story = multi-shot video with cast face-locked across every shot.
-    { id: "story", label: "Story", fullLabel: "Story", icon: FaVideo, badge: "NEW" },
+    { id: "story", label: "Story", fullLabel: "Story To video", icon: FaVideo, badge: "NEW" },
   ];
 
   // FIX 1: Show thumbnail immediately from local file, handle both MuAPI response formats
@@ -1076,8 +1075,10 @@ export default function Home() {
                       : "text-muted hover:text-foreground"
                   }`}
                 >
-                  <Icon className="shrink-0 hidden sm:inline" />
-                  <span>{m.fullLabel}</span>
+                  {/* Icon hidden — the long labels ("Reference To video")
+                      need every pixel inside the segmented control. */}
+                  <span className="sm:hidden">{m.label}</span>
+                  <span className="hidden sm:inline whitespace-nowrap">{m.fullLabel}</span>
                   {/* Subtle inline dot indicator on Story instead of a
                       floating corner badge — keeps the segmented control
                       visually balanced without a sticker pasted on top. */}
