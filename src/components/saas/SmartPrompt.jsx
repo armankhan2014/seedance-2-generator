@@ -87,24 +87,23 @@ export default function SmartPrompt({
   // images have changed since the last expand.
   const imagesKey = useMemo(() => (images || []).join("|"), [images]);
 
-  // Button visibility rules:
-  //   • 0 words      → hide (nothing to expand)
-  //   • 1–29 words   → show "✦ Expand my idea" (typical first-pass)
-  //   • 30+ words AND we have a stored lastIdea AND the image set
-  //     has changed since last expand → show "✦ Re-expand with new
-  //     image(s)" using the original short idea. Covers the common
-  //     "expand → notice you should upload an image → upload →
-  //     re-expand" workflow without forcing the user to re-type.
-  //   • 30+ words otherwise → hide (user knows what they want).
-  const showFirstExpand = wordCount >= 1 && wordCount <= 29;
+  // Button visibility rules (updated 2026-05-12 — Arman flagged the
+  // button vanishing at ~93 words, which used to be the "user knows what
+  // they want" cutoff):
+  //   • 0 words → hide (nothing to expand)
+  //   • Any non-empty input → show ✦ Expand. No upper word cap.
+  // The Re-expand label still activates whenever the user has expanded
+  // once AND added/removed images since — uses the stored original idea
+  // so they don't have to re-type after uploading a reference. Both
+  // conditions can now be true simultaneously (re-expand wins the label).
+  const showExpand = wordCount >= 1;
   const showReExpand =
-    !showFirstExpand &&
     wordCount > 0 &&
     lastIdea &&
     lastImagesKey !== null &&
     imagesKey !== lastImagesKey &&
     (images?.length || 0) > 0;
-  const showExpand = showFirstExpand || showReExpand;
+  const showFirstExpand = showExpand && !showReExpand;
 
   // Label adapts so the user knows what Claude will see BEFORE
   // they tap. Matches the parent's mode awareness.

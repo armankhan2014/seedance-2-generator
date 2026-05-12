@@ -19,7 +19,12 @@ import { UserService } from "@/lib/services/user";
 // on-failure pattern so a single credit can't loop a paid API call.
 
 const EXPAND_COST = 1;
-const MAX_DESCRIPTION_LEN = 2000;
+// Was 2000 chars (~300 words). Arman flagged 2026-05-12 that long
+// prompts (~93+ words) made the inline ✦ Expand button vanish from
+// SmartPrompt — the client cap is removed and the server now matches.
+// 12 000 chars ≈ a long screenplay paragraph — comfortably above any
+// realistic prompt and still bounded for safety.
+const MAX_DESCRIPTION_LEN = 12000;
 const ALLOWED_DURATIONS = new Set([5, 10, 15]);
 
 // Gold-standard system prompt — same heavy directorial framing the
