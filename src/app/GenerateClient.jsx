@@ -595,6 +595,12 @@ export default function Home() {
                 value={prompt}
                 onChange={setPrompt}
                 duration={duration}
+                // Pass uploaded image URLs so Claude can actually
+                // SEE the photos when expanding. Only relevant in
+                // image-to-video / reference-to-video modes — text-
+                // to-video sends an empty array. Server-side the
+                // route caps at 4 images per call.
+                images={mode !== "text-to-video" ? imagesList : []}
                 placeholder={
                   mode === "reference-to-video"
                     ? "Use @image1, @video1, @audio1 to reference your files…\nExample: @video1 in the style of @image1 with @audio1"

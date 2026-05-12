@@ -41,6 +41,11 @@ const WORD_RE = /\S+/g;
  * @param {string}   value          — controlled value (the prompt text)
  * @param {function} onChange       — called with the new value on edit / expand
  * @param {number}   duration       — 5 | 10 | 15 (currently selected video length)
+ * @param {string[]} images         — optional array of uploaded image URLs (R2).
+ *                                    When present, Claude sees the photos and
+ *                                    references real details (clothing, faces,
+ *                                    environment) using 【@image1】 / 【@image2】
+ *                                    notation instead of inventing placeholders.
  * @param {string}   placeholder    — textarea placeholder
  * @param {number}   maxWords       — soft cap; we display the count, never block typing
  * @param {boolean}  disabled       — disables the textarea + button (e.g. while generating)
@@ -51,6 +56,7 @@ export default function SmartPrompt({
   value = "",
   onChange,
   duration = 5,
+  images = [],
   placeholder = "Describe your video…",
   maxWords = 20000,
   disabled = false,
@@ -79,7 +85,15 @@ export default function SmartPrompt({
       const res = await fetch("/api/prompt/expand", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: value.trim(), duration }),
+        body: JSON.stringify({
+          description: value.trim(),
+          duration,
+          // Forward any uploaded image URLs so the server can fetch
+          // them and pass them to Claude vision. Parent typically
+          // sets this to imagesList from /generate when the user
+          // is in Image-to-Video or Reference-to-Video mode.
+          images: Array.isArray(images) ? images : [],
+        }),
       });
       const data = await res.json();
       if (!res.ok) {

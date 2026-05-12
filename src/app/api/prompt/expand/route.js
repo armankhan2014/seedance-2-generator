@@ -101,6 +101,20 @@ export async function POST(req) {
     const body = await req.json().catch(() => ({}));
     const description = typeof body.description === "string" ? body.description.trim() : "";
     const duration = ALLOWED_DURATIONS.has(Number(body.duration)) ? Number(body.duration) : 5;
+    // Optional uploaded image URLs (from /api/upload → R2). The
+    // existing Image-to-Video and Reference-to-Video modes already
+    // store these on the client as imagesList. Passing them here lets
+    // Claude actually SEE the user's photos and reference real
+    // details (clothing colours, faces, environment) instead of
+    // inventing 【@Photo1】 placeholders.
+    //
+    // Cap at 4 so the multi-image vision payload stays bounded.
+    // Anthropic accepts up to 20 images per request but each one
+    // costs tokens — 4 is enough for character + 2-3 references.
+    const rawImages = Array.isArray(body.images) ? body.images : [];
+    const images = rawImages
+      .filter((u) => typeof u === "string" && u.startsWith("http"))
+      .slice(0, 4);
 
     if (!description) {
       return NextResponse.json({ error: "No description provided." }, { status: 400 });
@@ -137,6 +151,67 @@ export async function POST(req) {
       throw e;
     }
 
+    // ── Fetch + base64-encode any uploaded images for Claude vision ─────────
+    // Done before the credit charge so we can fail-fast on a
+    // bad/expired URL without taking the user's credit. Each image
+    // hits R2 at most once. We tolerate per-image failure (skip and
+    // continue) so one busted URL doesn't sink the whole expansion.
+    const imageBlocks = [];
+    if (images.length > 0) {
+      const results = await Promise.allSettled(
+        images.map(async (url) => {
+          const resp = await fetch(url, {
+            // R2 public URLs are CDN-cached — short timeout is fine.
+            signal: AbortSignal.timeout(8000),
+          });
+          if (!resp.ok) throw new Error(`fetch ${resp.status}`);
+          const mt = (resp.headers.get("content-type") || "image/jpeg")
+            .split(";")[0]
+            .trim()
+            .toLowerCase();
+          // Anthropic accepts jpeg / png / gif / webp.
+          const allowed = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+          const media_type = allowed.includes(mt) ? mt : "image/jpeg";
+          const buf = Buffer.from(await resp.arrayBuffer());
+          // Skip anything over 5 MB — Anthropic's per-image cap is
+          // 5 MB and the upload pipeline targets ≤ 1.5 MB after the
+          // 2048 px compress.
+          if (buf.length > 5 * 1024 * 1024) throw new Error("image too large");
+          return {
+            type: "image",
+            source: {
+              type: "base64",
+              media_type,
+              data: buf.toString("base64"),
+            },
+          };
+        })
+      );
+      for (const r2 of results) {
+        if (r2.status === "fulfilled") imageBlocks.push(r2.value);
+      }
+    }
+
+    // Compose the user content. When images are present, prepend a
+    // hint so Claude treats them as references and uses 【@image1】
+    // syntax. Without it Claude sometimes describes the photos
+    // without naming the reference slot.
+    const userContent = [];
+    imageBlocks.forEach((block, i) => {
+      userContent.push(block);
+      userContent.push({
+        type: "text",
+        text: `↑ This is 【@image${i + 1}】. Reference it directly in the prompt using the same notation.`,
+      });
+    });
+    userContent.push({
+      type: "text",
+      text:
+        imageBlocks.length > 0
+          ? `User idea:\n${description}\n\nUse the uploaded image(s) above as the EXACT visual reference. Describe what's actually in them — clothing, face, environment — rather than inventing details.`
+          : description,
+    });
+
     // ── Claude call ──────────────────────────────────────────────────────────
     let r, d;
     try {
@@ -149,15 +224,9 @@ export async function POST(req) {
         },
         body: JSON.stringify({
           model: "claude-haiku-4-5-20251001",
-          // 3000 tokens — same budget as /api/prompt/build, since
-          // this endpoint now returns the full gold-standard format
-          // (character / environment / timestamped shot breakdown /
-          // sound design / camera architecture). Was 800; bumped on
-          // 2026-05-12 when Arman flagged the lightweight 3–6
-          // sentence output felt thin next to the old PromptBuilder.
           max_tokens: 3000,
           system: SYSTEM_TEMPLATE.replace("{DURATION}", String(duration)),
-          messages: [{ role: "user", content: description }],
+          messages: [{ role: "user", content: userContent }],
         }),
       });
       d = await r.json();
