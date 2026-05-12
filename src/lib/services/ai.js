@@ -5,6 +5,28 @@ import { uploadVideoFromUrl, isR2Configured } from "@/lib/storage";
 
 const MUAPI_RESULT_URL = "https://api.muapi.ai/api/v1/predictions";
 
+// MuAPI sometimes returns `error` as a string, sometimes wraps it in a
+// nested object like { id, status, error: "Face detected..." }, sometimes
+// stringifies it differently. Prisma's String? column rejects anything
+// that isn't a string, which crashed the failAndRefund updateMany on
+// 2026-05-12. This helper drills through the wrapper layers to find the
+// useful message, falling back to JSON.stringify if all else fails so
+// the column gets SOMETHING readable for debugging.
+function extractErrorString(err, depth = 0) {
+  if (err == null) return null;
+  if (typeof err === "string") return err;
+  if (typeof err !== "object") return String(err);
+  if (depth > 3) {
+    try { return JSON.stringify(err); } catch { return "Generation failed"; }
+  }
+  // Look for the most useful nested field, in order of likelihood.
+  if (typeof err.message === "string") return err.message;
+  if (typeof err.detail === "string") return err.detail;
+  if (typeof err.error === "string") return err.error;
+  if (typeof err.error === "object") return extractErrorString(err.error, depth + 1);
+  try { return JSON.stringify(err); } catch { return "Generation failed"; }
+}
+
 export const AIService = {
   getCreditCost(mode, duration, quality, resolution) {
     // Base credits for 720p basic quality (at 80 credits per $1):
@@ -213,6 +235,11 @@ export const AIService = {
         let parsed = null;
         try { parsed = JSON.parse(text); } catch {}
         if (res.ok) {
+          // Normalise — MuAPI nests `error` as an object sometimes. Flatten
+          // to a string so callers downstream don't have to babysit shapes.
+          if (parsed && parsed.error) {
+            parsed.error = extractErrorString(parsed.error);
+          }
           return parsed;
         }
         // 4xx with a parseable error body — MuAPI returns content-policy
@@ -220,8 +247,9 @@ export const AIService = {
         // Without this branch, pollMuAPI returned null and the caller
         // saw "processing" forever even though MuAPI had already rejected
         // the job. Arman flagged 2026-05-12.
-        if (parsed && (parsed.error || parsed.detail)) {
-          return { status: "failed", error: parsed.error || parsed.detail };
+        const errStr = extractErrorString(parsed?.error || parsed?.detail);
+        if (errStr) {
+          return { status: "failed", error: errStr };
         }
       } catch (e) {
         console.error("[AI_POLL_FETCH_ERROR]", url, e.message);
@@ -251,9 +279,13 @@ export const AIService = {
   // they fire concurrently. Returns true if THIS caller did the
   // transition (and refunded), false if someone else got there first.
   async failAndRefund(creation, errMsg) {
+    // Coerce to a plain string — MuAPI sometimes wraps `error` in a
+    // nested object, which crashed Prisma's String? column. See the
+    // extractErrorString helper at the top of this file.
+    const safeErr = extractErrorString(errMsg) || "Generation failed";
     const updated = await prisma.creation.updateMany({
       where: { id: creation.id, status: "processing" },
-      data: { status: "failed", error: errMsg },
+      data: { status: "failed", error: safeErr },
     });
     if (updated.count !== 1) return false;
     try {
@@ -264,7 +296,7 @@ export const AIService = {
           "[AI_REFUND_ASYNC] Refunded", cost,
           "credits to user", creation.userId,
           "for failed creation", creation.requestId,
-          "| reason:", errMsg
+          "| reason:", safeErr
         );
       }
     } catch (refundErr) {
