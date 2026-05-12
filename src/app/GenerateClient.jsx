@@ -459,9 +459,12 @@ export default function Home() {
   const [error, setError] = useState(null);
 
   const MODES = [
-    { id: "text-to-video", label: "Text", fullLabel: "Text", icon: FaBolt },
-    { id: "image-to-video", label: "Image", fullLabel: "Image", icon: IoImageOutline },
-    { id: "reference-to-video", label: "Reference", fullLabel: "Reference", icon: FaSyncAlt },
+    // `label` is shown on mobile (≤ sm), `fullLabel` on tablet+ — keeps
+    // the 4-up pill row readable on phones while spelling out the full
+    // mode name on desktop where Arman likes the longer phrasing.
+    { id: "text-to-video", label: "Text", fullLabel: "Text to Video", icon: FaBolt },
+    { id: "image-to-video", label: "Image", fullLabel: "Image to Video", icon: IoImageOutline },
+    { id: "reference-to-video", label: "Reference", fullLabel: "Reference to Video", icon: FaSyncAlt },
     // Story = multi-shot video with cast face-locked across every shot.
     // Each shot calls /api/seedance with reference-to-video under the hood,
     // so the existing FACE LOCK + anti-flash injections in /lib/services/ai.js
@@ -1076,7 +1079,9 @@ export default function Home() {
                   }`}
                 >
                   <Icon className="shrink-0 hidden sm:inline" />
-                  <span>{m.fullLabel}</span>
+                  {/* Short label on phones, full label on tablet+. */}
+                  <span className="sm:hidden">{m.label}</span>
+                  <span className="hidden sm:inline">{m.fullLabel}</span>
                   {/* "NEW" badge on Story until users have seen it for a
                       while — promotes discovery without a separate banner. */}
                   {m.badge && (
