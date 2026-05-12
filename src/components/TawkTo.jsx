@@ -17,6 +17,11 @@ export default function TawkTo() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (window.Tawk_API) return;
+    // Skip Tawk in dev — its bundled JS throws benign console.errors
+    // that Next.js dev mode catches and surfaces as full-screen error
+    // overlays, which is disruptive while building. Tawk wouldn't reach
+    // a real support agent from localhost anyway. Production unchanged.
+    if (process.env.NODE_ENV !== "production") return;
 
     window.Tawk_API = window.Tawk_API || {};
     window.Tawk_LoadStart = new Date();
