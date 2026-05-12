@@ -61,6 +61,12 @@ export default function DemoFullGeneratePage() {
   // ── Story mode toggle (Feature 2 preview) ─────────────────────
   const [storyMode, setStoryMode] = useState(false);
 
+  // ── Build-my-reference modal (existing feature — preserved) ───
+  // The 🎨 Build my reference button opens the existing ImageBuilder
+  // modal on the live /generate page. We mock it here so the demo
+  // shows the FULL prompt section layout (button + textarea + counter).
+  const [showRefBuilder, setShowRefBuilder] = useState(false);
+
   // ── Generation simulation ─────────────────────────────────────
   const [variations, setVariations] = useState([]); // [{ id, label, selected }]
   const [generating, setGenerating] = useState(false);
@@ -245,7 +251,21 @@ export default function DemoFullGeneratePage() {
             {/* Prompt section */}
             <div style={{ marginTop: 18 }}>
               <div style={S.labelRow}>
-                <label style={S.label}>PROMPT</label>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <label style={S.label}>PROMPT</label>
+                  {/* 🎨 Build my reference — KEPT from the live page.
+                      Per the brief: "Keep Build my reference exactly
+                      as it is — that is a different feature." Demo
+                      mocks the click with an info modal so Arman can
+                      see where it sits in the layout. */}
+                  <button
+                    type="button"
+                    onClick={() => setShowRefBuilder(true)}
+                    style={S.refBuilderBtn}
+                  >
+                    🎨 Build my reference
+                  </button>
+                </div>
                 <span style={S.wordCount}>
                   {prompt.match(/\S+/g)?.length || 0} / 20,000 words
                 </span>
@@ -481,6 +501,71 @@ export default function DemoFullGeneratePage() {
             until it's right, then port to the real page.
           </p>
         </section>
+
+        {/* ───────── Build-my-reference info modal ───────── */}
+        {showRefBuilder && (
+          <div
+            onClick={() => setShowRefBuilder(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.7)",
+              backdropFilter: "blur(6px)",
+              WebkitBackdropFilter: "blur(6px)",
+              zIndex: 100,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 20,
+            }}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: "100%",
+                maxWidth: 460,
+                padding: 24,
+                background: "#111",
+                border: "1px solid #2a2a2a",
+                borderRadius: 14,
+              }}
+            >
+              <FeatureTag>EXISTING FEATURE · unchanged in port</FeatureTag>
+              <h2 style={{ margin: "0 0 10px", fontSize: 19, fontWeight: 700, color: "#fff" }}>
+                🎨 Build my reference
+              </h2>
+              <p style={{ margin: "0 0 12px", fontSize: 13.5, color: "#cbd5e1", lineHeight: 1.55 }}>
+                On the real <code style={S.code}>/generate</code> page this opens
+                the existing <strong style={{ color: "#c8f135" }}>ImageBuilder</strong>{" "}
+                modal — same one you already have. The brief explicitly says to
+                keep this feature exactly as it is.
+              </p>
+              <p style={{ margin: "0 0 16px", fontSize: 13, color: "#888", lineHeight: 1.55 }}>
+                In the port: this button stays where it is, this modal stays
+                where it is, nothing about the reference-image workflow changes.
+                Only the textarea + "✨ Build my prompt" button get replaced by
+                the SmartPrompt above.
+              </p>
+              <button
+                onClick={() => setShowRefBuilder(false)}
+                style={{
+                  width: "100%",
+                  padding: "10px 16px",
+                  background: "#c8f135",
+                  color: "#0a0a0a",
+                  border: "none",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                Got it
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </main>
   );
@@ -677,6 +762,22 @@ const S = {
     fontSize: 11,
     color: "#666",
     fontVariantNumeric: "tabular-nums",
+  },
+  refBuilderBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 4,
+    padding: "3px 8px",
+    background: "rgba(200,241,53,0.10)",
+    border: "1px solid rgba(200,241,53,0.32)",
+    borderRadius: 6,
+    color: "#c8f135",
+    fontSize: 10.5,
+    fontWeight: 700,
+    letterSpacing: "0.02em",
+    cursor: "pointer",
+    fontFamily: "inherit",
+    transition: "background 0.15s",
   },
   uploadBtn: {
     width: "100%",
