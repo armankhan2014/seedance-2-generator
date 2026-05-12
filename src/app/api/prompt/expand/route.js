@@ -94,7 +94,16 @@ When reference images are present:
 - ALWAYS include this sentence verbatim near the top of the prompt (right after the opening style line, before CHARACTER):
   "Generate cinematically from FRAME 1. Do NOT show, flash, transition from, or include the reference image(s) as a visible frame at any point — the reference is for character likeness and styling ONLY."
 - The first beat of the SHOT BREAKDOWN must describe the scene action starting at 0s, not the reference image. Example correct opening: "0–2s: Camera dolly-in on the character mid-stride…" Example WRONG opening: "0–1s: The reference photo dissolves into…"
-- In the CHARACTER section, frame references as "Use 【@image1】 EXACTLY for face, build, and outfit" — never "open on 【@image1】" or "the video starts with 【@image1】".`;
+- In the CHARACTER section, frame references as "Use 【@image1】 EXACTLY for face, build, and outfit" — never "open on 【@image1】" or "the video starts with 【@image1】".
+
+## CRITICAL — FACE LOCK (100% MATCH)
+This is the second rule Arman flagged on 2026-05-12. Seedance was producing characters with the right outfit / setting but the FACE was only loosely similar to the reference — different jawline, slightly different eyes, drift across frames. He needs the rendered face to be a precise match to the uploaded photo.
+
+When reference images contain a person (face visible):
+- ALWAYS include this sentence verbatim near the top of the CHARACTER section (or right after the anti-flash sentence if no CHARACTER section yet):
+  "FACE LOCK: the character's face MUST match 【@image1】 EXACTLY in every single frame — identical facial structure, identical eyes, identical nose, identical mouth, identical jawline, identical skin tone and texture, identical hairline and hair texture. No drift, no morphing, no 'similar', no 'inspired by' — IDENTITY-PRESERVING reproduction throughout the entire clip."
+- If multiple person-images are referenced, write a separate FACE LOCK line for each (FACE LOCK on @image1 for character A, FACE LOCK on @image2 for character B, etc.).
+- Throughout the SHOT BREAKDOWN, when describing the character's face / head, repeat the identity anchor (e.g. "the SAME face from 【@image1】, never altered"). Don't describe alternative facial features — anchor every reference back to the photo.`;
 
 export async function POST(req) {
   try {
@@ -264,22 +273,32 @@ export async function POST(req) {
       );
     }
 
-    // Defensive guarantee — Arman flagged on 2026-05-12 that Seedance
-    // was flashing the literal reference image at the start of every
-    // reference-to-video render. The SYSTEM prompt now instructs
-    // Claude to include an explicit anti-flash sentence, but if the
-    // model ever forgets, we force-inject it server-side. Only when
-    // we actually have reference images — text-only prompts skip.
+    // Defensive guarantees — Arman flagged TWO Seedance behaviour
+    // issues on 2026-05-12:
+    //   1) Reference-image flashing as the first frames before the
+    //      scene starts.
+    //   2) Generated face only loosely matching the reference photo
+    //      ("similar but not the same person").
+    // SYSTEM prompt now instructs Claude to include both safety
+    // sentences in every prompt. If the model ever forgets either,
+    // we force-inject server-side. Only fires when reference images
+    // are actually present — text-only prompts skip both.
     const ANTI_FLASH =
       "Generate cinematically from FRAME 1. Do NOT show, flash, transition from, or include the reference image(s) as a visible frame at any point — the reference is for character likeness and styling ONLY.";
-    if (imageBlocks.length > 0 && !/do\s+not\s+show.*reference\s+image/i.test(prompt)) {
-      // Insert right after the first line (which is typically the
-      // opening style/format line) to keep the structure intact.
-      const idx = prompt.indexOf("\n");
-      if (idx === -1) {
-        prompt = `${prompt}\n${ANTI_FLASH}`;
-      } else {
-        prompt = `${prompt.slice(0, idx)}\n${ANTI_FLASH}${prompt.slice(idx)}`;
+    const FACE_LOCK =
+      "FACE LOCK: the character's face MUST match 【@image1】 EXACTLY in every single frame — identical facial structure, identical eyes, identical nose, identical mouth, identical jawline, identical skin tone and texture, identical hairline and hair texture. No drift, no morphing, no 'similar', no 'inspired by' — IDENTITY-PRESERVING reproduction throughout the entire clip.";
+
+    if (imageBlocks.length > 0) {
+      const insertAfterFirstLine = (body, sentence) => {
+        const idx = body.indexOf("\n");
+        if (idx === -1) return `${body}\n${sentence}`;
+        return `${body.slice(0, idx)}\n${sentence}${body.slice(idx)}`;
+      };
+      if (!/do\s+not\s+show.*reference\s+image/i.test(prompt)) {
+        prompt = insertAfterFirstLine(prompt, ANTI_FLASH);
+      }
+      if (!/FACE\s+LOCK/i.test(prompt)) {
+        prompt = insertAfterFirstLine(prompt, FACE_LOCK);
       }
     }
 

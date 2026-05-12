@@ -43,31 +43,33 @@ export const AIService = {
       const endpoint = config.ai.seedance.endpoints[type][resolution];
       if (!endpoint) throw new Error(`Endpoint not found for mode: ${mode} and resolution: ${resolution}`);
 
-      // ── Anti-flash safety injection ────────────────────────────────────────
-      // Arman flagged on 2026-05-12 that Seedance's reference-mode was
-      // rendering the LITERAL reference image as the first frames of the
-      // video before transitioning. The /api/prompt/expand SYSTEM prompt
-      // now tells Claude to include an anti-flash sentence in every
-      // generated prompt — but if the user TYPES their own prompt and
-      // skips Expand, that protection is gone. We re-inject the same
-      // sentence right here, on every reference-mode submit, so the
-      // Seedance call ALWAYS carries it regardless of how the prompt
-      // got into the textarea.
+      // ── Reference-mode safety injections ──────────────────────────────────
+      // Two issues Arman flagged on 2026-05-12:
+      //   1) Anti-flash — Seedance was rendering the literal reference
+      //      image as the first frames before transitioning.
+      //   2) Face lock — generated faces only loosely matched the
+      //      uploaded photo. Needs to be IDENTICAL across every frame.
+      // Both are also enforced by Claude in /api/prompt/expand, but
+      // a user who types their own prompt or pastes one bypasses
+      // that layer. We re-inject both here on every reference-mode
+      // submit so the Seedance call ALWAYS carries both safeties.
       const ANTI_FLASH =
         "Generate cinematically from FRAME 1. Do NOT show, flash, transition from, or include the reference image(s) as a visible frame at any point — the reference is for character likeness and styling ONLY.";
+      const FACE_LOCK =
+        "FACE LOCK: the character's face MUST match 【@image1】 EXACTLY in every single frame — identical facial structure, identical eyes, identical nose, identical mouth, identical jawline, identical skin tone and texture, identical hairline and hair texture. No drift, no morphing, no 'similar', no 'inspired by' — IDENTITY-PRESERVING reproduction throughout the entire clip.";
+
       let finalPrompt = prompt;
-      if (
-        type === "reference" &&
-        images_list.length > 0 &&
-        !/do\s+not\s+show.*reference\s+image/i.test(finalPrompt)
-      ) {
-        // Insert after the first line (the opening style / format
-        // line) when possible — keeps the prompt structure intact.
-        const idx = finalPrompt.indexOf("\n");
-        if (idx === -1) {
-          finalPrompt = `${finalPrompt}\n${ANTI_FLASH}`;
-        } else {
-          finalPrompt = `${finalPrompt.slice(0, idx)}\n${ANTI_FLASH}${finalPrompt.slice(idx)}`;
+      if (type === "reference" && images_list.length > 0) {
+        const insertAfterFirstLine = (body, sentence) => {
+          const idx = body.indexOf("\n");
+          if (idx === -1) return `${body}\n${sentence}`;
+          return `${body.slice(0, idx)}\n${sentence}${body.slice(idx)}`;
+        };
+        if (!/do\s+not\s+show.*reference\s+image/i.test(finalPrompt)) {
+          finalPrompt = insertAfterFirstLine(finalPrompt, ANTI_FLASH);
+        }
+        if (!/FACE\s+LOCK/i.test(finalPrompt)) {
+          finalPrompt = insertAfterFirstLine(finalPrompt, FACE_LOCK);
         }
       }
 

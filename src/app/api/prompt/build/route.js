@@ -57,7 +57,14 @@ When reference images (【@image1】, 【@image2】, …) are referenced:
 - ALWAYS include this sentence verbatim near the top of the prompt (right after the opening style line, before CHARACTER):
   "Generate cinematically from FRAME 1. Do NOT show, flash, transition from, or include the reference image(s) as a visible frame at any point — the reference is for character likeness and styling ONLY."
 - The first beat of the SHOT BREAKDOWN must describe scene action starting at 0s, not the reference image.
-- In CHARACTER, frame references as "Use 【@image1】 EXACTLY for face, build, and outfit" — never "open on 【@image1】" or "the video starts with 【@image1】".`;
+- In CHARACTER, frame references as "Use 【@image1】 EXACTLY for face, build, and outfit" — never "open on 【@image1】" or "the video starts with 【@image1】".
+
+## CRITICAL — FACE LOCK (100% MATCH)
+When reference images contain a person (face visible):
+- ALWAYS include this sentence verbatim near the top of the CHARACTER section:
+  "FACE LOCK: the character's face MUST match 【@image1】 EXACTLY in every single frame — identical facial structure, identical eyes, identical nose, identical mouth, identical jawline, identical skin tone and texture, identical hairline and hair texture. No drift, no morphing, no 'similar', no 'inspired by' — IDENTITY-PRESERVING reproduction throughout the entire clip."
+- If multiple person-images are referenced, write a separate FACE LOCK line for each (FACE LOCK on @image1 for character A, FACE LOCK on @image2 for character B, etc.).
+- Throughout the SHOT BREAKDOWN when describing the face, anchor every reference back to the photo (e.g. "the SAME face from 【@image1】, never altered").`;
 
 export async function POST(req) {
   try {
