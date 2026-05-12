@@ -84,7 +84,17 @@ The user has selected {DURATION} seconds. Match the shot breakdown to that windo
 - Then CAMERA ARCHITECTURE section
 - Output ONLY the prompt — no "here is your prompt", no explanations, no meta-commentary
 - Be SPECIFIC everywhere — no vague words like "dramatic" or "cinematic" without backing them up with exact detail
-- Invent creative details where the user left gaps — make bold creative decisions`;
+- Invent creative details where the user left gaps — make bold creative decisions
+
+## CRITICAL — REFERENCE-IMAGE HANDLING
+This is the rule Arman flagged on 2026-05-12 because Seedance was flashing the literal reference image at the start of every video before transitioning to the generated scene.
+
+When reference images are present:
+- 【@image1】, 【@image2】, … are CHARACTER and STYLE GUIDES ONLY. They are NEVER to appear as a frame, slide, transition, or visible element in the video itself.
+- ALWAYS include this sentence verbatim near the top of the prompt (right after the opening style line, before CHARACTER):
+  "Generate cinematically from FRAME 1. Do NOT show, flash, transition from, or include the reference image(s) as a visible frame at any point — the reference is for character likeness and styling ONLY."
+- The first beat of the SHOT BREAKDOWN must describe the scene action starting at 0s, not the reference image. Example correct opening: "0–2s: Camera dolly-in on the character mid-stride…" Example WRONG opening: "0–1s: The reference photo dissolves into…"
+- In the CHARACTER section, frame references as "Use 【@image1】 EXACTLY for face, build, and outfit" — never "open on 【@image1】" or "the video starts with 【@image1】".`;
 
 export async function POST(req) {
   try {
@@ -245,13 +255,32 @@ export async function POST(req) {
       );
     }
 
-    const prompt = d.content?.[0]?.text?.trim();
+    let prompt = d.content?.[0]?.text?.trim();
     if (!prompt) {
       await UserService.addCredits(session.user.id, EXPAND_COST).catch(() => {});
       return NextResponse.json(
         { error: "AI returned empty response. Please try again." },
         { status: 500 }
       );
+    }
+
+    // Defensive guarantee — Arman flagged on 2026-05-12 that Seedance
+    // was flashing the literal reference image at the start of every
+    // reference-to-video render. The SYSTEM prompt now instructs
+    // Claude to include an explicit anti-flash sentence, but if the
+    // model ever forgets, we force-inject it server-side. Only when
+    // we actually have reference images — text-only prompts skip.
+    const ANTI_FLASH =
+      "Generate cinematically from FRAME 1. Do NOT show, flash, transition from, or include the reference image(s) as a visible frame at any point — the reference is for character likeness and styling ONLY.";
+    if (imageBlocks.length > 0 && !/do\s+not\s+show.*reference\s+image/i.test(prompt)) {
+      // Insert right after the first line (which is typically the
+      // opening style/format line) to keep the structure intact.
+      const idx = prompt.indexOf("\n");
+      if (idx === -1) {
+        prompt = `${prompt}\n${ANTI_FLASH}`;
+      } else {
+        prompt = `${prompt.slice(0, idx)}\n${ANTI_FLASH}${prompt.slice(idx)}`;
+      }
     }
 
     return NextResponse.json({ prompt });

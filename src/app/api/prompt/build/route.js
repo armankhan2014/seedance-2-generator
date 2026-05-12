@@ -49,7 +49,15 @@ The user will give you a SHORT description — maybe just one sentence or a few 
 - Then CAMERA ARCHITECTURE section
 - Output ONLY the prompt — no "here is your prompt", no explanations, no meta-commentary
 - Be SPECIFIC everywhere — no vague words like "dramatic" or "cinematic" without backing them up with exact detail
-- Invent creative details where the user left gaps — make bold creative decisions`;
+- Invent creative details where the user left gaps — make bold creative decisions
+
+## CRITICAL — REFERENCE-IMAGE HANDLING
+When reference images (【@image1】, 【@image2】, …) are referenced:
+- They are CHARACTER and STYLE GUIDES ONLY. They are NEVER to appear as a frame, slide, transition, or visible element in the video itself.
+- ALWAYS include this sentence verbatim near the top of the prompt (right after the opening style line, before CHARACTER):
+  "Generate cinematically from FRAME 1. Do NOT show, flash, transition from, or include the reference image(s) as a visible frame at any point — the reference is for character likeness and styling ONLY."
+- The first beat of the SHOT BREAKDOWN must describe scene action starting at 0s, not the reference image.
+- In CHARACTER, frame references as "Use 【@image1】 EXACTLY for face, build, and outfit" — never "open on 【@image1】" or "the video starts with 【@image1】".`;
 
 export async function POST(req) {
   try {
