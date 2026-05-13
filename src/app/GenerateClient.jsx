@@ -27,6 +27,7 @@ import {
   letterFor as storyLetterFor,
   estimateCreditsPerShot as storyEstimateCreditsPerShot,
 } from "@/components/saas/StoryBuilder";
+import WalkthroughTour from "@/components/saas/WalkthroughTour";
 
 export const dynamic = "force-dynamic";
 
@@ -423,6 +424,21 @@ export default function Home() {
       document.removeEventListener("keydown", onEsc);
     };
   }, [libraryPreview]);
+
+  // First-visit walkthrough tour. Shown once, gated on localStorage
+  // flag `seedance_walkthrough_v1`. The "👋 Show tour" link in the
+  // generator header lets users replay it anytime.
+  const [showWalkthrough, setShowWalkthrough] = useState(false);
+  useEffect(() => {
+    try {
+      const seen = localStorage.getItem("seedance_walkthrough_v1");
+      if (!seen) setShowWalkthrough(true);
+    } catch {}
+  }, []);
+  const dismissWalkthrough = () => {
+    try { localStorage.setItem("seedance_walkthrough_v1", "1"); } catch {}
+    setShowWalkthrough(false);
+  };
 
   // Hydrate Story state on mount + persist on every change.
   useEffect(() => {
@@ -1924,6 +1940,11 @@ export default function Home() {
           onClose={() => setShowImageBuilder(false)}
         />
       )}
+
+      {/* First-visit walkthrough — modal overlay that teaches the
+          type → image(s) → expand → generate flow. Auto-shows on first
+          visit only (gated on seedance_walkthrough_v1 in localStorage). */}
+      {showWalkthrough && <WalkthroughTour onClose={dismissWalkthrough} />}
 
       {/* Library image preview popup — small floating card that appears
           next to the clicked thumbnail so the user can see the full
