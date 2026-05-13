@@ -28,7 +28,6 @@ import {
   estimateCreditsPerShot as storyEstimateCreditsPerShot,
 } from "@/components/saas/StoryBuilder";
 import WalkthroughTour from "@/components/saas/WalkthroughTour";
-import { playClick, playClickForce, isMuted, setMuted } from "@/lib/clickSound";
 
 export const dynamic = "force-dynamic";
 
@@ -444,36 +443,6 @@ export default function Home() {
   const dismissWalkthrough = () => {
     try { localStorage.setItem("seedance_walkthrough_v1", "1"); } catch {}
     setShowWalkthrough(false);
-  };
-
-  // Click-sound system — plays a soft synthesised click on every
-  // button press, makes the UI feel tactile. Mute is persisted to
-  // localStorage and toggled via the 🔊 / 🔇 button in the header.
-  // Capture-phase listener so the sound fires even if a child
-  // stopPropagation()s the event later.
-  const [soundsMuted, setSoundsMuted] = useState(false);
-  useEffect(() => {
-    setSoundsMuted(isMuted());
-    const onPointerDown = (e) => {
-      const btn = e.target?.closest?.("button");
-      if (!btn) return;
-      // Skip the mute toggle itself (already plays a click via its handler).
-      if (btn.dataset?.noClickSound) return;
-      playClick();
-    };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    return () => document.removeEventListener("pointerdown", onPointerDown, true);
-  }, []);
-  const toggleSounds = () => {
-    // ALWAYS play a test click on toggle — whether muting or un-muting.
-    // Doubles as a sound-check so the user can verify clicks are
-    // audible on their device (volume / silent-switch / browser
-    // permission). playClickForce() bypasses the mute check so the
-    // click plays even if isMuted() is true at this moment.
-    playClickForce();
-    const next = !soundsMuted;
-    setMuted(next);
-    setSoundsMuted(next);
   };
 
   // Hydrate Story state on mount + persist on every change.
@@ -1147,22 +1116,6 @@ export default function Home() {
               </h2>
               <p className="text-[10px] text-muted">Minimal Video Engine</p>
             </div>
-            {/* Sound toggle — controls the click-sound on buttons.
-                data-no-click-sound on the button stops the global
-                listener from firing its own click on this press (the
-                toggleSounds() handler plays a confirmation click when
-                un-muting instead). */}
-            <button
-              type="button"
-              onClick={toggleSounds}
-              data-no-click-sound
-              title={soundsMuted ? "Unmute click sounds" : "Mute click sounds"}
-              aria-label={soundsMuted ? "Unmute click sounds" : "Mute click sounds"}
-              className="w-8 h-8 rounded-md text-muted bg-glass-hover border border-glass-border hover:text-foreground hover:border-glass-border/80 transition-colors flex items-center justify-center text-sm"
-            >
-              {soundsMuted ? "🔇" : "🔊"}
-            </button>
-
             {/* Replay walkthrough — for users who dismissed the first-visit
                 tour but want to see it again. Always visible so it's
                 discoverable. Resets nothing else — just re-opens the

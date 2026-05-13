@@ -19,6 +19,7 @@
 // gate; this component just calls onClose() on Skip / Done.
 
 import { useEffect, useRef, useState } from "react";
+import { playClick } from "@/lib/clickSound";
 
 const COLOR_BG = "#0a0a0a";
 const COLOR_PANEL = "#0f0f0f";
@@ -76,6 +77,13 @@ export default function WalkthroughTour({ onClose }) {
     return () => document.removeEventListener("keydown", onEsc);
   }, [onClose]);
 
+  // Each step transition plays a soft tick — only inside the walkthrough.
+  // Global click sounds on /generate were pulled per Arman 2026-05-13
+  // ("I only need sound in the demo tutorial").
+  useEffect(() => {
+    playClick();
+  }, [stepIdx]);
+
   useEffect(() => {
     clearTimeout(typeTimerRef.current);
     clearTimeout(advanceTimerRef.current);
@@ -109,6 +117,8 @@ export default function WalkthroughTour({ onClose }) {
       setExpandClicked(false);
       if (autoplay) {
         stepTimers.push(setTimeout(() => {
+          // Tactile feedback for the simulated Expand auto-click.
+          playClick();
           setExpandClicked(true);
           stepTimers.push(setTimeout(() => setStepIdx(3), 700));
         }, SETTLE + 2200));
