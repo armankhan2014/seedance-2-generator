@@ -373,8 +373,11 @@ export default function WalkthroughTour({ onClose }) {
                 )}
               </div>
             </div>
-            {step.target === "expand" && <Pointer stepNum={stepIdx + 1} totalSteps={STEPS.length - 1} side="bottom-right" label="Tap here to expand" />}
-            {step.target === "textarea" && step.id === "type" && <Pointer stepNum={stepIdx + 1} totalSteps={STEPS.length - 1} side="top" label="Type a short idea" />}
+            {/* Step badges are anchored to the actual element so the user
+                sees "this glowing button = step 2" without a floating chip
+                that crashes into other UI below. */}
+            {step.target === "expand" && <StepBadge n={stepIdx + 1} total={STEPS.length - 1} />}
+            {step.target === "textarea" && step.id === "type" && <StepBadge n={stepIdx + 1} total={STEPS.length - 1} />}
           </div>
 
           {/* Image upload section — matches the REAL /generate layout:
@@ -478,7 +481,7 @@ export default function WalkthroughTour({ onClose }) {
               </div>
             )}
 
-            {step.target === "image" && <Pointer stepNum={stepIdx + 1} totalSteps={STEPS.length - 1} side="bottom-right" label="Tap to add — one or many" />}
+            {step.target === "image" && <StepBadge n={stepIdx + 1} total={STEPS.length - 1} />}
           </div>
 
           {/* Generate */}
@@ -502,7 +505,7 @@ export default function WalkthroughTour({ onClose }) {
                 transition: "transform 0.2s",
               }}
             >▶ Generate (120 credits)</button>
-            {step.target === "generate" && <Pointer stepNum={stepIdx + 1} totalSteps={STEPS.length - 1} side="bottom" label="And you're done!" />}
+            {step.target === "generate" && <StepBadge n={stepIdx + 1} total={STEPS.length - 1} />}
           </div>
         </div>
 
@@ -576,8 +579,15 @@ export default function WalkthroughTour({ onClose }) {
 
       <style>{`
         @keyframes wt-slideIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes wt-pulse   { 0%, 100% { box-shadow: 0 0 0 0 rgba(200,241,53,0.55); } 50% { box-shadow: 0 0 0 14px rgba(200,241,53,0); } }
-        @keyframes wt-arrowBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+        /* Pulse now keeps a 2 px accent ring around the target at ALL
+           times, with the radial halo expanding outward on top. The
+           fixed ring is what makes "which element is the focus" obvious
+           even between halo cycles. */
+        @keyframes wt-pulse {
+          0%, 100% { box-shadow: 0 0 0 2px rgba(200,241,53,0.85), 0 0 0 4px rgba(200,241,53,0); }
+          50%      { box-shadow: 0 0 0 2px rgba(200,241,53,0.85), 0 0 0 16px rgba(200,241,53,0); }
+        }
+        @keyframes wt-badgeBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
         @keyframes wt-pop     { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
         .wt-target       { animation: wt-pulse 1.8s ease-out infinite; border-radius: 10px; }
         .wt-target-pulse { animation: wt-pulse 1.4s ease-out infinite; }
@@ -586,61 +596,51 @@ export default function WalkthroughTour({ onClose }) {
   );
 }
 
-function Pointer({ side = "bottom-right", label, stepNum, totalSteps }) {
-  const positions = {
-    "bottom-right": { right: -8, top: "calc(100% + 8px)", transform: "translateY(0)" },
-    "bottom":       { left: "50%", top: "calc(100% + 8px)", transform: "translateX(-50%)" },
-    "top":          { left: "50%", bottom: "calc(100% + 8px)", transform: "translateX(-50%)" },
-  };
+// StepBadge — small "STEP X/5" capsule that anchors to the top-left
+// corner of the currently-highlighted target. Negative offset so it
+// bleeds slightly outside the element's bounds, drawing the eye to it.
+// Gently bobs so it reads as "look here". The badge replaces the old
+// floating pointer chip because that chip was overlapping adjacent
+// buttons (the image-step chip crashed into the thumbnail grid below,
+// the expand-step chip crashed into the image section, etc.).
+function StepBadge({ n, total }) {
   return (
-    <div
+    <span
       style={{
         position: "absolute",
-        zIndex: 5,
-        animation: "wt-arrowBounce 1.2s ease-in-out infinite",
-        ...positions[side],
+        top: -11,
+        left: -11,
+        zIndex: 6,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "3px 10px 3px 6px",
+        background: "#0a0a0a",
+        color: COLOR_ACCENT,
+        border: `2px solid ${COLOR_ACCENT}`,
+        borderRadius: 999,
+        fontSize: 10.5,
+        fontWeight: 800,
+        letterSpacing: "0.10em",
+        textTransform: "uppercase",
+        boxShadow: "0 6px 18px -4px rgba(200,241,53,0.55)",
+        animation: "wt-badgeBounce 1.3s ease-in-out infinite",
+        whiteSpace: "nowrap",
+        pointerEvents: "none",
       }}
     >
-      {/* Pointer chip — STEP X leads, label follows. The big black
-          "STEP X" pill sits against the green chip so the eye locks
-          onto the step number first, then reads the action. */}
-      <div style={{
-        display: "inline-flex", alignItems: "stretch", gap: 0,
+      <span style={{
+        display: "inline-flex",
+        alignItems: "center", justifyContent: "center",
+        width: 18, height: 18,
         background: COLOR_ACCENT,
         color: "#0a0a0a",
-        borderRadius: 999,
-        fontWeight: 800,
-        letterSpacing: "0.02em",
-        whiteSpace: "nowrap",
-        boxShadow: "0 6px 18px -4px rgba(200,241,53,0.55)",
-        overflow: "hidden",
+        borderRadius: "50%",
+        fontSize: 11, fontWeight: 900,
       }}>
-        {stepNum != null && (
-          <span style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 4,
-            padding: "5px 10px 5px 11px",
-            background: "#0a0a0a",
-            color: COLOR_ACCENT,
-            fontSize: 11,
-            letterSpacing: "0.12em",
-            fontWeight: 800,
-          }}>
-            STEP {stepNum}{totalSteps ? `/${totalSteps}` : ""}
-          </span>
-        )}
-        <span style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "5px 12px",
-          fontSize: 11.5,
-        }}>
-          <span style={{ fontSize: 13 }}>{side === "top" ? "↓" : "↑"}</span>
-          {label}
-        </span>
-      </div>
-    </div>
+        {n}
+      </span>
+      Step {n}/{total}
+    </span>
   );
 }
