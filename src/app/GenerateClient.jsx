@@ -351,6 +351,11 @@ export default function Home() {
   // Inline-rename state. editingUrl tracks which row's name field is active.
   const [libraryEditingUrl, setLibraryEditingUrl] = useState(null);
   const [libraryDraftName, setLibraryDraftName] = useState("");
+  // Click-to-preview state — small floating popup showing the library
+  // image at a readable size without leaving the page. Anchored next to
+  // the thumbnail using getBoundingClientRect on click. Closes on
+  // outside-click or Escape via a useEffect below.
+  const [libraryPreview, setLibraryPreview] = useState(null); // {url, name, rect} | null
 
   // ── Story mode (mode 4) state ─────────────────────────────────────────
   // Each shot calls /api/seedance under the hood with mode=reference-to-video
@@ -397,6 +402,24 @@ export default function Home() {
     setImagesList((prev) => (prev.includes(url) ? prev : [...prev, url].slice(0, 9)));
     setRecentImages(saveRecentImage(url));
   }, []);
+
+  // Close the library-image preview popup on outside-click or Escape.
+  // 50 ms timeout on the click listener so the click that OPENED the
+  // popup doesn't immediately propagate and close it.
+  useEffect(() => {
+    if (!libraryPreview) return;
+    const onClickAway = () => setLibraryPreview(null);
+    const onEsc = (e) => { if (e.key === "Escape") setLibraryPreview(null); };
+    const t = setTimeout(() => {
+      document.addEventListener("click", onClickAway);
+      document.addEventListener("keydown", onEsc);
+    }, 50);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener("click", onClickAway);
+      document.removeEventListener("keydown", onEsc);
+    };
+  }, [libraryPreview]);
 
   // Hydrate Story state on mount + persist on every change.
   useEffect(() => {
@@ -1317,10 +1340,22 @@ export default function Home() {
                                     inTray ? "bg-primary-500/[0.04]" : ""
                                   }`}
                                 >
-                                  {/* Thumbnail */}
-                                  <div
-                                    className={`relative flex-shrink-0 w-11 h-11 rounded-md overflow-hidden border ${
-                                      inTray ? "border-primary-500/40" : "border-glass-border"
+                                  {/* Thumbnail — click for a small floating
+                                      preview popup. Magnifier overlay on
+                                      hover hints that there's more to see. */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setLibraryPreview({
+                                        url: row.url,
+                                        name: row.name,
+                                        rect: e.currentTarget.getBoundingClientRect(),
+                                      });
+                                    }}
+                                    title="Click to view larger"
+                                    className={`relative flex-shrink-0 w-11 h-11 rounded-md overflow-hidden border group cursor-zoom-in transition-shadow ${
+                                      inTray ? "border-primary-500/40" : "border-glass-border hover:border-primary-500/30"
                                     }`}
                                   >
                                     <img src={row.url} className="w-full h-full object-cover" alt="" />
@@ -1329,7 +1364,18 @@ export default function Home() {
                                         ✓
                                       </div>
                                     )}
-                                  </div>
+                                    {/* Magnifier hint on hover */}
+                                    {!inTray && (
+                                      <div className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                          <circle cx="11" cy="11" r="7" />
+                                          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                                          <line x1="11" y1="8" x2="11" y2="14" />
+                                          <line x1="8" y1="11" x2="14" y2="11" />
+                                        </svg>
+                                      </div>
+                                    )}
+                                  </button>
 
                                   {/* Name + time-ago */}
                                   <div className="flex-1 min-w-0">
@@ -1873,6 +1919,54 @@ export default function Home() {
           onClose={() => setShowImageBuilder(false)}
         />
       )}
+
+      {/* Library image preview popup — small floating card that appears
+          next to the clicked thumbnail so the user can see the full
+          image clearly without leaving the page. Positioned with the
+          captured rect; flips left when there's no room on the right,
+          clamps vertically to the viewport. ESC + outside-click close
+          (wired in the useEffect above). */}
+      {libraryPreview && (() => {
+        const SIZE = 280;             // square card edge
+        const PAD = 12;                // gap between thumbnail + card
+        const VW = typeof window !== "undefined" ? window.innerWidth : 1024;
+        const VH = typeof window !== "undefined" ? window.innerHeight : 768;
+        const r = libraryPreview.rect;
+        // Prefer right of the thumbnail. If that overflows, place on the left.
+        let left = r.right + PAD;
+        if (left + SIZE > VW - 8) left = Math.max(8, r.left - PAD - SIZE);
+        // Top-align with the row, but clamp inside the viewport.
+        let top = Math.max(8, Math.min(r.top, VH - SIZE - 60));
+        return (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ position: "fixed", left, top, width: SIZE, zIndex: 60 }}
+            className="bg-glass-bg border border-glass-border rounded-xl shadow-2xl shadow-black/60 p-2 backdrop-blur-sm"
+          >
+            <div className="relative w-full" style={{ height: SIZE - 16 }}>
+              <img
+                src={libraryPreview.url}
+                alt={libraryPreview.name || ""}
+                className="w-full h-full object-contain rounded-lg bg-black/40"
+              />
+              <button
+                type="button"
+                onClick={() => setLibraryPreview(null)}
+                aria-label="Close preview"
+                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/70 border border-white/15 text-white text-xs leading-none flex items-center justify-center hover:bg-red-500 hover:border-red-400 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex items-center justify-between gap-2 mt-2 px-1">
+              <span className="text-[11px] font-semibold text-foreground truncate">
+                {libraryPreview.name || "Untitled"}
+              </span>
+              <span className="text-[10px] text-muted">Esc to close</span>
+            </div>
+          </div>
+        );
+      })()}
     </>
   );
 }
