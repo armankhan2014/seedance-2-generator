@@ -221,34 +221,55 @@ export default function WalkthroughTour({ onClose }) {
           </p>
         </div>
 
-        {/* Hint card */}
+        {/* Hint card — clear "STEP X OF 5" label so users know where
+            they are in the flow. The final "done" step shows "✓ ALL SET"
+            instead of a step number. Arman flagged 2026-05-13 that
+            numbered steps make the tour easier to follow. */}
         <div
           key={stepIdx}
           style={{
             background: COLOR_PANEL,
             border: `1px solid ${COLOR_BORDER_HOVER}`,
             borderRadius: 12,
-            padding: "12px 16px",
+            padding: "14px 16px",
             marginBottom: 16,
             display: "flex",
-            alignItems: "center",
-            gap: 12,
+            alignItems: "flex-start",
+            gap: 14,
             animation: "wt-slideIn 0.35s ease",
           }}
         >
           <div style={{
             flexShrink: 0,
-            width: 32, height: 32, borderRadius: 8,
+            width: 38, height: 38, borderRadius: 10,
             background: "rgba(200,241,53,0.10)",
             border: `1px solid ${COLOR_BORDER_HOVER}`,
             color: COLOR_ACCENT,
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 14, fontWeight: 800,
+            fontSize: 16, fontWeight: 800,
           }}>
             {isLast ? "✓" : stepIdx + 1}
           </div>
-          <div style={{ flex: 1, fontSize: 13.5, lineHeight: 1.45, color: COLOR_TEXT }}>
-            {step.hint}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: 11,
+              color: COLOR_ACCENT,
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+              fontWeight: 800,
+              marginBottom: 4,
+            }}>
+              {isLast
+                ? "✓ All set"
+                : `Step ${stepIdx + 1} of ${STEPS.length - 1}`}
+            </div>
+            <div style={{
+              fontSize: 13.5,
+              lineHeight: 1.45,
+              color: COLOR_TEXT,
+            }}>
+              {step.hint}
+            </div>
           </div>
         </div>
 
