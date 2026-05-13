@@ -328,7 +328,10 @@ function CustomSelect({ label, value, options, onChange, icon: Icon }) {
 export default function Home() {
   const { data: session } = useSession();
   // Mode State
-  const [mode, setMode] = useState("text-to-video");
+  // Default to Image To video — most common starting point for our users.
+  // Arman flagged 2026-05-13: landing on Text first felt empty since the
+  // Image Library + photo upload are the bigger draw.
+  const [mode, setMode] = useState("image-to-video");
   // Form State
   const [prompt, setPrompt] = useState("");
   // Pre-fill prompt from sessionStorage (set by "Use This Prompt" button)
