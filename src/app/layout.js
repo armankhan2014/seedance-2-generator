@@ -9,6 +9,7 @@ import SignInModal from "@/components/saas/SignInModal";
 import MobileBottomNav from "@/components/saas/MobileBottomNav";
 import TawkTo from "@/components/TawkTo";
 import VisitorTracker from "@/components/VisitorTracker";
+import PWARegister from "@/components/PWARegister";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -26,6 +27,30 @@ export const metadata = {
   },
   twitter: { card: "summary_large_image", title: "Seedance Studio — AI Video Generator", description: "Generate stunning AI videos in seconds with Seedance 2.0.", images: ["/og-image.png"] },
   robots: { index: true, follow: true },
+  // ── PWA / "Add to Home Screen" ────────────────────────────────────
+  // Tells iOS Safari that the site is a stand-alone web app. When the
+  // user adds it to their home screen iOS hides its own browser chrome
+  // and the site looks native. Android / Chrome / Edge read manifest.json
+  // (src/app/manifest.js) for the same purpose.
+  appleWebApp: {
+    capable: true,
+    title: "Seedance",
+    statusBarStyle: "black-translucent",
+  },
+  applicationName: "Seedance",
+  formatDetection: { telephone: false },
+};
+
+// viewport export drives <meta name="theme-color"> + the viewport meta
+// tag itself. Theme color is what colours the iOS status bar + Android
+// system bar when the PWA is open, so it must match the page background.
+export const viewport = {
+  themeColor: "#0a0a0a",
+  width: "device-width",
+  initialScale: 1,
+  // Prevents iOS Safari's pinch-zoom on form inputs which can break
+  // the PWA chrome — still allows manual zoom for accessibility.
+  viewportFit: "cover",
 };
 
 export default async function RootLayout({ children }) {
@@ -60,6 +85,8 @@ export default async function RootLayout({ children }) {
           {/* Tawk.to live chat */}
           <TawkTo />
           <VisitorTracker />
+          {/* Service-worker registration for the PWA. No-op in dev. */}
+          <PWARegister />
         </Providers>
       </body>
     </html>
