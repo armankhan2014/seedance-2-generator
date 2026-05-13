@@ -28,7 +28,7 @@ import {
   estimateCreditsPerShot as storyEstimateCreditsPerShot,
 } from "@/components/saas/StoryBuilder";
 import WalkthroughTour from "@/components/saas/WalkthroughTour";
-import { playClick, isMuted, setMuted } from "@/lib/clickSound";
+import { playClick, playClickForce, isMuted, setMuted } from "@/lib/clickSound";
 
 export const dynamic = "force-dynamic";
 
@@ -465,10 +465,15 @@ export default function Home() {
     return () => document.removeEventListener("pointerdown", onPointerDown, true);
   }, []);
   const toggleSounds = () => {
+    // ALWAYS play a test click on toggle — whether muting or un-muting.
+    // Doubles as a sound-check so the user can verify clicks are
+    // audible on their device (volume / silent-switch / browser
+    // permission). playClickForce() bypasses the mute check so the
+    // click plays even if isMuted() is true at this moment.
+    playClickForce();
     const next = !soundsMuted;
     setMuted(next);
     setSoundsMuted(next);
-    if (!next) playClick(); // play one as confirmation when unmuting
   };
 
   // Hydrate Story state on mount + persist on every change.
