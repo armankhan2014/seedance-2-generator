@@ -1104,8 +1104,10 @@ export default function Home() {
                       : "bg-glass-hover border border-glass-border text-muted hover:text-foreground hover:border-primary-500/40 hover:bg-primary-500/[0.04]"
                   }`}
                 >
-                  <span className="sm:hidden whitespace-nowrap">{m.label}</span>
-                  <span className="hidden sm:inline whitespace-nowrap">{m.fullLabel}</span>
+                  {/* Same full label on mobile + desktop. Phone is 2×2
+                      grid so each cell is wide enough for the long
+                      "Reference To video" text. */}
+                  <span className="whitespace-nowrap">{m.fullLabel}</span>
                   {m.badge && (
                     <span
                       className={`text-[8px] font-extrabold tracking-wider px-1 py-px rounded ${
