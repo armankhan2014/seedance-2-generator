@@ -1095,12 +1095,34 @@ export default function Home() {
             <div className="w-10 h-10 rounded-md bg-primary-500/10 flex items-center justify-center text-primary-500">
               <FaMagic />
             </div>
-            <div>
+            <div className="flex-1 min-w-0">
               <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
                 Seedance Generator
               </h2>
               <p className="text-[10px] text-muted">Minimal Video Engine</p>
             </div>
+            {/* Replay walkthrough — for users who dismissed the first-visit
+                tour but want to see it again. Always visible so it's
+                discoverable. Resets nothing else — just re-opens the
+                animated guide. */}
+            <button
+              type="button"
+              onClick={() => setShowWalkthrough(true)}
+              title="Replay the quick tour"
+              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10.5px] font-bold text-primary-500 bg-primary-500/[0.06] border border-primary-500/25 hover:bg-primary-500/10 hover:border-primary-500/50 transition-colors"
+            >
+              <span className="text-[11px]">?</span>
+              <span>Replay tour</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowWalkthrough(true)}
+              title="Replay the quick tour"
+              aria-label="Replay the quick tour"
+              className="sm:hidden w-8 h-8 rounded-md text-primary-500 bg-primary-500/[0.06] border border-primary-500/25 hover:bg-primary-500/10 hover:border-primary-500/50 transition-colors flex items-center justify-center text-sm font-bold"
+            >
+              ?
+            </button>
           </div>
 
           {/* Mode buttons — independent floating pills (replaced the
