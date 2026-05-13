@@ -335,52 +335,91 @@ export default function WalkthroughTour({ onClose }) {
                 padding: "8px 12px 10px",
                 borderTop: `1px solid ${COLOR_BORDER}`,
                 minHeight: 44,
+                gap: 8,
+                flexWrap: "wrap",
               }}>
                 <span style={{ fontSize: 11, color: COLOR_MUTED, fontVariantNumeric: "tabular-nums" }}>
                   {wordCount.toLocaleString()} words
                 </span>
                 {wordCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => { setExpandClicked(true); next(); }}
-                    disabled={step.id === "done"}
-                    className={step.target === "expand" ? "wt-target-pulse" : ""}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 6,
-                      padding: "7px 12px",
-                      background: expandClicked ? "rgba(200,241,53,0.15)" : COLOR_ACCENT,
-                      color: expandClicked ? COLOR_MUTED : "#0a0a0a",
-                      border: "none",
-                      borderRadius: 7,
-                      fontSize: 12,
-                      fontWeight: 800,
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                      letterSpacing: "0.02em",
-                      transform: step.target === "expand" ? "scale(1.02)" : "scale(1)",
-                      transition: "transform 0.2s, background 0.2s",
-                    }}
-                  >
-                    {expandClicked
-                      ? "✦ Expanding…"
-                      : imageCount === 0
-                        ? "✦ Expand my idea"
-                        : imageCount === 1
-                          ? "✦ Expand my idea (with image)"
-                          : `✦ Expand my idea (with ${imageCount} images)`
-                    }
-                  </button>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                    {/* Step 3 badge sits INLINE, immediately left of the
+                        Expand button. Was floating outside the wrapper
+                        boundary which hid it behind other content —
+                        Arman flagged 2026-05-13 "the button not
+                        visible". Inline guarantees it's in the same
+                        row as Expand, can't be clipped or stacked
+                        behind anything. */}
+                    {step.target === "expand" && (
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: "3px 10px 3px 6px",
+                          background: "#0a0a0a",
+                          color: COLOR_ACCENT,
+                          border: `2px solid ${COLOR_ACCENT}`,
+                          borderRadius: 999,
+                          fontSize: 10.5,
+                          fontWeight: 800,
+                          letterSpacing: "0.10em",
+                          textTransform: "uppercase",
+                          boxShadow: "0 6px 18px -4px rgba(200,241,53,0.55)",
+                          animation: "wt-badgeBounce 1.3s ease-in-out infinite",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <span style={{
+                          display: "inline-flex",
+                          alignItems: "center", justifyContent: "center",
+                          width: 18, height: 18,
+                          background: COLOR_ACCENT,
+                          color: "#0a0a0a",
+                          borderRadius: "50%",
+                          fontSize: 11, fontWeight: 900,
+                        }}>
+                          {stepIdx + 1}
+                        </span>
+                        Step {stepIdx + 1}/{STEPS.length - 1}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => { setExpandClicked(true); next(); }}
+                      disabled={step.id === "done"}
+                      className={step.target === "expand" ? "wt-target-pulse" : ""}
+                      style={{
+                        display: "inline-flex", alignItems: "center", gap: 6,
+                        padding: "7px 12px",
+                        background: expandClicked ? "rgba(200,241,53,0.15)" : COLOR_ACCENT,
+                        color: expandClicked ? COLOR_MUTED : "#0a0a0a",
+                        border: "none",
+                        borderRadius: 7,
+                        fontSize: 12,
+                        fontWeight: 800,
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                        letterSpacing: "0.02em",
+                        transform: step.target === "expand" ? "scale(1.02)" : "scale(1)",
+                        transition: "transform 0.2s, background 0.2s",
+                      }}
+                    >
+                      {expandClicked
+                        ? "✦ Expanding…"
+                        : imageCount === 0
+                          ? "✦ Expand my idea"
+                          : imageCount === 1
+                            ? "✦ Expand my idea (with image)"
+                            : `✦ Expand my idea (with ${imageCount} images)`
+                      }
+                    </button>
+                  </div>
                 )}
               </div>
-              {/* Step 3 badge anchored to the BOTTOM-RIGHT of the
-                  textarea wrapper — sits right next to the Expand
-                  button so the eye locks onto "this button is step 3"
-                  immediately. Arman flagged 2026-05-13 that the badge
-                  floating at the top of the prompt area didn't make
-                  the connection clear. */}
-              {step.target === "expand" && (
-                <StepBadge n={stepIdx + 1} total={STEPS.length - 1} corner="bottom-right" />
-              )}
+              {/* Step 3 badge lives INLINE in the footer above, next to
+                  the Expand button. No absolute-positioned badge here
+                  any more — it was getting hidden outside the wrapper. */}
             </div>
             {step.target === "textarea" && step.id === "type" && <StepBadge n={stepIdx + 1} total={STEPS.length - 1} />}
           </div>
