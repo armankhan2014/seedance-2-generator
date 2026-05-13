@@ -19,7 +19,6 @@
 // gate; this component just calls onClose() on Skip / Done.
 
 import { useEffect, useRef, useState } from "react";
-import { playClick } from "@/lib/clickSound";
 
 const COLOR_BG = "#0a0a0a";
 const COLOR_PANEL = "#0f0f0f";
@@ -77,13 +76,6 @@ export default function WalkthroughTour({ onClose }) {
     return () => document.removeEventListener("keydown", onEsc);
   }, [onClose]);
 
-  // Each step transition plays a soft tick — only inside the walkthrough.
-  // Global click sounds on /generate were pulled per Arman 2026-05-13
-  // ("I only need sound in the demo tutorial").
-  useEffect(() => {
-    playClick();
-  }, [stepIdx]);
-
   useEffect(() => {
     clearTimeout(typeTimerRef.current);
     clearTimeout(advanceTimerRef.current);
@@ -117,8 +109,6 @@ export default function WalkthroughTour({ onClose }) {
       setExpandClicked(false);
       if (autoplay) {
         stepTimers.push(setTimeout(() => {
-          // Tactile feedback for the simulated Expand auto-click.
-          playClick();
           setExpandClicked(true);
           stepTimers.push(setTimeout(() => setStepIdx(3), 700));
         }, SETTLE + 2200));
@@ -382,11 +372,16 @@ export default function WalkthroughTour({ onClose }) {
                   </button>
                 )}
               </div>
+              {/* Step 3 badge anchored to the BOTTOM-RIGHT of the
+                  textarea wrapper — sits right next to the Expand
+                  button so the eye locks onto "this button is step 3"
+                  immediately. Arman flagged 2026-05-13 that the badge
+                  floating at the top of the prompt area didn't make
+                  the connection clear. */}
+              {step.target === "expand" && (
+                <StepBadge n={stepIdx + 1} total={STEPS.length - 1} corner="bottom-right" />
+              )}
             </div>
-            {/* Step badges are anchored to the actual element so the user
-                sees "this glowing button = step 2" without a floating chip
-                that crashes into other UI below. */}
-            {step.target === "expand" && <StepBadge n={stepIdx + 1} total={STEPS.length - 1} />}
             {step.target === "textarea" && step.id === "type" && <StepBadge n={stepIdx + 1} total={STEPS.length - 1} />}
           </div>
 
@@ -606,20 +601,23 @@ export default function WalkthroughTour({ onClose }) {
   );
 }
 
-// StepBadge — small "STEP X/5" capsule that anchors to the top-left
-// corner of the currently-highlighted target. Negative offset so it
-// bleeds slightly outside the element's bounds, drawing the eye to it.
-// Gently bobs so it reads as "look here". The badge replaces the old
-// floating pointer chip because that chip was overlapping adjacent
-// buttons (the image-step chip crashed into the thumbnail grid below,
-// the expand-step chip crashed into the image section, etc.).
-function StepBadge({ n, total }) {
+// StepBadge — small "STEP X/5" capsule anchored to a corner of the
+// currently-highlighted target. The `corner` prop picks which side it
+// bleeds out from so each step can attach the badge near its specific
+// button (e.g. the Expand step badge sits at the BOTTOM-RIGHT of the
+// textarea wrapper, right next to the Expand button itself).
+const CORNERS = {
+  "top-left":     { top: -11, left: -11 },
+  "top-right":    { top: -11, right: -11 },
+  "bottom-left":  { bottom: -11, left: -11 },
+  "bottom-right": { bottom: -11, right: -11 },
+};
+
+function StepBadge({ n, total, corner = "top-left" }) {
   return (
     <span
       style={{
         position: "absolute",
-        top: -11,
-        left: -11,
         zIndex: 6,
         display: "inline-flex",
         alignItems: "center",
@@ -637,6 +635,7 @@ function StepBadge({ n, total }) {
         animation: "wt-badgeBounce 1.3s ease-in-out infinite",
         whiteSpace: "nowrap",
         pointerEvents: "none",
+        ...CORNERS[corner],
       }}
     >
       <span style={{
