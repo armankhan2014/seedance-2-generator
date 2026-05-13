@@ -42,26 +42,41 @@ export function setMuted(muted) {
   } catch {}
 }
 
+// Internal — actually schedule the oscillator on `c`. Split out so we
+// can await resume() before calling it.
+function schedule(c) {
+  const t = c.currentTime;
+  // Triangle wave at ~900 Hz with a fast pitch drop and quick decay
+  // produces a soft "tk" tone. Volume 0.22 — quiet but actually
+  // audible on phone speakers (0.10 was too quiet — Arman flagged
+  // 2026-05-13 "the sound is not there").
+  const osc = c.createOscillator();
+  const gain = c.createGain();
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(900, t);
+  osc.frequency.exponentialRampToValueAtTime(420, t + 0.04);
+  gain.gain.setValueAtTime(0.22, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+  osc.connect(gain);
+  gain.connect(c.destination);
+  osc.start(t);
+  osc.stop(t + 0.08);
+}
+
 export function playClick() {
   if (isMuted()) return;
   try {
     const c = ctx();
     if (!c) return;
-    if (c.state === "suspended") c.resume();
-    const t = c.currentTime;
-    // Triangle wave at ~900 Hz with a fast pitch drop and quick decay
-    // produces a soft "tk" tone — friendly, not annoying when fired
-    // dozens of times in a session.
-    const osc = c.createOscillator();
-    const gain = c.createGain();
-    osc.type = "triangle";
-    osc.frequency.setValueAtTime(900, t);
-    osc.frequency.exponentialRampToValueAtTime(420, t + 0.04);
-    gain.gain.setValueAtTime(0.10, t);
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
-    osc.connect(gain);
-    gain.connect(c.destination);
-    osc.start(t);
-    osc.stop(t + 0.07);
+    // Browsers (especially iOS) start AudioContext in "suspended" state
+    // and require a user gesture to resume. resume() returns a Promise,
+    // so we MUST await it before scheduling — otherwise currentTime
+    // doesn't advance and the oscillator silently produces nothing.
+    // Previous version called resume() without awaiting, hence "no sound".
+    if (c.state === "suspended") {
+      c.resume().then(() => schedule(c)).catch(() => {});
+    } else {
+      schedule(c);
+    }
   } catch {}
 }
