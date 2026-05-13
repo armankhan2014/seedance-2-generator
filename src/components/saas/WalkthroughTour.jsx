@@ -41,13 +41,11 @@ const STEPS = [
   { id: "done",     hint: "That's it — you're ready to make videos.",                                                                              target: null },
 ];
 
-// Slowed down 2026-05-13 — first cut was ~13 s end-to-end and Arman
-// couldn't follow what was happening. Chunk size 1 (real-typing feel)
-// for the short idea, 4 for the long expansion so it still lands fast
-// enough to not drag, plus longer pauses between steps so the user has
-// time to read each hint card. Total demo ≈ 22-25 s now.
-const TYPE_SHORT = { chunk: 1, ms: 38 };
-const TYPE_LONG  = { chunk: 4, ms: 24 };
+// Slowed down again 2026-05-13 round 2 — Arman still felt it was too
+// fast to follow. Real-typing speed on the short idea, comfortable
+// reading pace on the long expansion. Total demo ≈ 30-32 s.
+const TYPE_SHORT = { chunk: 1, ms: 55 };
+const TYPE_LONG  = { chunk: 3, ms: 30 };
 
 export default function WalkthroughTour({ onClose }) {
   const [stepIdx, setStepIdx] = useState(0);
@@ -84,21 +82,27 @@ export default function WalkthroughTour({ onClose }) {
 
     const stepTimers = [];
 
+    // Each step now starts with a SETTLE pause before the animation
+    // kicks in, so the user sees "STEP X starting on this element" and
+    // can orient before content moves.
+    const SETTLE = 700;
+
     if (step.id === "type") {
       setText("");
       setExpandClicked(false);
       setImageCount(0);
-      typeChunked(SHORT_IDEA, 0, TYPE_SHORT, () => {
-        // Pause after typing so user can read the hint + see the result.
-        if (autoplay) advanceTimerRef.current = setTimeout(() => setStepIdx(1), 1400);
-      });
+      stepTimers.push(setTimeout(() => {
+        typeChunked(SHORT_IDEA, 0, TYPE_SHORT, () => {
+          if (autoplay) advanceTimerRef.current = setTimeout(() => setStepIdx(1), 1800);
+        });
+      }, SETTLE));
     } else if (step.id === "image") {
       setText(SHORT_IDEA);
       setExpandClicked(false);
       setImageCount(0);
-      stepTimers.push(setTimeout(() => setImageCount(1), 900));
-      stepTimers.push(setTimeout(() => setImageCount(2), 2400));
-      if (autoplay) stepTimers.push(setTimeout(() => setStepIdx(2), 4800));
+      stepTimers.push(setTimeout(() => setImageCount(1), SETTLE + 600));
+      stepTimers.push(setTimeout(() => setImageCount(2), SETTLE + 2200));
+      if (autoplay) stepTimers.push(setTimeout(() => setStepIdx(2), SETTLE + 4800));
     } else if (step.id === "expand") {
       setText(SHORT_IDEA);
       setImageCount(2);
@@ -106,19 +110,21 @@ export default function WalkthroughTour({ onClose }) {
       if (autoplay) {
         stepTimers.push(setTimeout(() => {
           setExpandClicked(true);
-          stepTimers.push(setTimeout(() => setStepIdx(3), 600));
-        }, 2200));
+          stepTimers.push(setTimeout(() => setStepIdx(3), 700));
+        }, SETTLE + 2200));
       }
     } else if (step.id === "expanded") {
       setText("");
       setImageCount(2);
-      typeChunked(EXPANDED, 0, TYPE_LONG, () => {
-        if (autoplay) advanceTimerRef.current = setTimeout(() => setStepIdx(4), 1800);
-      });
+      stepTimers.push(setTimeout(() => {
+        typeChunked(EXPANDED, 0, TYPE_LONG, () => {
+          if (autoplay) advanceTimerRef.current = setTimeout(() => setStepIdx(4), 2200);
+        });
+      }, SETTLE));
     } else if (step.id === "generate") {
       setText(EXPANDED);
       setImageCount(2);
-      if (autoplay) stepTimers.push(setTimeout(() => setStepIdx(5), 2600));
+      if (autoplay) stepTimers.push(setTimeout(() => setStepIdx(5), SETTLE + 2800));
     } else if (step.id === "done") {
       setText(EXPANDED);
       setImageCount(2);
@@ -367,8 +373,8 @@ export default function WalkthroughTour({ onClose }) {
                 )}
               </div>
             </div>
-            {step.target === "expand" && <Pointer side="bottom-right" label="Tap here to expand" />}
-            {step.target === "textarea" && step.id === "type" && <Pointer side="top" label="Auto-typing example…" />}
+            {step.target === "expand" && <Pointer stepNum={stepIdx + 1} totalSteps={STEPS.length - 1} side="bottom-right" label="Tap here to expand" />}
+            {step.target === "textarea" && step.id === "type" && <Pointer stepNum={stepIdx + 1} totalSteps={STEPS.length - 1} side="top" label="Type a short idea" />}
           </div>
 
           {/* Image upload section — matches the REAL /generate layout:
@@ -472,7 +478,7 @@ export default function WalkthroughTour({ onClose }) {
               </div>
             )}
 
-            {step.target === "image" && <Pointer side="bottom-right" label="Tap to add — one or many" />}
+            {step.target === "image" && <Pointer stepNum={stepIdx + 1} totalSteps={STEPS.length - 1} side="bottom-right" label="Tap to add — one or many" />}
           </div>
 
           {/* Generate */}
@@ -496,7 +502,7 @@ export default function WalkthroughTour({ onClose }) {
                 transition: "transform 0.2s",
               }}
             >▶ Generate (120 credits)</button>
-            {step.target === "generate" && <Pointer side="bottom" label="And you're done!" />}
+            {step.target === "generate" && <Pointer stepNum={stepIdx + 1} totalSteps={STEPS.length - 1} side="bottom" label="And you're done!" />}
           </div>
         </div>
 
@@ -580,11 +586,11 @@ export default function WalkthroughTour({ onClose }) {
   );
 }
 
-function Pointer({ side = "bottom-right", label }) {
+function Pointer({ side = "bottom-right", label, stepNum, totalSteps }) {
   const positions = {
-    "bottom-right": { right: -8, top: "calc(100% + 6px)", transform: "translateY(0)" },
-    "bottom":       { left: "50%", top: "calc(100% + 6px)", transform: "translateX(-50%)" },
-    "top":          { left: "50%", bottom: "calc(100% + 6px)", transform: "translateX(-50%)" },
+    "bottom-right": { right: -8, top: "calc(100% + 8px)", transform: "translateY(0)" },
+    "bottom":       { left: "50%", top: "calc(100% + 8px)", transform: "translateX(-50%)" },
+    "top":          { left: "50%", bottom: "calc(100% + 8px)", transform: "translateX(-50%)" },
   };
   return (
     <div
@@ -595,18 +601,45 @@ function Pointer({ side = "bottom-right", label }) {
         ...positions[side],
       }}
     >
+      {/* Pointer chip — STEP X leads, label follows. The big black
+          "STEP X" pill sits against the green chip so the eye locks
+          onto the step number first, then reads the action. */}
       <div style={{
-        display: "inline-flex", alignItems: "center", gap: 6,
-        padding: "5px 10px",
-        background: COLOR_ACCENT, color: "#0a0a0a",
+        display: "inline-flex", alignItems: "stretch", gap: 0,
+        background: COLOR_ACCENT,
+        color: "#0a0a0a",
         borderRadius: 999,
-        fontSize: 11, fontWeight: 800,
+        fontWeight: 800,
         letterSpacing: "0.02em",
         whiteSpace: "nowrap",
-        boxShadow: "0 4px 12px -4px rgba(200,241,53,0.4)",
+        boxShadow: "0 6px 18px -4px rgba(200,241,53,0.55)",
+        overflow: "hidden",
       }}>
-        <span style={{ fontSize: 13 }}>{side === "top" ? "↓" : "↑"}</span>
-        {label}
+        {stepNum != null && (
+          <span style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 4,
+            padding: "5px 10px 5px 11px",
+            background: "#0a0a0a",
+            color: COLOR_ACCENT,
+            fontSize: 11,
+            letterSpacing: "0.12em",
+            fontWeight: 800,
+          }}>
+            STEP {stepNum}{totalSteps ? `/${totalSteps}` : ""}
+          </span>
+        )}
+        <span style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "5px 12px",
+          fontSize: 11.5,
+        }}>
+          <span style={{ fontSize: 13 }}>{side === "top" ? "↓" : "↑"}</span>
+          {label}
+        </span>
       </div>
     </div>
   );
