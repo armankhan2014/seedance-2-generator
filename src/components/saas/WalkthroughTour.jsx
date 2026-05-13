@@ -350,81 +350,108 @@ export default function WalkthroughTour({ onClose }) {
             {step.target === "textarea" && step.id === "type" && <Pointer side="top" label="Auto-typing example…" />}
           </div>
 
-          {/* Image upload row */}
+          {/* Image upload section — matches the REAL /generate layout:
+              IMAGES (N/9) label, full-width yellow "Upload image" button,
+              then a 5-column grid below for uploaded thumbnails labelled
+              @image1, @image2, … with delete buttons. Arman wanted the
+              walkthrough to mirror the actual page so first-time users
+              see the exact buttons they'll click. */}
           <div
             className={step.target === "image" ? "wt-target-pulse" : ""}
             style={{
               position: "relative",
-              background: COLOR_BG,
-              border: `1px ${imageCount > 0 ? "solid" : "dashed"} ${step.target === "image" || imageCount > 0 ? COLOR_BORDER_HOVER : COLOR_BORDER}`,
-              borderRadius: 10,
-              padding: "12px 14px",
-              display: "flex",
-              alignItems: "center",
-              gap: 12,
               transform: step.target === "image" ? "scale(1.01)" : "scale(1)",
-              transition: "all 0.25s",
+              transition: "transform 0.25s",
             }}
           >
-            {imageCount === 0 ? (
+            {/* Section label */}
+            <div style={{
+              fontSize: 10, color: COLOR_MUTED, letterSpacing: "0.12em",
+              textTransform: "uppercase", fontWeight: 600, marginBottom: 6,
+            }}>
+              Images ({imageCount}/9)
+            </div>
+
+            {/* Upload button (yellow-tinted, full width — matches live UI) */}
+            <button
+              type="button"
+              disabled
+              style={{
+                width: "100%",
+                padding: "10px 14px",
+                background: "rgba(200,241,53,0.10)",
+                border: `1px solid ${
+                  step.target === "image" ? COLOR_BORDER_HOVER : "rgba(200,241,53,0.25)"
+                }`,
+                color: COLOR_ACCENT,
+                fontSize: 12.5,
+                fontWeight: 700,
+                borderRadius: 7,
+                cursor: "default",
+                fontFamily: "inherit",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                transition: "all 0.2s",
+              }}
+            >
+              🖼 Upload image
+            </button>
+
+            {/* Thumbnail grid (only renders after the first image lands) */}
+            {imageCount > 0 && (
               <div style={{
-                flexShrink: 0,
-                width: 44, height: 44, borderRadius: 8,
-                background: "rgba(255,255,255,0.04)",
-                border: `1px solid ${COLOR_BORDER}`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 16,
-              }}>📷</div>
-            ) : (
-              <div style={{ flexShrink: 0, display: "flex", gap: 6 }}>
+                marginTop: 8,
+                display: "grid",
+                gridTemplateColumns: "repeat(5, 1fr)",
+                gap: 8,
+              }}>
                 {Array.from({ length: imageCount }).map((_, i) => (
-                  <img
+                  <div
                     key={i}
-                    src={`https://picsum.photos/seed/wt-ref-${i + 1}/96/96`}
-                    alt=""
                     style={{
-                      width: 44, height: 44, borderRadius: 8, objectFit: "cover",
+                      position: "relative",
+                      aspectRatio: "1 / 1",
+                      borderRadius: 8,
+                      overflow: "hidden",
                       border: `1px solid ${COLOR_BORDER_HOVER}`,
+                      background: "#000",
                       animation: "wt-pop 0.35s ease",
                     }}
-                  />
+                  >
+                    <img
+                      src={`https://picsum.photos/seed/wt-ref-${i + 1}/200/200`}
+                      alt={`image ${i + 1}`}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                    {/* Delete button in corner */}
+                    <div style={{
+                      position: "absolute", top: 4, right: 4,
+                      width: 18, height: 18, borderRadius: "50%",
+                      background: "rgba(0,0,0,0.75)",
+                      border: "1px solid rgba(255,255,255,0.2)",
+                      color: "#fff",
+                      fontSize: 9, lineHeight: 1,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>×</div>
+                    {/* @imageN label */}
+                    <div style={{
+                      position: "absolute", bottom: 3, left: 3,
+                      background: "rgba(0,0,0,0.7)",
+                      padding: "1px 5px",
+                      borderRadius: 3,
+                      fontSize: 8.5,
+                      fontWeight: 800,
+                      color: "#fff",
+                      letterSpacing: "0.02em",
+                    }}>@image{i + 1}</div>
+                  </div>
                 ))}
               </div>
             )}
-            <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
-              <div style={{
-                fontSize: 12.5, fontWeight: 700, marginBottom: 2, color: COLOR_TEXT,
-                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-              }}>
-                {imageCount === 0 ? "Add reference image(s)" : imageCount === 1 ? "1 reference added" : `${imageCount} references added`}
-              </div>
-              <div style={{
-                fontSize: 11, color: COLOR_MUTED, lineHeight: 1.4,
-                // Allow up to 2 lines on the subtitle (longer on multi-character)
-                // without overflowing into the badge area.
-                display: "-webkit-box",
-                WebkitLineClamp: 2,
-                WebkitBoxOrient: "vertical",
-                overflow: "hidden",
-              }}>
-                {imageCount === 0
-                  ? "One or more — face, outfit, environment."
-                  : imageCount === 1
-                    ? "Face + outfit + scene will be locked to this photo."
-                    : "Each character stays locked to its own reference — no face-swap between them."}
-              </div>
-            </div>
-            {imageCount === 0 ? (
-              <button type="button" disabled style={{
-                padding: "5px 10px", background: "transparent",
-                border: `1px solid ${COLOR_BORDER}`,
-                color: COLOR_MUTED, fontSize: 11, fontWeight: 700, borderRadius: 6,
-                fontFamily: "inherit", cursor: "default",
-              }}>Upload</button>
-            ) : (
-              <span style={{ fontSize: 10, fontWeight: 800, color: COLOR_ACCENT, letterSpacing: "0.1em" }}>✓ READY</span>
-            )}
-            {step.target === "image" && <Pointer side="bottom-right" label="Drop one or more" />}
+
+            {step.target === "image" && <Pointer side="bottom-right" label="Tap to add — one or many" />}
           </div>
 
           {/* Generate */}
