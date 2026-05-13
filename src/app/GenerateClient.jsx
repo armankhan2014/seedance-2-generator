@@ -10,12 +10,14 @@ import {
   FaSyncAlt,
   FaVideo,
   FaMusic,
+  FaShare,
 } from "react-icons/fa";
 import { IoImageOutline } from "react-icons/io5";
 import { FiDownload } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { downloadMedia } from "@/lib/utils";
+import { nativeShare, isNativeApp } from "@/lib/nativeShare";
 import ArmanGallery from "@/components/saas/ArmanGallery";
 import toast from "@/lib/toast";
 import PromptBuilder from "@/components/saas/PromptBuilder";
@@ -1841,11 +1843,42 @@ export default function Home() {
                     loop
                     playsInline
                   />
-                  <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <div className="absolute top-4 right-4 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {/* Inside the native iOS/Android app, opening the
+                        OS share sheet is FAR more useful than a download
+                        — users want to push the video into Instagram /
+                        WhatsApp / TikTok directly. nativeShare() returns
+                        a Web Share fallback for mobile browsers and
+                        a clipboard fallback for desktop, so the same
+                        button works everywhere. The download button is
+                        kept as a secondary action. */}
+                    <button
+                      onClick={async () => {
+                        const r = await nativeShare({
+                          title: "My Seedance video",
+                          text: "Made with Seedance — type. tap. cinema.",
+                          url: resultUrl,
+                          dialogTitle: "Share your video",
+                        });
+                        if (!r.ok && r.via === "unsupported") {
+                          // Last-resort: just download.
+                          downloadMedia(resultUrl, `seedance-${Date.now()}.mp4`);
+                        } else if (r.ok && r.via === "clipboard") {
+                          toast.success("Link copied — paste it anywhere");
+                        }
+                      }}
+                      title={isNativeApp() ? "Share" : "Share or copy link"}
+                      aria-label="Share"
+                      className="p-3 bg-white/90 hover:bg-white text-black rounded-full shadow-2xl transition-all hover:scale-110 active:scale-90"
+                    >
+                      <FaShare className="text-base" />
+                    </button>
                     <button
                       onClick={() =>
                         downloadMedia(resultUrl, `seedance-${Date.now()}.mp4`)
                       }
+                      title="Download"
+                      aria-label="Download"
                       className="p-3 bg-white/90 hover:bg-white text-black rounded-full shadow-2xl transition-all hover:scale-110 active:scale-90"
                     >
                       <FiDownload className="text-xl" />
