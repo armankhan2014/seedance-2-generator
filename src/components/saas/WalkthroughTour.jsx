@@ -41,8 +41,13 @@ const STEPS = [
   { id: "done",     hint: "That's it — you're ready to make videos.",                                                                              target: null },
 ];
 
-const TYPE_SHORT = { chunk: 3, ms: 18 };
-const TYPE_LONG  = { chunk: 8, ms: 14 };
+// Slowed down 2026-05-13 — first cut was ~13 s end-to-end and Arman
+// couldn't follow what was happening. Chunk size 1 (real-typing feel)
+// for the short idea, 4 for the long expansion so it still lands fast
+// enough to not drag, plus longer pauses between steps so the user has
+// time to read each hint card. Total demo ≈ 22-25 s now.
+const TYPE_SHORT = { chunk: 1, ms: 38 };
+const TYPE_LONG  = { chunk: 4, ms: 24 };
 
 export default function WalkthroughTour({ onClose }) {
   const [stepIdx, setStepIdx] = useState(0);
@@ -52,6 +57,16 @@ export default function WalkthroughTour({ onClose }) {
   const [autoplay, setAutoplay] = useState(true);
   const typeTimerRef = useRef(null);
   const advanceTimerRef = useRef(null);
+  const textareaRef = useRef(null);
+
+  // Keep the textarea scrolled to the bottom as typing progresses so
+  // the latest chars are always visible (matters during the long
+  // "expanded" step which overflows the 150 px cap).
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.scrollTop = textareaRef.current.scrollHeight;
+    }
+  }, [text]);
 
   const step = STEPS[stepIdx];
   const isLast = stepIdx === STEPS.length - 1;
@@ -74,15 +89,16 @@ export default function WalkthroughTour({ onClose }) {
       setExpandClicked(false);
       setImageCount(0);
       typeChunked(SHORT_IDEA, 0, TYPE_SHORT, () => {
-        if (autoplay) advanceTimerRef.current = setTimeout(() => setStepIdx(1), 500);
+        // Pause after typing so user can read the hint + see the result.
+        if (autoplay) advanceTimerRef.current = setTimeout(() => setStepIdx(1), 1400);
       });
     } else if (step.id === "image") {
       setText(SHORT_IDEA);
       setExpandClicked(false);
       setImageCount(0);
-      stepTimers.push(setTimeout(() => setImageCount(1), 600));
-      stepTimers.push(setTimeout(() => setImageCount(2), 1700));
-      if (autoplay) stepTimers.push(setTimeout(() => setStepIdx(2), 3000));
+      stepTimers.push(setTimeout(() => setImageCount(1), 900));
+      stepTimers.push(setTimeout(() => setImageCount(2), 2400));
+      if (autoplay) stepTimers.push(setTimeout(() => setStepIdx(2), 4800));
     } else if (step.id === "expand") {
       setText(SHORT_IDEA);
       setImageCount(2);
@@ -90,19 +106,19 @@ export default function WalkthroughTour({ onClose }) {
       if (autoplay) {
         stepTimers.push(setTimeout(() => {
           setExpandClicked(true);
-          stepTimers.push(setTimeout(() => setStepIdx(3), 350));
-        }, 1100));
+          stepTimers.push(setTimeout(() => setStepIdx(3), 600));
+        }, 2200));
       }
     } else if (step.id === "expanded") {
       setText("");
       setImageCount(2);
       typeChunked(EXPANDED, 0, TYPE_LONG, () => {
-        if (autoplay) advanceTimerRef.current = setTimeout(() => setStepIdx(4), 700);
+        if (autoplay) advanceTimerRef.current = setTimeout(() => setStepIdx(4), 1800);
       });
     } else if (step.id === "generate") {
       setText(EXPANDED);
       setImageCount(2);
-      if (autoplay) stepTimers.push(setTimeout(() => setStepIdx(5), 1500));
+      if (autoplay) stepTimers.push(setTimeout(() => setStepIdx(5), 2600));
     } else if (step.id === "done") {
       setText(EXPANDED);
       setImageCount(2);
@@ -259,7 +275,12 @@ export default function WalkthroughTour({ onClose }) {
                 overflow: "hidden",
               }}
             >
+              {/* Cap textarea at 150 px tall + enable internal scroll so
+                  the long expanded prompt doesn't grow the field past
+                  the footer (word count + Expand button) and bleed
+                  visually behind it. Arman flagged 2026-05-13. */}
               <textarea
+                ref={textareaRef}
                 readOnly
                 value={text}
                 placeholder="Describe your video…"
@@ -276,6 +297,10 @@ export default function WalkthroughTour({ onClose }) {
                   padding: "12px 14px",
                   resize: "none",
                   minHeight: 110,
+                  maxHeight: 150,
+                  overflowY: "auto",
+                  display: "block",
+                  boxSizing: "border-box",
                 }}
               />
               <div style={{
@@ -366,11 +391,22 @@ export default function WalkthroughTour({ onClose }) {
                 ))}
               </div>
             )}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 2, color: COLOR_TEXT }}>
+            <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+              <div style={{
+                fontSize: 12.5, fontWeight: 700, marginBottom: 2, color: COLOR_TEXT,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>
                 {imageCount === 0 ? "Add reference image(s)" : imageCount === 1 ? "1 reference added" : `${imageCount} references added`}
               </div>
-              <div style={{ fontSize: 11, color: COLOR_MUTED }}>
+              <div style={{
+                fontSize: 11, color: COLOR_MUTED, lineHeight: 1.4,
+                // Allow up to 2 lines on the subtitle (longer on multi-character)
+                // without overflowing into the badge area.
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+              }}>
                 {imageCount === 0
                   ? "One or more — face, outfit, environment."
                   : imageCount === 1
