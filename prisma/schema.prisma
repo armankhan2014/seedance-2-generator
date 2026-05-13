@@ -214,3 +214,30 @@ model Visit {
   @@index([ip])
   @@index([createdAt])
 }
+
+
+// Push-notification token registry. The mobile app (Capacitor) posts
+// its FCM (Android) / APNS (iOS) token to /api/devices/register on
+// launch. We send "your video is ready" + future engagement pushes
+// by joining this on userId.
+//
+// Standalone — no relation back to User on purpose. Adding a Devices[]
+// field on User would touch the auth-critical model and Arman has had
+// 3 cookie-bloat incidents from auth-table migrations. Querying by
+// userId from this side works fine without the back-reference.
+model Device {
+  id         String   @id @default(cuid())
+  userId     String
+  token      String   @unique
+  platform   String   // "ios" | "android" | "web"
+  appVersion String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @default(now()) @updatedAt
+  lastSeenAt DateTime @default(now())
+  // Set when a push fails with INVALID_REGISTRATION / NotRegistered —
+  // the cron sweeps these monthly. Null means token is still good.
+  invalidAt  DateTime?
+
+  @@index([userId])
+  @@index([invalidAt])
+}

@@ -10,6 +10,7 @@ import MobileBottomNav from "@/components/saas/MobileBottomNav";
 import TawkTo from "@/components/TawkTo";
 import VisitorTracker from "@/components/VisitorTracker";
 import PWARegister from "@/components/PWARegister";
+import CapacitorBridge from "@/components/CapacitorBridge";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -87,6 +88,9 @@ export default async function RootLayout({ children }) {
           <VisitorTracker />
           {/* Service-worker registration for the PWA. No-op in dev. */}
           <PWARegister />
+          {/* Capacitor bridge — back-button, push registration, app
+              state events. No-op in regular browsers. */}
+          <CapacitorBridge />
         </Providers>
       </body>
     </html>
