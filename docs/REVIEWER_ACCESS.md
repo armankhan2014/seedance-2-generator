@@ -13,15 +13,16 @@ sets the same session cookie NextAuth normally sets, and redirects to
 ## One-time setup
 
 ```bash
-# 1. Seed the reviewer user (idempotent — safe to re-run).
-node scripts/seed-reviewer.mjs
-
-# 2. Generate a long random token and add it to Vercel env vars
+# 1. Generate a long random token and add it to Vercel env vars
 #    as REVIEWER_TOKEN (Production + Preview, NOT Development).
 openssl rand -hex 32
 
-# 3. Redeploy so the new env var takes effect.
+# 2. Redeploy so the new env var takes effect.
 ```
+
+The reviewer User row is auto-created on the first valid hit to the
+endpoint — no separate seed step needed. `scripts/seed-reviewer.mjs`
+exists as a fallback for pre-seeding before review.
 
 ## Paste into the store consoles
 
