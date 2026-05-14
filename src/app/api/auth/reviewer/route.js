@@ -44,15 +44,22 @@ export async function GET(request) {
     return NextResponse.json({ error: "Invalid reviewer token." }, { status: 403 });
   }
 
-  const user = await prisma.user.findUnique({ where: { email: REVIEWER_EMAIL } });
-  if (!user) {
-    return NextResponse.json(
-      {
-        error:
-          "Reviewer user not seeded. Run `node scripts/seed-reviewer.mjs` and redeploy.",
-      },
-      { status: 500 },
-    );
+  // Auto-seed on first hit so the URL works as soon as REVIEWER_TOKEN is set —
+  // no need to run scripts/seed-reviewer.mjs separately. Idempotent: subsequent
+  // hits just look up the existing row and bump credits if low.
+  const user = await prisma.user.upsert({
+    where: { email: REVIEWER_EMAIL },
+    update: {},
+    create: {
+      email: REVIEWER_EMAIL,
+      name: "Play Store Reviewer",
+      credits: 200,
+      verified: true,
+      emailVerified: new Date(),
+    },
+  });
+  if (user.credits < 50) {
+    await prisma.user.update({ where: { id: user.id }, data: { credits: 200 } });
   }
 
   const sessionToken = crypto.randomBytes(32).toString("hex");
