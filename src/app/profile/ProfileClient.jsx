@@ -243,11 +243,11 @@ export default function ProfilePage() {
               />
             </div>
 
-            <div>
+            <div style={{ minWidth: 0, flex: 1 }}>
               <h1 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 700, color: "#fff", display: "flex", alignItems: "center" }}>
-                {name}
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{name}</span>
                 {profile?.verified && (
-                  <span title="ID Verified" aria-label="ID Verified" style={{ display: "inline-flex", alignItems: "center", marginLeft: "6px" }}>
+                  <span title="ID Verified" aria-label="ID Verified" style={{ display: "inline-flex", alignItems: "center", marginLeft: "6px", flexShrink: 0 }}>
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="#e91e8c" xmlns="http://www.w3.org/2000/svg">
                       <path d="M23 12l-2.44-2.79.34-3.69-3.61-.82-1.89-3.2L12 2.96 8.6 1.5 6.71 4.69 3.1 5.5l.34 3.7L1 12l2.44 2.79-.34 3.7 3.61.82 1.89 3.2L12 21.04l3.4 1.46 1.89-3.19 3.61-.82-.34-3.69z" />
                       <path d="M10 17l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9z" fill="white" />
@@ -255,7 +255,7 @@ export default function ProfilePage() {
                   </span>
                 )}
               </h1>
-              <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "#64748b" }}>{email}</p>
+              <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "#64748b", overflowWrap: "anywhere" }}>{email}</p>
               {/* Step-by-step upload status */}
               {uploadStatus && !uploadError && (
                 <p style={{ margin: "6px 0 0", fontSize: "0.75rem", color: uploadStatus.startsWith("✅") ? "#4ade80" : "#D9FF00" }}>{uploadStatus}</p>
