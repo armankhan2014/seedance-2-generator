@@ -184,6 +184,12 @@ export default function Navbar() {
         borderBottom: "1px solid rgba(255,255,255,0.08)",
         position: "sticky",
         top: 0,
+        // Respect safe-area-inset-top so the navbar doesn't visually
+        // merge with the OS status bar inside the Capacitor WebView.
+        // env() is 0 in normal desktop browsers, so the 16px floor
+        // is the visible effect there (barely noticeable below the
+        // existing 56px row).
+        paddingTop: "max(env(safe-area-inset-top, 0px), 16px)",
         // 9000 keeps the navbar above every page-level z-index
         // (cinematic hero h1 is z:60, pricing cards are z:2, etc.)
         // while still staying below modals (9990+) so dialogs can
