@@ -22,6 +22,11 @@ export default function TawkTo() {
     // overlays, which is disruptive while building. Tawk wouldn't reach
     // a real support agent from localhost anyway. Production unchanged.
     if (process.env.NODE_ENV !== "production") return;
+    // Skip Tawk inside the Capacitor app — its analytics endpoints fail
+    // (CORS + DNS errors clutter the WebView console) and its chat bubble
+    // overlaps the native app UX. Mobile app users get support through
+    // the same channel as web on next visit in a regular browser.
+    if (window.Capacitor?.isNativePlatform?.()) return;
 
     window.Tawk_API = window.Tawk_API || {};
     window.Tawk_LoadStart = new Date();
