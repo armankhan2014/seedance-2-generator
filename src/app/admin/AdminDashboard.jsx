@@ -219,6 +219,7 @@ function OverviewTab({ data }) {
 function FilmmakersTab({ rows }) {
   const [q, setQ] = useState("");
   const [plan, setPlan] = useState("all");
+  const [kind, setKind] = useState("all"); // "all" | "real" | "dummy"
 
   const filtered = useMemo(() => {
     let r = rows;
@@ -230,21 +231,39 @@ function FilmmakersTab({ rows }) {
       );
     }
     if (plan !== "all") r = r.filter((u) => u.plan === plan);
+    if (kind === "real")  r = r.filter((u) => !u.isDummy);
+    if (kind === "dummy") r = r.filter((u) => u.isDummy);
     return r;
-  }, [rows, q, plan]);
+  }, [rows, q, plan, kind]);
 
-  // Shape to AddCreditsWidget's expected input.
-  const userList = rows.map((u) => ({ email: u.email, name: u.name, credits: u.credits }));
+  // Split for the divided rendering: real users above, dummies below.
+  const real    = filtered.filter((u) => !u.isDummy);
+  const dummies = filtered.filter((u) => u.isDummy);
+
+  // Shape to AddCreditsWidget's expected input — real users only,
+  // adding credits to a dummy is a footgun.
+  const userList = rows.filter((u) => !u.isDummy).map((u) => ({ email: u.email, name: u.name, credits: u.credits }));
+
+  const realCount  = rows.filter((u) => !u.isDummy).length;
+  const dummyCount = rows.filter((u) =>  u.isDummy).length;
 
   return (
     <div style={{ paddingTop: 24, display: "flex", flexDirection: "column", gap: 16 }}>
-      <SectionHeading title="Filmmakers" sub={`${filtered.length} of ${rows.length} paying customers · plan + spend + credits`} />
+      <SectionHeading
+        title="Filmmakers"
+        sub={`${realCount} real · ${dummyCount} community dummies (pinned bottom) · plan + spend + credits`}
+      />
 
       <AddCreditsWidget users={userList} />
 
       <Panel padding={0}>
         <div style={{ padding: 14, borderBottom: `1px solid ${C.border}`, display: "flex", gap: 10, flexWrap: "wrap" }}>
           <SearchInput value={q} onChange={setQ} wide placeholder="Search name or email…" />
+          <Select value={kind} onChange={setKind} options={[
+            { value: "all",   label: `All (${realCount + dummyCount})` },
+            { value: "real",  label: `🟢 Real (${realCount})` },
+            { value: "dummy", label: `🎬 Dummies only (${dummyCount})` },
+          ]} />
           <Select value={plan} onChange={setPlan} options={[
             { value: "all", label: "All plans" },
             { value: "Quantum Flow", label: "💎 Quantum Flow" },
@@ -254,14 +273,40 @@ function FilmmakersTab({ rows }) {
           ]} />
         </div>
 
+        {/* Real users — top section, full opacity */}
         <div className="row-table">
           <FilmmakerHeader />
-          {filtered.length === 0 ? <Empty>No filmmakers match this filter.</Empty> : filtered.map((u) => <FilmmakerRow key={u.id} u={u} />)}
+          {real.length === 0 ? <Empty>No real filmmakers match this filter.</Empty> : real.map((u) => <FilmmakerRow key={u.id} u={u} />)}
+        </div>
+        <div className="row-cards" style={{ display: "none" }}>
+          {real.length === 0 ? <Empty>No real filmmakers match this filter.</Empty> : real.map((u) => <FilmmakerCard key={u.id} u={u} />)}
         </div>
 
-        <div className="row-cards" style={{ display: "none" }}>
-          {filtered.length === 0 ? <Empty>No filmmakers match this filter.</Empty> : filtered.map((u) => <FilmmakerCard key={u.id} u={u} />)}
-        </div>
+        {/* Dummies section — visible separator + dimmed rows so Arman
+            can scroll past at a glance. Only renders if any dummies
+            match the current filter. */}
+        {dummies.length > 0 && (
+          <>
+            <div style={{
+              padding: "12px 14px",
+              background: C.panelSoft,
+              borderTop: `1px solid ${C.border}`,
+              borderBottom: `1px solid ${C.border}`,
+              fontSize: 10.5, fontWeight: 800, color: C.muted,
+              letterSpacing: "0.18em", textTransform: "uppercase",
+              display: "flex", alignItems: "center", gap: 8,
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: C.muted }} />
+              Community dummies · {dummies.length} below
+            </div>
+            <div className="row-table" style={{ opacity: 0.55 }}>
+              {dummies.map((u) => <FilmmakerRow key={u.id} u={u} />)}
+            </div>
+            <div className="row-cards" style={{ display: "none", opacity: 0.55 }}>
+              {dummies.map((u) => <FilmmakerCard key={u.id} u={u} />)}
+            </div>
+          </>
+        )}
       </Panel>
     </div>
   );
@@ -302,6 +347,7 @@ function FilmmakerRow({ u }) {
             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name || "—"}</span>
             {u.verified && <VerifiedDot />}
             {u.isAdmin && <Pill label="ADMIN" color={C.accent} />}
+            {u.isDummy && <Pill label="DUMMY" color={C.muted} />}
           </div>
         </div>
       </div>
@@ -328,6 +374,7 @@ function FilmmakerCard({ u }) {
             {u.name || "—"}
             {u.verified && <VerifiedDot />}
             {u.isAdmin && <Pill label="ADMIN" color={C.accent} />}
+            {u.isDummy && <Pill label="DUMMY" color={C.muted} />}
           </div>
           <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>{u.email || "—"}</div>
         </div>

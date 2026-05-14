@@ -52,9 +52,12 @@ async function getAdminData() {
     creationsToday,
     creationsFailed30d,
   ] = await Promise.all([
+    // Real (paying) filmmakers pinned to the top, community-seed
+    // dummies pushed to the bottom — Arman wants to spot real customers
+    // at a glance without dummy noise. Within each group, newest first.
     prisma.user.findMany({
       include: { _count: { select: { creations: true } } },
-      orderBy: { id: "desc" },
+      orderBy: [{ isDummy: "asc" }, { id: "desc" }],
     }).catch(logErr("users")),
 
     prisma.creation.findMany({
@@ -131,7 +134,12 @@ async function getAdminData() {
     createdAt: u.id, // CUIDs are roughly time-ordered; use id as a proxy
     verified: !!u.verified,
     isAdmin: u.email === OWNER_EMAIL,
+    isDummy: !!u.isDummy,
   }));
+
+  // Headline counts on the Overview tab should only count REAL users.
+  const realFilmmakers = filmmakers.filter((u) => !u.isDummy);
+  const dummyFilmmakers = filmmakers.filter((u) => u.isDummy);
 
   // Shape generations — pull out the prompt + status + duration + req id.
   const generations = (recentCreations || []).map((c) => ({
@@ -197,7 +205,8 @@ async function getAdminData() {
 
   return {
     counts: {
-      filmmakers: usersList.length,
+      filmmakers: realFilmmakers.length,
+      dummies: dummyFilmmakers.length,
       paidUsers: uniquePayerIds.size,
       totalCredits: totalCreditsLeft,
       totalOrders: paymentsList.length,

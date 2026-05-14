@@ -45,6 +45,12 @@ model User {
   image         String?
   credits       Int        @default(10)
   verified      Boolean    @default(false)
+  // Mirrors the column the community project already pushed to the
+  // shared Neon DB. Declaring it here so Studio's Prisma client can
+  // read/sort by it — primarily to keep paying filmmakers on top and
+  // community-seed dummies pinned to the bottom in /admin → Filmmakers.
+  // No new column added to the DB; this is just a Prisma-client view.
+  isDummy       Boolean    @default(false)
   accounts      Account[]
   creations     Creation[]
   sessions      Session[]
