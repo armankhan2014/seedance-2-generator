@@ -49,8 +49,39 @@ export default function CapacitorBridge() {
             App.exitApp?.();
           }
         }));
+
+        // appUrlOpen — fires when the OS routes a deep link to this app
+        // (magic-link emails, App Links from share sheets, custom-scheme
+        // marketing URLs, etc.). Capacitor delivers the URL but does NOT
+        // navigate the WebView automatically; without this we'd silently
+        // ignore the link and the user would stay on whatever page the
+        // WebView happened to be on. Critical for magic-link auth to set
+        // the session cookie in the WebView's cookie jar.
+        trackHandle(App.addListener("appUrlOpen", ({ url }) => {
+          if (typeof url !== "string") return;
+          let target;
+          try {
+            const parsed = new URL(url);
+            // Same-origin URL on the live host → navigate via path so
+            // we don't trigger a fresh page load if the route is local.
+            if (parsed.host === window.location.host) {
+              target = parsed.pathname + parsed.search + parsed.hash;
+            } else if (parsed.protocol === "seedance:") {
+              // Custom scheme marketing link — map to a real path.
+              target = "/" + url.replace(/^seedance:\/?\/?/, "");
+            } else {
+              return;
+            }
+          } catch {
+            return;
+          }
+          // Use location.href so server-side cookies (NextAuth callbacks)
+          // are picked up on the navigation. SPA router would skip the
+          // callback handler entirely.
+          window.location.href = target;
+        }));
       } catch (e) {
-        console.warn("[CapacitorBridge] backButton listener failed:", e?.message);
+        console.warn("[CapacitorBridge] App listeners failed:", e?.message);
       }
     }
 
