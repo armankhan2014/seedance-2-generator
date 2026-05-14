@@ -31,16 +31,27 @@ export default function CapacitorBridge() {
 
     const subs = [];
 
+    // Capacitor 7's plugin addListener returns the handle either as a Promise
+    // OR synchronously depending on plugin version — wrap with Promise.resolve
+    // so .then() works for both. A buggy direct .then() crashes React render.
+    const trackHandle = (result) => {
+      Promise.resolve(result).then((h) => h && subs.push(h)).catch(() => {});
+    };
+
     // ── 1. Android back-button handler ────────────────────────────
     if (App?.addListener) {
-      App.addListener("backButton", ({ canGoBack }) => {
-        if (canGoBack || window.history.length > 1) {
-          window.history.back();
-        } else {
-          // We're at the root with nothing to go back to — exit.
-          App.exitApp?.();
-        }
-      }).then((handle) => subs.push(handle)).catch(() => {});
+      try {
+        trackHandle(App.addListener("backButton", ({ canGoBack }) => {
+          if (canGoBack || window.history.length > 1) {
+            window.history.back();
+          } else {
+            // We're at the root with nothing to go back to — exit.
+            App.exitApp?.();
+          }
+        }));
+      } catch (e) {
+        console.warn("[CapacitorBridge] backButton listener failed:", e?.message);
+      }
     }
 
     // ── 2. Push-token registration ────────────────────────────────
@@ -50,26 +61,30 @@ export default function CapacitorBridge() {
     // itself is triggered manually after the first successful
     // generation (where notification value is obvious).
     if (Push?.addListener) {
-      Push.addListener("registration", async (token) => {
-        try {
-          await fetch("/api/devices/register", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({
-              token: token.value,
-              platform: Capacitor.getPlatform?.() || "unknown",
-              appVersion: "1.0",
-            }),
-          });
-        } catch (e) {
-          console.warn("[CapacitorBridge] push token register failed:", e?.message);
-        }
-      }).then((handle) => subs.push(handle)).catch(() => {});
+      try {
+        trackHandle(Push.addListener("registration", async (token) => {
+          try {
+            await fetch("/api/devices/register", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "include",
+              body: JSON.stringify({
+                token: token.value,
+                platform: Capacitor.getPlatform?.() || "unknown",
+                appVersion: "1.0",
+              }),
+            });
+          } catch (e) {
+            console.warn("[CapacitorBridge] push token register failed:", e?.message);
+          }
+        }));
 
-      Push.addListener("registrationError", (err) => {
-        console.warn("[CapacitorBridge] push registration error:", err?.error);
-      }).then((handle) => subs.push(handle)).catch(() => {});
+        trackHandle(Push.addListener("registrationError", (err) => {
+          console.warn("[CapacitorBridge] push registration error:", err?.error);
+        }));
+      } catch (e) {
+        console.warn("[CapacitorBridge] push listeners failed:", e?.message);
+      }
     }
 
     return () => {
