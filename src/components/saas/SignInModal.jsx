@@ -109,7 +109,7 @@ export default function SignInModal() {
           <div style={{padding:"24px 24px 20px",position:"relative"}}>
 
             {/* Close */}
-            <button onClick={close} style={{position:"absolute",top:-8,right:0,width:28,height:28,borderRadius:"50%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",color:"#475569",cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s",fontFamily:"inherit",lineHeight:1}}
+            <button onClick={close} style={{position:"absolute",top:8,right:8,width:32,height:32,borderRadius:"50%",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",color:"#94a3b8",cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s",fontFamily:"inherit",lineHeight:1,zIndex:2}}
               onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,.1)";e.currentTarget.style.color="#FFFFFF";}}
               onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,.05)";e.currentTarget.style.color="#475569";}}>✕</button>
 

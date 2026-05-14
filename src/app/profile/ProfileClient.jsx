@@ -304,9 +304,9 @@ export default function ProfilePage() {
               { label: "Email", value: email },
               { label: "Account Type", value: "Google" },
             ].map(row => (
-              <div key={row.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "rgba(255,255,255,0.03)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.06)" }}>
-                <span style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600 }}>{row.label}</span>
-                <span style={{ fontSize: "0.85rem", color: "#FFFFFF" }}>{row.value}</span>
+              <div key={row.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px", padding: "12px 16px", background: "rgba(255,255,255,0.03)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.06)" }}>
+                <span style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600, flexShrink: 0 }}>{row.label}</span>
+                <span style={{ fontSize: "0.85rem", color: "#FFFFFF", textAlign: "right", overflowWrap: "anywhere", minWidth: 0 }}>{row.value}</span>
               </div>
             ))}
           </div>
