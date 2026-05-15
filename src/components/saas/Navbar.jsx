@@ -5,6 +5,7 @@ import { signIn, signOut, useSession } from "next-auth/react";
 import { useState, useEffect, useRef } from "react";
 import ContactModal from "./ContactModal";
 import ToastContainer from "./ToastContainer";
+import VerifiedBadge from "./VerifiedBadge";
 // Pure-CSS :hover styles for every nav element. Loaded as a real
 // CSS file so the rules ship in the SSR <head>. Replacing the
 // previous useState-driven hover (which routed every cursor move
@@ -126,8 +127,15 @@ export default function Navbar() {
   // Avatar — visual only. Hover tilt is driven by the parent
   // .sd-nav-profile's :hover via the .sd-nav-avatar class, so no
   // tilt prop is needed here.
-  const Avatar = ({ size = 24 }) => (
-    displayImage ? (
+  //
+  // When the viewer is ID-verified (session.user.verified), a
+  // bottom-right pink badge overlays the avatar — Instagram-style.
+  // Matches the same pattern in seedance-community's UserWidget so
+  // the brand badge is consistent across both properties.
+  const verified = !!session?.user?.verified;
+  const Avatar = ({ size = 24, badgeSize = null }) => {
+    const bSize = badgeSize ?? Math.max(10, Math.round(size * 0.5));
+    const inner = displayImage ? (
       <img
         src={displayImage}
         alt={firstName}
@@ -137,6 +145,7 @@ export default function Navbar() {
           height: size,
           borderRadius: "50%",
           objectFit: "cover",
+          display: "block",
         }}
       />
     ) : (
@@ -148,8 +157,36 @@ export default function Navbar() {
       }}>
         {initials}
       </div>
-    )
-  );
+    );
+    if (!verified) return inner;
+    return (
+      <span
+        style={{
+          position: "relative",
+          width: size,
+          height: size,
+          display: "inline-block",
+          flexShrink: 0,
+        }}
+      >
+        {inner}
+        <span
+          style={{
+            position: "absolute",
+            bottom: -2,
+            right: -2,
+            display: "inline-flex",
+            background: "#0a0a0a",
+            borderRadius: "50%",
+            padding: 1,
+            lineHeight: 0,
+          }}
+        >
+          <VerifiedBadge size={bSize} />
+        </span>
+      </span>
+    );
+  };
 
   // Pure-CSS hover handled by .sd-nav-link in top-nav.css. No
   // useState, no React re-render on mouseenter — the browser
@@ -338,13 +375,28 @@ export default function Navbar() {
             )}
           </div>
 
-          {/* Mobile hamburger */}
-          <button
-            className="mobile-menu-btn"
-            onClick={() => setMenuOpen(o => !o)}
-            style={{ background: "none", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "6px", color: "#94a3b8", padding: "6px 10px", cursor: "pointer", fontSize: "1rem", lineHeight: 1 }}>
-            {menuOpen ? "✕" : "☰"}
-          </button>
+          {/* Mobile cluster — avatar (always visible on phones for
+              parity with community.visualseffect.com) + hamburger.
+              Avatar taps through to /profile rather than opening a
+              dropdown; hamburger holds the nav links + sign-out. The
+              cluster is hidden on desktop ≥768px (see CSS below). */}
+          <div className="mobile-cluster" style={{ display: "none", alignItems: "center", gap: 10 }}>
+            {session && (
+              <Link
+                href="/profile"
+                aria-label="Profile"
+                style={{ display: "inline-flex", textDecoration: "none" }}
+              >
+                <Avatar size={28} />
+              </Link>
+            )}
+            <button
+              className="mobile-menu-btn"
+              onClick={() => setMenuOpen(o => !o)}
+              style={{ background: "none", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "6px", color: "#94a3b8", padding: "6px 10px", cursor: "pointer", fontSize: "1rem", lineHeight: 1 }}>
+              {menuOpen ? "✕" : "☰"}
+            </button>
+          </div>
         </div>
 
         {/* Mobile dropdown */}
@@ -421,11 +473,11 @@ export default function Navbar() {
         <style>{`
           .desktop-nav { display: flex !important; }
           .desktop-auth { display: flex !important; }
-          .mobile-menu-btn { display: none !important; }
+          .mobile-cluster { display: none !important; }
           @media (max-width: 768px) {
             .desktop-nav { display: none !important; }
             .desktop-auth { display: none !important; }
-            .mobile-menu-btn { display: flex !important; align-items: center; justify-content: center; }
+            .mobile-cluster { display: flex !important; align-items: center; gap: 10px; }
           }
         `}</style>
       </header>

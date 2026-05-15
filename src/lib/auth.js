@@ -123,6 +123,9 @@ export const authOptions = {
       if (session.user) {
         session.user.id = user.id;
         session.user.credits = user.credits ?? 10;
+        // Expose ID-verified state so the navbar avatar can render the
+        // pink verified badge overlay (parity with community.visualseffect.com).
+        session.user.verified = !!user.verified;
       }
       return session;
     },
