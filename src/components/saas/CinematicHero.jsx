@@ -222,15 +222,32 @@ export default function CinematicHero() {
     let lastTickTs = 0;
     const MIN_FRAME_MS = 33; // ~30 fps cap
 
+    // Self-healing loop: the rAF chain ALWAYS reschedules. The
+    // `running` flag only gates the per-frame draw work. Previous
+    // version returned early on !running which killed the rAF chain
+    // permanently when any of the pause signals (cursorOnNav,
+    // IntersectionObserver firing isIntersecting=false on an
+    // unmeasured 0x0 layout, cursor leaving window via Cmd-Tab while
+    // still in nav zone) got stuck at "paused" — those signals'
+    // wake-handlers fire only when state CHANGES, so if they never
+    // change back, the loop never resumes. Decoupling means the
+    // worst case is a blank frame, not a permanently dead canvas.
     function tick(now) {
-      if (!running) return;
-      // Throttle to 30 fps. Schedule the next frame regardless so
-      // the loop doesn't stall.
+      // Throttle to ~30 fps regardless of pause state. Each tick is
+      // a few flag-reads + a clearRect when paused, so the idle cost
+      // is negligible.
       if (now - lastTickTs < MIN_FRAME_MS) {
         rafId = requestAnimationFrame(tick);
         return;
       }
       lastTickTs = now;
+
+      // Paused: skip the draw work (keeps the previous frame on
+      // screen as a soft hint things may resume), but keep ticking.
+      if (!running) {
+        rafId = requestAnimationFrame(tick);
+        return;
+      }
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       for (const p of particles) {
@@ -314,11 +331,38 @@ export default function CinematicHero() {
     }
     window.addEventListener("mousemove", onMouseMove, { passive: true });
 
+    // Safety net: when the cursor leaves the viewport entirely
+    // (Cmd-Tab, multi-monitor jump, cursor parks above the window)
+    // there is no future mousemove to flip cursorOnNav back to false.
+    // Treat any of these as "cursor is no longer in the nav" and
+    // resume drawing.
+    function onMouseLeavePage() {
+      if (cursorOnNav) {
+        cursorOnNav = false;
+        maybeStart();
+      }
+    }
+    document.documentElement.addEventListener("mouseleave", onMouseLeavePage);
+
+    // Window blur means the user switched apps / windows. The cursor
+    // is effectively "not here" until the next mousemove inside the
+    // viewport reports its real position. Reset and resume so the
+    // animation isn't frozen when they return.
+    function onWindowBlur() {
+      if (cursorOnNav) {
+        cursorOnNav = false;
+        maybeStart();
+      }
+    }
+    window.addEventListener("blur", onWindowBlur);
+
     return () => {
       running = false;
       cancelAnimationFrame(rafId);
       window.removeEventListener("resize", resize);
       window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("blur", onWindowBlur);
+      document.documentElement.removeEventListener("mouseleave", onMouseLeavePage);
       document.removeEventListener("visibilitychange", onVis);
       visObs.disconnect();
     };
