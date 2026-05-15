@@ -90,3 +90,86 @@ self.addEventListener("fetch", (e) => {
       .catch(() => caches.match(req).then((hit) => hit || caches.match("/generate")))
   );
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// Push notifications — Phase B
+// ─────────────────────────────────────────────────────────────────────
+//
+// Server payload (from lib/push.js) is JSON with:
+//   { kind, title, body, url, tag }
+// kind ∈ "video_ready" | "video_failed" | "featured"
+// url  = path to navigate to on tap (always same-origin)
+// tag  = de-dupes notifications for the same target (e.g. one "ready"
+//        per creationId)
+
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  let payload = {};
+  try {
+    payload = event.data.json();
+  } catch {
+    payload = { title: "Seedance", body: event.data.text() };
+  }
+  const title = payload.title || "Seedance";
+  const options = {
+    body: payload.body || "",
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    tag: payload.tag,
+    data: { url: payload.url || "/", kind: payload.kind || "default" },
+    // Surface on iOS Safari (16.4+) without ringing — Mac / Android
+    // honour these defaults. silent:false ensures the system sound
+    // plays so the user actually notices the alt-tabbed render.
+    requireInteraction: false,
+    silent: false,
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Click on the notification — focus an open tab if we have one,
+// otherwise open a fresh one to the right URL.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || "/";
+  event.waitUntil(
+    (async () => {
+      const allClients = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      // Try to focus an existing tab already on the target URL.
+      for (const client of allClients) {
+        const clientUrl = new URL(client.url);
+        if (clientUrl.pathname === targetUrl && "focus" in client) {
+          return client.focus();
+        }
+      }
+      // Otherwise focus any open tab and navigate it, or open new.
+      if (allClients.length && "navigate" in allClients[0]) {
+        allClients[0].focus();
+        return allClients[0].navigate(targetUrl);
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
+    })()
+  );
+});
+
+// Subscription expired or rotated — fire a re-subscribe request on
+// next page load by clearing our cached endpoint. The page-side push
+// helper (lib/clientPush.js) checks for an active subscription on
+// boot and re-creates one when missing.
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    (async () => {
+      try {
+        // Tell every open tab so the client-side helper can re-up.
+        const allClients = await self.clients.matchAll({ includeUncontrolled: true });
+        for (const c of allClients) c.postMessage({ type: "pushsubscriptionchange" });
+      } catch {
+        /* no-op */
+      }
+    })()
+  );
+});

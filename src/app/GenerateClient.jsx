@@ -30,6 +30,7 @@ import {
   estimateCreditsPerShot as storyEstimateCreditsPerShot,
 } from "@/components/saas/StoryBuilder";
 import WalkthroughTour from "@/components/saas/WalkthroughTour";
+import PushPermissionBanner from "@/components/PushPermissionBanner";
 
 export const dynamic = "force-dynamic";
 
@@ -462,6 +463,11 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const progressIntervalRef = useRef(null);
+  // Bumped each time the user kicks off a generation — drives
+  // <PushPermissionBanner>'s show check. Initial null means "don't
+  // show on first mount"; we only want the banner on real generate
+  // events.
+  const [pushBannerTrigger, setPushBannerTrigger] = useState(null);
 
   // Expected wall-clock seconds for a generation, based on the selected video
   // duration. Provided by the user from real-world observation:
@@ -658,6 +664,11 @@ export default function Home() {
       setResultUrl(null);
       setStatusMessage("Starting generation...");
       startProgressAnimation(duration);
+      // Bump the push-banner trigger key so it re-evaluates whether
+      // to surface the "Don't sit and wait" banner. The banner is a
+      // no-op if the user already has permission or has dismissed in
+      // the last 14 days — see PushPermissionBanner show-rules.
+      setPushBannerTrigger(Date.now());
       const res = await fetch("/api/seedance", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2024,6 +2035,12 @@ export default function Home() {
           type → image(s) → expand → generate flow. Auto-shows on first
           visit only (gated on seedance_walkthrough_v1 in localStorage). */}
       {showWalkthrough && <WalkthroughTour onClose={dismissWalkthrough} />}
+      {/* Push-permission banner — slides in bottom-right on the first
+          Generate click of the session (provided OS push is supported,
+          permission is still "default", and the user hasn't dismissed
+          in the last 14 days). All gating logic lives inside the
+          component; we just bump `triggerKey` here. */}
+      <PushPermissionBanner triggerKey={pushBannerTrigger} />
 
       {/* Library image preview popup — small floating card that appears
           next to the clicked thumbnail so the user can see the full

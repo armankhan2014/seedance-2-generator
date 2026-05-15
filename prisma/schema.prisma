@@ -51,6 +51,14 @@ model User {
   // community-seed dummies pinned to the bottom in /admin → Filmmakers.
   // No new column added to the DB; this is just a Prisma-client view.
   isDummy       Boolean    @default(false)
+  // Push-notification preferences for Studio. Single master switch +
+  // three per-type toggles, matching the Settings panel in the
+  // /demo/push-notifications mockup. Defaults to all-on so users who
+  // opt in via the contextual banner get the full set immediately.
+  pushMaster      Boolean @default(true)
+  pushVideoReady  Boolean @default(true)
+  pushVideoFailed Boolean @default(true)
+  pushFeatured    Boolean @default(true)
   accounts      Account[]
   creations     Creation[]
   sessions      Session[]
@@ -62,6 +70,7 @@ model User {
   notificationsSent Notification[] @relation("NotifActor")
   posts             Post[]
   reactions         Reaction[]
+  pushSubscriptions PushSubscription[]
 }
 
 model Creation {
@@ -139,6 +148,13 @@ model Post {
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   reactions Reaction[]
   comments  Comment[]
+  // Mirrors the model owned by seedance-community — declared here so
+  // the Studio Prisma client can read pinned-state when it shows
+  // shared posts in /admin. Side-table, never touched by Studio code.
+  pinned    PinnedPost?
+  // Phase 2 — Instagram-style profile pin. Same comment as `pinned`
+  // above: mirrored from community so the shared client stays valid.
+  profilePin ProfilePin?
 
   @@index([userId])
   @@index([createdAt(sort: Desc)])
@@ -219,6 +235,71 @@ model Visit {
 
   @@index([ip])
   @@index([createdAt])
+}
+
+
+// Admin-pinned posts for community.visualseffect.com. Owned by the
+// community project — Studio mirrors the model so the shared Prisma
+// client stays in sync after `db push` from either side. Studio code
+// does not write to this table.
+model PinnedPost {
+  id         String   @id @default(cuid())
+  postId     String   @unique
+  pinnedById String
+  kind       String   @default("feature")
+  priority   Int      @default(100)
+  reason     String?  @db.Text
+  pinnedAt   DateTime @default(now())
+  expiresAt  DateTime?
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([priority, pinnedAt(sort: Desc)])
+  @@index([expiresAt])
+  @@index([pinnedById])
+}
+
+// Phase 2 — user profile pins (Instagram-style). Mirrored here so the
+// Studio Prisma client stays valid after `db push`. Studio never
+// writes to this table.
+model ProfilePin {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String   @unique
+  position  Int      @default(100)
+  pinnedAt  DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([userId, position])
+  @@index([postId])
+}
+
+
+// Web Push subscription for browser notifications. Mirrors the model
+// owned by seedance-community (same shared Neon DB). The `origin`
+// column scopes by app: "studio" rows are fanout targets for the
+// Studio MuAPI webhook ("video ready" / failed / featured); existing
+// "community" rows stay routed to the community fanout. Null in
+// legacy rows is treated as community by the API for back-compat.
+//
+// One row per (userId, endpoint) since `endpoint` is globally unique
+// — re-subscribing on the same device upserts on endpoint.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  // "studio" | "community" — null = legacy community row.
+  origin    String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, origin])
 }
 
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AIService } from "@/lib/services/ai";
+import { sendCreationReadyPush, sendCreationFailedPush } from "@/lib/push";
 import crypto from "crypto";
 
 export async function POST(req) {
@@ -49,11 +50,23 @@ export async function POST(req) {
       // rejections to the user instead of leaving them stuck at
       // "processing" while keeping their credits. Arman flagged 2026-05-12.
       await AIService.failAndRefund(creation, data.error);
+      // Fire-and-forget push so the user doesn't sit waiting on a
+      // doomed render. Wrapped in catch so a push failure never
+      // 500s the webhook — MuAPI will retry the webhook on 5xx.
+      sendCreationFailedPush(creation.userId, creation, data.error).catch((e) =>
+        console.warn("[MUAPI_WEBHOOK] push failed (failed-gen):", e?.message)
+      );
     } else {
       await prisma.creation.update({
         where: { id: creation.id },
         data: { status: "completed", imageUrl },
       });
+      // "🎬 Your video is ready" push — fanout to all Studio-origin
+      // subscriptions for this user. Same fire-and-forget pattern;
+      // we don't block the webhook ACK on the push send.
+      sendCreationReadyPush(creation.userId, creation).catch((e) =>
+        console.warn("[MUAPI_WEBHOOK] push failed (ready):", e?.message)
+      );
     }
 
     return NextResponse.json({ success: true });

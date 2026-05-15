@@ -45,3 +45,6 @@ next-env.d.ts
 # local utility scripts (Mac double-clickable bash) and editor backups
 *.command
 *.bak
+
+# FCM service-account JSON + any other server-side credentials.
+secrets/
