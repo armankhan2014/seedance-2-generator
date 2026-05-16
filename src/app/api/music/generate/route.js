@@ -68,6 +68,12 @@ export async function POST(req) {
   const customStyle = typeof body.customStyle === "string"
     ? body.customStyle.trim().slice(0, 1000)
     : "";
+  // Optional comma-separated list of styles / instruments / moods
+  // the engine should avoid. Capped at 300 chars (well under any
+  // upstream limit).
+  const negativeTags = typeof body.negativeTags === "string"
+    ? body.negativeTags.trim().slice(0, 300)
+    : "";
 
   // ── Cost + credit debit (atomic CAS) ────────────────────────────────
   const cost = creditsForTrack({ duration, isVocal });
@@ -119,6 +125,7 @@ export async function POST(req) {
       model,
       vocalGender,
       callBackUrl,
+      negativeTags: negativeTags || undefined,
     });
     taskId = result.taskId;
     if (!taskId) throw new Error("Music service returned no task id");

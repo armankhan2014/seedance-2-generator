@@ -159,6 +159,14 @@ export default function MusicClient() {
   // Empty = genre preset wins. Lets power users go beyond the 8
   // built-in genres (e.g. "lo-fi hip-hop, jazzy keys, mellow drums").
   const [customStyle, setCustomStyle] = useState("");
+  // Model version — V5 = best quality (default), V4 = cheaper +
+  // faster, V5.5 = newest experimental. Cost is identical at the
+  // wholesale tier but quality varies; we expose this so power users
+  // can pick V4 for quick iterations.
+  const [model, setModel] = useState("V5");
+  // Negative tags — comma-separated list of styles / instruments /
+  // moods to AVOID. The engine treats this as a soft constraint.
+  const [negativeTags, setNegativeTags] = useState("");
   const [prompt, setPrompt] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
@@ -250,6 +258,8 @@ export default function MusicClient() {
           // falls back to buildStyleString(genre, mood, tempo, isVocal).
           customStyle: customStyle?.trim() || undefined,
           vocalGender: vocalGender === "auto" ? undefined : vocalGender,
+          model,
+          negativeTags: negativeTags?.trim() || undefined,
         }),
       });
       const j = await res.json();
@@ -498,14 +508,18 @@ export default function MusicClient() {
                   <DurationPicker value={duration} onChange={setDuration} />
                 </div>
 
-                {/* Vocal gender moved out of Advanced and into the
-                    top-level Vocals section above — Advanced now owns
-                    just tempo. */}
+                {/* Vocal gender lives in the top-level Vocals section
+                    above. Advanced now exposes tempo, model picker,
+                    and negative tags. */}
                 <AdvancedOptions
                   open={advancedOpen}
                   onToggle={() => setAdvancedOpen((o) => !o)}
                   tempo={tempo}
                   onTempoChange={setTempo}
+                  model={model}
+                  onModelChange={setModel}
+                  negativeTags={negativeTags}
+                  onNegativeTagsChange={setNegativeTags}
                 />
                 <GenerateBar
                   cost={cost}
@@ -1502,7 +1516,12 @@ function LyricsBox({ value, onChange }) {
   );
 }
 
-function AdvancedOptions({ open, onToggle, tempo, onTempoChange }) {
+function AdvancedOptions({
+  open, onToggle,
+  tempo, onTempoChange,
+  model, onModelChange,
+  negativeTags, onNegativeTagsChange,
+}) {
   return (
     <div style={{ marginTop: 18 }}>
       <button
@@ -1521,7 +1540,7 @@ function AdvancedOptions({ open, onToggle, tempo, onTempoChange }) {
         }}
       >
         <span>{open ? "▾" : "▸"}</span>
-        Advanced (tempo)
+        Advanced (tempo · model · negative tags)
       </button>
       {open && (
         <div
@@ -1531,8 +1550,12 @@ function AdvancedOptions({ open, onToggle, tempo, onTempoChange }) {
             background: C.panelSoft,
             border: `1px solid ${C.border}`,
             borderRadius: 12,
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
           }}
         >
+          {/* Tempo slider — was previously the only Advanced field. */}
           <FormBox label={`Tempo · ${tempo} BPM`}>
             <input
               type="range"
@@ -1544,6 +1567,72 @@ function AdvancedOptions({ open, onToggle, tempo, onTempoChange }) {
             />
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: C.muted, marginTop: 2 }}>
               <span>Slow</span><span>Medium</span><span>Fast</span>
+            </div>
+          </FormBox>
+
+          {/* Model picker — four-button row across all available
+              engine versions. V5 is the default (best quality);
+              V4 = fastest + cheapest at upstream tier; V5.5 = newest.
+              Wholesale cost is identical so we don't charge
+              differently per model — just call out the quality tier
+              in the subtitle so users understand the trade. */}
+          <FormBox label="Model">
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 6 }}>
+              {[
+                { id: "V4",   label: "V4",    sub: "Fastest" },
+                { id: "V4_5", label: "V4.5",  sub: "Balanced" },
+                { id: "V5",   label: "V5",    sub: "Best quality" },
+                { id: "V5_5", label: "V5.5",  sub: "Newest" },
+              ].map((m) => {
+                const on = m.id === model;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => onModelChange(m.id)}
+                    style={{
+                      padding: "8px 6px",
+                      borderRadius: 8,
+                      background: on ? C.accent : C.bg,
+                      border: `1px solid ${on ? C.accent : C.border}`,
+                      color: on ? "#0a0a0a" : C.text,
+                      fontSize: 12,
+                      fontWeight: on ? 800 : 600,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    {m.label}
+                    <span style={{ display: "block", fontSize: 9.5, opacity: 0.7, marginTop: 2 }}>{m.sub}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </FormBox>
+
+          {/* Negative tags — what to NOT include. Comma-separated. */}
+          <FormBox label="Negative tags (what to avoid)">
+            <input
+              type="text"
+              value={negativeTags}
+              onChange={(e) => onNegativeTagsChange(e.target.value.slice(0, 300))}
+              placeholder="e.g. heavy metal, screaming, autotune"
+              maxLength={300}
+              style={{
+                width: "100%",
+                background: C.bg,
+                border: `1px solid ${C.border}`,
+                borderRadius: 8,
+                padding: "8px 12px",
+                color: C.text,
+                fontSize: 12.5,
+                fontFamily: "inherit",
+                outline: "none",
+              }}
+            />
+            <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
+              Comma-separated list of styles / instruments / moods the engine
+              should avoid. Leave blank for no constraint.
             </div>
           </FormBox>
         </div>
@@ -1758,6 +1847,33 @@ function PlayerPanel({ track, onReset }) {
     link.download = `${(track.title || "track").replace(/[^a-z0-9_-]/gi, "_")}.mp3`;
     link.click();
   }
+  // Web Share API on mobile (native share sheet across WhatsApp /
+  // SMS / Twitter / etc.); silently falls back to clipboard-copy
+  // on desktop. Both paths point at the public /m/[id] permalink
+  // that has rich OG metadata so previews render with the title +
+  // creator + audio embed.
+  const [shareToast, setShareToast] = useState("");
+  async function onShare() {
+    if (!track.id) return;
+    const url = typeof window !== "undefined"
+      ? `${window.location.origin}/m/${track.id}`
+      : `/m/${track.id}`;
+    const payload = {
+      title: track.title,
+      text: `🎵 ${track.title} — AI-generated soundtrack`,
+      url,
+    };
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try { await navigator.share(payload); return; } catch { /* user cancelled */ }
+    }
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(url);
+        setShareToast("Link copied — paste anywhere");
+        setTimeout(() => setShareToast(""), 2400);
+      } catch {}
+    }
+  }
 
   return (
     <div
@@ -1823,9 +1939,30 @@ function PlayerPanel({ track, onReset }) {
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <PlayerAction icon="⬇" label="Download MP3" onClick={onDownload} />
+          <PlayerAction icon="↗" label="Share" onClick={onShare} />
           <PlayerAction icon="↻" label="Generate another" onClick={onReset} />
         </div>
       </div>
+      {shareToast && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 16,
+            right: 16,
+            padding: "8px 14px",
+            background: "rgba(13,13,15,0.96)",
+            color: C.accent,
+            border: `1px solid ${C.borderHover}`,
+            borderRadius: 999,
+            fontSize: 12,
+            fontWeight: 700,
+            boxShadow: "0 12px 24px -8px rgba(0,0,0,0.5)",
+            zIndex: 3,
+          }}
+        >
+          {shareToast}
+        </div>
+      )}
     </div>
   );
 }
@@ -2137,39 +2274,90 @@ function GalleryCard({ track }) {
             {isFailed && " · failed"}
           </div>
         </div>
-        {isReady ? (
-          <button
-            onClick={toggle}
-            aria-label={playing ? "Pause" : "Play"}
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: "50%",
-              background: hover ? `linear-gradient(135deg, ${C.accent}, ${C.accentDark})` : C.panelSoft,
-              border: `1px solid ${hover ? C.accent : C.border}`,
-              color: hover ? "#0a0a0a" : C.accent,
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+          {isReady && (
+            <CardShareButton trackId={track.id} title={track.title} />
+          )}
+          {isReady ? (
+            <button
+              onClick={toggle}
+              aria-label={playing ? "Pause" : "Play"}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: "50%",
+                background: hover ? `linear-gradient(135deg, ${C.accent}, ${C.accentDark})` : C.panelSoft,
+                border: `1px solid ${hover ? C.accent : C.border}`,
+                color: hover ? "#0a0a0a" : C.accent,
+                fontSize: 14,
+                cursor: "pointer",
+              }}
+            >
+              {playing ? "❚❚" : "▶"}
+            </button>
+          ) : (
+            <div style={{
+              width: 36, height: 36, borderRadius: "50%",
+              background: C.panelSoft,
+              border: `1px solid ${C.border}`,
+              color: isFailed ? C.danger : C.muted,
               fontSize: 14,
-              cursor: "pointer",
-              flexShrink: 0,
-            }}
-          >
-            {playing ? "❚❚" : "▶"}
-          </button>
-        ) : (
-          <div style={{
-            width: 36, height: 36, borderRadius: "50%",
-            background: C.panelSoft,
-            border: `1px solid ${C.border}`,
-            color: isFailed ? C.danger : C.muted,
-            fontSize: 14,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
-          }}>
-            {isFailed ? "✕" : "⏳"}
-          </div>
-        )}
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              {isFailed ? "✕" : "⏳"}
+            </div>
+          )}
+        </div>
       </div>
     </div>
+  );
+}
+
+// Small share-icon button for library cards. Same Web-Share-API
+// fallback as the main player. Shows a brief inline confirmation
+// when the link gets copied to clipboard.
+function CardShareButton({ trackId, title }) {
+  const [toast, setToast] = useState(false);
+  async function onShare(e) {
+    e.stopPropagation();
+    if (!trackId) return;
+    const url = typeof window !== "undefined"
+      ? `${window.location.origin}/m/${trackId}`
+      : `/m/${trackId}`;
+    if (navigator.share) {
+      try { await navigator.share({ title, text: `🎵 ${title}`, url }); return; } catch {}
+    }
+    if (navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(url);
+        setToast(true);
+        setTimeout(() => setToast(false), 1600);
+      } catch {}
+    }
+  }
+  return (
+    <button
+      onClick={onShare}
+      aria-label="Share track"
+      title="Share track"
+      style={{
+        width: 32,
+        height: 32,
+        borderRadius: "50%",
+        background: toast ? C.accent : "transparent",
+        border: `1px solid ${toast ? C.accent : C.border}`,
+        color: toast ? "#0a0a0a" : C.textSoft,
+        fontSize: 13,
+        cursor: "pointer",
+        fontFamily: "inherit",
+        transition: "all 0.15s",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {toast ? "✓" : "↗"}
+    </button>
   );
 }
 
