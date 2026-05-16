@@ -109,6 +109,7 @@ export default function Navbar() {
     { href: "/generate", label: "Generate" },
     { href: "/creations", label: "Gallery" },
     { href: "/pricing", label: "Pricing" },
+    { href: "/music", label: "Music 🎵" },
     // Cross-subdomain link to the community site. Rendered as a
     // plain <a> by NavLink so the browser does a full navigation
     // (correct since the session cookie is shared at .visualseffect.com

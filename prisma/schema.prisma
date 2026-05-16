@@ -71,6 +71,7 @@ model User {
   posts             Post[]
   reactions         Reaction[]
   pushSubscriptions PushSubscription[]
+  musicTracks       MusicTrack[]
 }
 
 model Creation {
@@ -275,6 +276,44 @@ model ProfilePin {
   @@index([postId])
 }
 
+
+// AI music tracks generated via Suno API. See community/prisma/
+// schema.prisma for the full lifecycle comment — this declaration
+// mirrors the canonical one in seedance-community so both projects'
+// Prisma clients agree on the shape.
+model MusicTrack {
+  id             String   @id @default(cuid())
+  userId         String
+  taskId         String   @unique
+  audioId        String?
+  title          String
+  prompt         String?  @db.Text
+  genre          String?
+  mood           String?
+  durationReq    Int
+  actualDuration Int?
+  isVocal        Boolean  @default(false)
+  lyrics         String?  @db.Text
+  tempo          Int?
+  model          String   @default("V5")
+  status         String   @default("processing")
+  error          String?  @db.Text
+  streamUrl      String?
+  audioUrl       String?
+  imageUrl       String?
+  r2Url          String?
+  credits        Int
+  plays          Int      @default(0)
+  deletedAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status])
+  @@index([deletedAt])
+}
 
 // Web Push subscription for browser notifications. Mirrors the model
 // owned by seedance-community (same shared Neon DB). The `origin`
