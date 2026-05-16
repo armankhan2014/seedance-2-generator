@@ -139,11 +139,38 @@ export default function MusicClient() {
   const [mood, setMood] = useState("Epic");
   const [duration, setDuration] = useState(60);
   const [tempo, setTempo] = useState(100);
-  const [vocalGender, setVocalGender] = useState("auto");
-  const [isVocal, setIsVocal] = useState(false);
+  // Vocal mode is a 4-state choice on the form, but on the wire it
+  // maps to two flags: `instrumental` (isVocal=false) vs `vocal` with
+  // an optional vocalGender ("m" | "f"). "auto" means vocal but let
+  // Suno pick the gender — same as the original Pro-mode Advanced
+  // setting, surfaced as a top-level radio now.
+  //   states: "instrumental" | "auto" | "f" | "m"
+  const [vocalMode, setVocalMode] = useState("instrumental");
+  const isVocal = vocalMode !== "instrumental";
+  const vocalGender = (vocalMode === "f" || vocalMode === "m") ? vocalMode : "auto";
+  // Suno's Custom Mode treats lyrics as a top-level decision: let the
+  // AI write them, OR write your own with [Verse]/[Chorus] structure
+  // tags. We mirror that with a sub-tab inside the Lyrics section.
+  //   states: "auto" | "custom"
+  const [lyricsMode, setLyricsMode] = useState("auto");
   const [lyrics, setLyrics] = useState("");
+  // Free-text Style field — Suno calls this the "Style" prompt. When
+  // populated, it OVERRIDES the genre preset's built-in style string.
+  // Empty = genre preset wins. Lets power users go beyond the 8
+  // built-in genres (e.g. "lo-fi hip-hop, jazzy keys, mellow drums").
+  const [customStyle, setCustomStyle] = useState("");
   const [prompt, setPrompt] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // Wire compat — keep these names so the existing onGenerate body
+  // and downstream callers don't need to change.
+  function setIsVocal(v) {
+    setVocalMode(v ? "auto" : "instrumental");
+  }
+  function setVocalGender(g) {
+    if (g === "f" || g === "m") setVocalMode(g);
+    else setVocalMode(isVocal ? "auto" : "instrumental");
+  }
 
   // ── Helpers — Surprise me + Starter prompts ────────────────────
   // applyStarter() fills every relevant form field from one of the
@@ -214,8 +241,14 @@ export default function MusicClient() {
           duration,
           tempo,
           isVocal,
-          lyrics: isVocal ? lyrics : undefined,
+          // Lyrics: only sent when vocal mode is on AND the user picked
+          // Custom-write. Auto-generate sends no lyrics so Suno writes
+          // them itself (same as Suno's own "Auto-generate" toggle).
+          lyrics: isVocal && lyricsMode === "custom" ? lyrics : undefined,
           prompt,
+          // Suno calls this the "Style" prompt. Empty string → server
+          // falls back to buildStyleString(genre, mood, tempo, isVocal).
+          customStyle: customStyle?.trim() || undefined,
           vocalGender: vocalGender === "auto" ? undefined : vocalGender,
         }),
       });
@@ -389,6 +422,7 @@ export default function MusicClient() {
               </div>
             ) : (
               <>
+                {/* 1 · DESCRIBE — the user's free-form direction */}
                 <div style={{ marginTop: 22 }}>
                   <SectionEyebrow tooltip="Suno style strings are 15–30 comma-separated descriptors. Picking a preset below auto-builds one for you.">
                     1 · Describe what you want
@@ -397,28 +431,81 @@ export default function MusicClient() {
                   <PromptStrength value={prompt} />
                   <TemplateChips onPick={setPrompt} />
                 </div>
+
                 <Divider />
-                <SectionEyebrow tooltip="Genre presets map to Suno style strings under the hood — picking one gives the cleanest first result.">
-                  2 · Pick a vibe
+
+                {/* 2 · VOCALS — single visible row of four options.
+                    Was previously buried inside a 3-col + Advanced
+                    disclosure. Now front-and-centre with Suno-parity
+                    Instrumental / Auto / Female / Male radio. */}
+                <SectionEyebrow tooltip="Instrumental = no vocals at all. Auto = Suno picks the singer. Female / Male = lock the vocal gender.">
+                  2 · Vocals
+                </SectionEyebrow>
+                <VocalModeRow value={vocalMode} onChange={setVocalMode} />
+
+                {/* 3 · LYRICS — only when vocals are on. Suno-style
+                    Auto-generate ↔ Write yours sub-tabs. */}
+                {isVocal && (
+                  <>
+                    <Divider />
+                    <SectionEyebrow tooltip="Auto-generate = Suno writes lyrics for you (faster but generic). Write yours = full control; use [Verse] [Chorus] [Bridge] tags for structure.">
+                      3 · Lyrics
+                    </SectionEyebrow>
+                    <LyricsModeTabs value={lyricsMode} onChange={setLyricsMode} />
+                    {lyricsMode === "custom" && (
+                      <LyricsBox value={lyrics} onChange={setLyrics} />
+                    )}
+                    {lyricsMode === "auto" && (
+                      <div
+                        style={{
+                          padding: "14px 16px",
+                          background: C.panelSoft,
+                          border: `1px dashed ${C.border}`,
+                          borderRadius: 12,
+                          fontSize: 12.5,
+                          color: C.muted,
+                          lineHeight: 1.6,
+                          marginTop: 10,
+                        }}
+                      >
+                        Suno will write lyrics based on your description above.
+                        Fast, but words tend toward generic. Switch to{" "}
+                        <b style={{ color: C.text }}>Write yours</b> for control.
+                      </div>
+                    )}
+                  </>
+                )}
+
+                <Divider />
+
+                {/* 4 · STYLE — genre grid (presets) PLUS a free-text
+                    "Style" field that mirrors Suno's Custom-mode Style
+                    prompt. Empty = preset wins. Non-empty = override. */}
+                <SectionEyebrow tooltip="Pick a preset OR type your own comma-separated descriptors. Examples: 'lo-fi hip-hop, jazzy piano, mellow drums' or 'epic orchestral, sweeping strings, choir'.">
+                  {isVocal ? "4" : "3"} · Style
                 </SectionEyebrow>
                 <GenreGrid value={genre} onChange={setGenre} />
+                <StyleOverride value={customStyle} onChange={setCustomStyle} />
+
                 <Divider />
+
+                {/* 5 · LENGTH & MOOD */}
                 <SectionEyebrow tooltip="Longer tracks cost more credits but give Suno more room for a proper intro–build–outro arc.">
-                  3 · Mood, length, vocal
+                  {isVocal ? "5" : "4"} · Length &amp; mood
                 </SectionEyebrow>
-                <ThreeColRow>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
                   <MoodPicker value={mood} onChange={setMood} />
                   <DurationPicker value={duration} onChange={setDuration} />
-                  <VocalToggle value={isVocal} onChange={setIsVocal} />
-                </ThreeColRow>
-                {isVocal && <LyricsBox value={lyrics} onChange={setLyrics} />}
+                </div>
+
+                {/* Vocal gender moved out of Advanced and into the
+                    top-level Vocals section above — Advanced now owns
+                    just tempo. */}
                 <AdvancedOptions
                   open={advancedOpen}
                   onToggle={() => setAdvancedOpen((o) => !o)}
                   tempo={tempo}
                   onTempoChange={setTempo}
-                  vocalGender={vocalGender}
-                  onVocalGenderChange={setVocalGender}
                 />
                 <GenerateBar
                   cost={cost}
@@ -1193,6 +1280,184 @@ function VocalToggle({ value, onChange }) {
   );
 }
 
+// Top-level 4-state vocal picker — Suno-parity replacement for the
+// old VocalToggle. Surfaces Female / Male / Auto explicitly so users
+// don't have to dig through Advanced. Each option has an icon + a
+// one-liner subtitle so the choice is immediately understandable.
+function VocalModeRow({ value, onChange }) {
+  const opts = [
+    { id: "instrumental", icon: "🎼", label: "Instrumental", sub: "No vocals", credits: "" },
+    { id: "auto",         icon: "🎤", label: "Auto",         sub: "Suno picks", credits: "+4 cr" },
+    { id: "f",            icon: "♀",  label: "Female",       sub: "Female vocal", credits: "+4 cr" },
+    { id: "m",            icon: "♂",  label: "Male",         sub: "Male vocal", credits: "+4 cr" },
+  ];
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
+      {opts.map((o) => {
+        const on = o.id === value;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => onChange(o.id)}
+            style={{
+              position: "relative",
+              padding: "14px 12px 12px",
+              borderRadius: 14,
+              background: on
+                ? "linear-gradient(135deg, rgba(217,255,0,0.18), rgba(217,255,0,0.06))"
+                : C.panelSoft,
+              border: `1px solid ${on ? C.accent : C.border}`,
+              color: on ? C.accent : C.text,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              transition: "all 0.18s",
+              transform: on ? "translateY(-1px)" : "translateY(0)",
+              boxShadow: on ? `0 12px 28px -12px ${C.accent}55` : "none",
+              textAlign: "left",
+            }}
+          >
+            <div style={{ fontSize: 22, lineHeight: 1, marginBottom: 6 }}>{o.icon}</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: on ? C.accent : C.text }}>{o.label}</div>
+            <div style={{ fontSize: 10.5, color: on ? C.accentDark : C.muted, marginTop: 2, fontWeight: 600 }}>
+              {o.sub}
+            </div>
+            {o.credits && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 10,
+                  right: 10,
+                  fontSize: 9.5,
+                  fontWeight: 800,
+                  color: on ? C.accent : C.muted,
+                  background: on ? "rgba(0,0,0,0.25)" : C.panel,
+                  border: `1px solid ${on ? C.accent : C.border}`,
+                  padding: "2px 6px",
+                  borderRadius: 6,
+                  letterSpacing: "0.04em",
+                }}
+              >
+                {o.credits}
+              </div>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Auto-generate ↔ Write yours sub-tabs inside the Lyrics section.
+// Mirrors Suno Custom Mode's lyrics toggle. Visual contract is the
+// same as ModeTabs (the page-level Easy/Pro switcher) so they read
+// as siblings.
+function LyricsModeTabs({ value, onChange }) {
+  const tabs = [
+    { id: "auto",   label: "Auto-generate", sub: "Suno writes lyrics" },
+    { id: "custom", label: "Write yours",   sub: "Full control" },
+  ];
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        background: C.panelSoft,
+        border: `1px solid ${C.border}`,
+        borderRadius: 999,
+        padding: 3,
+        gap: 2,
+      }}
+    >
+      {tabs.map((t) => {
+        const on = t.id === value;
+        return (
+          <button
+            key={t.id}
+            onClick={() => onChange(t.id)}
+            style={{
+              padding: "6px 14px",
+              borderRadius: 999,
+              border: "none",
+              background: on ? "linear-gradient(135deg, #D9FF00, #A6CC00)" : "transparent",
+              color: on ? "#0a0a0a" : C.textSoft,
+              fontSize: 12,
+              fontWeight: 800,
+              letterSpacing: "0.04em",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              transition: "all 0.15s",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            {t.label}
+            <span style={{ fontSize: 9.5, opacity: 0.7, fontWeight: 600, letterSpacing: 0 }}>
+              {t.sub}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Free-text Style override — appears below the genre grid. Empty =
+// genre preset wins (default behaviour). Non-empty = sent to Suno
+// as the canonical Style string. Matches Suno's own Custom-mode
+// Style field; capped at 1000 chars (V4.5+ limit).
+function StyleOverride({ value, onChange }) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div
+        style={{
+          fontSize: 10.5,
+          fontWeight: 700,
+          color: C.muted,
+          letterSpacing: "0.12em",
+          textTransform: "uppercase",
+          marginBottom: 6,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        <span>Custom style (optional)</span>
+        <span style={{ fontSize: 9.5, color: C.accent, fontWeight: 700, letterSpacing: "0.06em" }}>
+          Overrides preset
+        </span>
+      </div>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value.slice(0, 1000))}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        placeholder="e.g. lo-fi hip-hop, jazzy piano, mellow brushed drums, warm vinyl crackle"
+        maxLength={1000}
+        style={{
+          width: "100%",
+          background: C.panelSoft,
+          border: `1px solid ${focused ? C.borderHover : C.border}`,
+          borderRadius: 10,
+          padding: "10px 12px",
+          color: C.text,
+          fontSize: 13,
+          fontFamily: "inherit",
+          outline: "none",
+          transition: "border-color 0.15s",
+        }}
+      />
+      <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.55 }}>
+        Type comma-separated descriptors. Leave blank to use the preset above.
+        Examples: <i>“cinematic film score, sweeping strings, brass, slow build”</i>{" "}
+        or <i>“synthwave, retro arpeggios, gated reverb drums, analog bassline”</i>.
+      </div>
+    </div>
+  );
+}
+
 function vocalBtn(on) {
   return {
     padding: "10px 6px",
@@ -1238,7 +1503,7 @@ function LyricsBox({ value, onChange }) {
   );
 }
 
-function AdvancedOptions({ open, onToggle, tempo, onTempoChange, vocalGender, onVocalGenderChange }) {
+function AdvancedOptions({ open, onToggle, tempo, onTempoChange }) {
   return (
     <div style={{ marginTop: 18 }}>
       <button
@@ -1257,7 +1522,7 @@ function AdvancedOptions({ open, onToggle, tempo, onTempoChange, vocalGender, on
         }}
       >
         <span>{open ? "▾" : "▸"}</span>
-        Advanced (tempo, vocal gender)
+        Advanced (tempo)
       </button>
       {open && (
         <div
@@ -1267,9 +1532,6 @@ function AdvancedOptions({ open, onToggle, tempo, onTempoChange, vocalGender, on
             background: C.panelSoft,
             border: `1px solid ${C.border}`,
             borderRadius: 12,
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-            gap: 14,
           }}
         >
           <FormBox label={`Tempo · ${tempo} BPM`}>
@@ -1284,13 +1546,6 @@ function AdvancedOptions({ open, onToggle, tempo, onTempoChange, vocalGender, on
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: C.muted, marginTop: 2 }}>
               <span>Slow</span><span>Medium</span><span>Fast</span>
             </div>
-          </FormBox>
-          <FormBox label="Vocal gender">
-            <select value={vocalGender} onChange={(e) => onVocalGenderChange(e.target.value)} style={selectStyle()}>
-              <option value="auto">Auto</option>
-              <option value="f">Female</option>
-              <option value="m">Male</option>
-            </select>
           </FormBox>
         </div>
       )}

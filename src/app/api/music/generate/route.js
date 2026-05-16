@@ -62,6 +62,12 @@ export async function POST(req) {
   const vocalGender = body.vocalGender === "f" || body.vocalGender === "m"
     ? body.vocalGender
     : undefined;
+  // Optional free-text Style override — Suno's own "Style" field.
+  // When non-empty, it REPLACES the genre-derived buildStyleString.
+  // Capped at 1000 chars (Suno's V4.5+ limit).
+  const customStyle = typeof body.customStyle === "string"
+    ? body.customStyle.trim().slice(0, 1000)
+    : "";
 
   // ── Cost + credit debit (atomic CAS) ────────────────────────────────
   const cost = creditsForTrack({ duration, isVocal });
@@ -92,7 +98,10 @@ export async function POST(req) {
   const callBackUrl = `${origin}/api/music/callback?secret=${encodeURIComponent(callbackSecret)}`;
 
   // ── Translate UI selections → Suno API params ───────────────────────
-  const style = buildStyleString({ genre, mood, tempo, isVocal });
+  // customStyle (Pro-mode Style field) wins over the genre preset
+  // when present. Otherwise we fall back to the canonical mapping
+  // (genre → comma-separated descriptors + mood + tempo qualifier).
+  const style = customStyle || buildStyleString({ genre, mood, tempo, isVocal });
   // Title — short, human-friendly. Falls back to "<Genre> · <Mood>".
   const niceGenre = genre ? genre[0].toUpperCase() + genre.slice(1) : "Cinematic";
   const fallbackTitle = `${niceGenre}${mood ? " · " + mood : ""}`;
