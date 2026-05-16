@@ -1,18 +1,20 @@
-// Pure-presentation bottom navigation that mirrors community.visualseffect
-// .com's bar so users keep their bearings when crossing the subdomain into
-// Studio. ZERO client-side logic by design — no hooks, no fetch, no event
-// handlers. Just static HTML + CSS that compiles to ~700 bytes of markup.
+"use client";
+// Bottom navigation that mirrors community.visualseffect.com's bar so
+// users keep their bearings when crossing the subdomain into Studio.
 //
 // Visual contract MUST stay 1:1 with
 // seedance-community/src/components/shell/MobileTabBar.jsx
 // (icons, sizes, gap, colors, padding, font weights, AND the lime
 // pill-slide treatment). Change them in lockstep on both sides.
 //
-// Why no "use client": this component has no client-side state — the
-// active tab is *always* Studio when this side of the subdomain is
-// rendered, so the pill can be statically positioned with no JS.
-// Plain <a> anchors handle navigation natively; 3 of 4 tabs cross
-// the subdomain (which forces a full page load anyway).
+// Was previously a pure server component because Studio was always
+// the active tab (only Studio's own home + cross-origin community
+// routes were reachable). Adding /music as a same-origin sub-route
+// broke that assumption — the pill would stay under "Studio" even
+// when the user was on /music. Converted to client with usePathname
+// so the active tab follows the current route.
+
+import { usePathname } from "next/navigation";
 
 const COMMUNITY_URL = "https://community.visualseffect.com";
 
@@ -74,12 +76,24 @@ const TABS = [
   },
 ];
 
-// Studio is always the rightmost tab (TABS.length - 1) and always
-// "active" on this side of the subdomain — so the pill is a fixed
-// CSS placement, not a JS-driven translateX like on community.
-const ACTIVE_IDX = TABS.length - 1;
+// Studio tab is the rightmost — used as the default-active state
+// for any Studio route that isn't explicitly mapped to another tab.
+const STUDIO_IDX = TABS.length - 1;
+const MUSIC_IDX = TABS.findIndex((t) => t.href === "/music");
+
+// Match the current pathname to one of the LOCAL tabs (same-origin
+// hrefs only — the cross-subdomain ones at COMMUNITY_URL are never
+// the current pathname on this side). Falls back to STUDIO_IDX so
+// the lime pill defaults to Studio on /, /generate, /creations etc.
+function activeIndexFor(pathname) {
+  if (!pathname) return STUDIO_IDX;
+  if (pathname === "/music" || pathname.startsWith("/music/")) return MUSIC_IDX;
+  return STUDIO_IDX;
+}
 
 export default function MobileBottomNav() {
+  const pathname = usePathname();
+  const activeIdx = activeIndexFor(pathname);
   return (
     <nav
       className="seedance-mobile-bottom-nav"
@@ -100,13 +114,11 @@ export default function MobileBottomNav() {
         fontFamily: "Inter, sans-serif",
       }}
     >
-      {/* Lime pill behind the Studio tab — same visual treatment as
-          the community pill-slide animation. Statically positioned
-          here because Studio is always the active tab on this side
-          (no slide needed). The translateX in style + matching CSS
-          transition means if we ever do switch this to a client
-          component with active-tab tracking, the same animation
-          will Just Work. */}
+      {/* Lime pill that slides under the active tab. translateX is
+          computed from `activeIdx` which follows usePathname — so
+          tapping Music slides the pill there, navigating to / or
+          any other Studio route slides it back to Studio. The
+          cubic-bezier overshoot matches community's MobileTabBar. */}
       <span
         aria-hidden="true"
         style={{
@@ -119,7 +131,7 @@ export default function MobileBottomNav() {
             "linear-gradient(180deg, rgba(217,255,0,0.16), rgba(217,255,0,0.06))",
           border: "1px solid rgba(217,255,0,0.28)",
           borderRadius: 14,
-          transform: `translateX(${ACTIVE_IDX * 100}%)`,
+          transform: `translateX(${activeIdx * 100}%)`,
           transition:
             "transform 380ms cubic-bezier(0.34, 1.56, 0.64, 1)",
           pointerEvents: "none",
@@ -128,42 +140,45 @@ export default function MobileBottomNav() {
         }}
       />
 
-      {TABS.map((tab) => (
-        <a
-          key={tab.label}
-          href={tab.href}
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 3,
-            padding: "6px 4px",
-            color: tab.isStudio ? "#D9FF00" : "#94a3b8",
-            textDecoration: "none",
-            fontSize: 9,
-            fontWeight: 700,
-            letterSpacing: "0.06em",
-            textTransform: "uppercase",
-            position: "relative",
-            zIndex: 1,
-            transition: "color 240ms ease",
-          }}
-        >
-          <span
+      {TABS.map((tab, i) => {
+        const isActive = i === activeIdx;
+        return (
+          <a
+            key={tab.label}
+            href={tab.href}
             style={{
-              lineHeight: 0,
-              display: "block",
-              transform: tab.isStudio ? "scale(1.08)" : "scale(1)",
-              transition:
-                "transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 3,
+              padding: "6px 4px",
+              color: isActive ? "#D9FF00" : "#94a3b8",
+              textDecoration: "none",
+              fontSize: 9,
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              textTransform: "uppercase",
+              position: "relative",
+              zIndex: 1,
+              transition: "color 240ms ease",
             }}
           >
-            {tab.icon}
-          </span>
-          <span>{tab.label}</span>
-        </a>
-      ))}
+            <span
+              style={{
+                lineHeight: 0,
+                display: "block",
+                transform: isActive ? "scale(1.08)" : "scale(1)",
+                transition:
+                  "transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+              }}
+            >
+              {tab.icon}
+            </span>
+            <span>{tab.label}</span>
+          </a>
+        );
+      })}
       <style>{`
         /* Hide on tablet/desktop — same breakpoint as community's bar. */
         @media (min-width: 721px) {
