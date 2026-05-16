@@ -1,6 +1,6 @@
 // POST /api/music/callback?secret=...
 //
-// Suno fires this webhook 1–3× per generation:
+// music engine fires this webhook 1–3× per generation:
 //   "text"     — lyrics text generated (we ignore for now)
 //   "first"    — stream URL ready (~30–40s in)   → set streamUrl
 //   "complete" — final mix ready (~2–3 min in)   → set audioUrl,
@@ -11,12 +11,13 @@
 // same compare-and-swap pattern as MuAPI's failAndRefund so racing
 // callbacks can't double-refund.
 //
-// Authentication: Suno doesn't sign payloads — we accept a shared
+// Authentication: music engine doesn't sign payloads — we accept a shared
 // `secret` query param that matches the WEBHOOK_SECRET env (the same
 // one MuAPI uses). Constant-time compare to prevent timing attacks.
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { scrubVendor } from "@/lib/suno";
 import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +45,7 @@ export async function POST(req) {
   }
   console.log("[MUSIC_CALLBACK] received:", JSON.stringify(payload).slice(0, 600));
 
-  // Suno's callback envelope: { code, msg, data: { callbackType, task_id, data: [...] } }
+  // music engine's callback envelope: { code, msg, data: { callbackType, task_id, data: [...] } }
   const data = payload.data || payload;
   const callbackType = data.callbackType || data.type || payload.callbackType;
   const taskId = data.task_id || data.taskId || payload.taskId;
@@ -53,21 +54,21 @@ export async function POST(req) {
   }
 
   // Find the track. If the row is missing, the user must have cancelled
-  // / been refunded already — log and accept so Suno doesn't retry.
+  // / been refunded already — log and accept so music engine doesn't retry.
   const track = await prisma.musicTrack.findUnique({ where: { taskId } });
   if (!track) {
     console.warn(`[MUSIC_CALLBACK] No track for taskId ${taskId} — ignoring`);
     return NextResponse.json({ ok: true });
   }
 
-  // Failed generation — Suno returns code !== 200 OR data.code = error.
+  // Failed generation — music engine returns code !== 200 OR data.code = error.
   const reportedCode = payload.code ?? data.code;
   const reportedMsg = payload.msg || data.msg;
   if (reportedCode && reportedCode !== 200) {
-    return failAndRefund(track, reportedMsg || `Suno error ${reportedCode}`);
+    return failAndRefund(track, reportedMsg || `Music engine error ${reportedCode}`);
   }
 
-  // Pull the first audio variant. Suno can return multiple; we keep
+  // Pull the first audio variant. music engine can return multiple; we keep
   // the first one (the only one we charged for at our pricing tier).
   const items = Array.isArray(data.data) ? data.data : Array.isArray(payload.data) ? payload.data : [];
   const item = items[0] || data || {};
@@ -93,7 +94,7 @@ export async function POST(req) {
   // ── Final callback ("complete") — full mix downloadable ────────────
   if (callbackType === "complete" || audioUrl) {
     // Mirror to R2 in the background — don't block the webhook ack.
-    // If the upload fails, the user's library still serves Suno's URL
+    // If the upload fails, the user's library still serves music engine's URL
     // (which works for the next 15 days). A nightly cron retries.
     let r2Url = null;
     try {
@@ -116,7 +117,7 @@ export async function POST(req) {
     return NextResponse.json({ ok: true, phase: "complete", r2: !!r2Url });
   }
 
-  // Unknown callback type — log and accept so Suno doesn't retry.
+  // Unknown callback type — log and accept so music engine doesn't retry.
   console.warn(`[MUSIC_CALLBACK] Unknown callbackType "${callbackType}" — accepted`);
   return NextResponse.json({ ok: true });
 }
@@ -124,7 +125,9 @@ export async function POST(req) {
 // Compare-and-swap fail + refund. Mirrors AIService.failAndRefund's
 // semantics so a duplicate webhook can't double-refund.
 async function failAndRefund(track, errMsg) {
-  const safeErr = (errMsg || "").toString().slice(0, 500) || "Generation failed";
+  // Scrub vendor strings before persisting — the value is shown back
+  // to the user as the failed-track tooltip in their library.
+  const safeErr = scrubVendor((errMsg || "").toString().slice(0, 500)) || "Generation failed";
   const updated = await prisma.musicTrack.updateMany({
     where: { id: track.id, status: "processing" },
     data: { status: "failed", error: safeErr },
@@ -145,10 +148,10 @@ async function failAndRefund(track, errMsg) {
   return NextResponse.json({ ok: true, phase: "failed" });
 }
 
-// Best-effort: download the final mp3 from Suno and upload to our R2
-// bucket so the track survives Suno's 15-day retention. Returns the
+// Best-effort: download the final mp3 from music engine and upload to our R2
+// bucket so the track survives music engine's 15-day retention. Returns the
 // public R2 URL, or null if anything fails — failure is non-fatal,
-// the user can still stream from Suno's URL for 15 days.
+// the user can still stream from music engine's URL for 15 days.
 async function mirrorToR2(trackId, sourceUrl) {
   if (!sourceUrl) return null;
   const region = process.env.R2_REGION || "auto";

@@ -1,17 +1,17 @@
 // POST /api/music/generate   { genre, mood, duration, isVocal, lyrics, prompt, tempo, model? }
 //
-// Authed endpoint that kicks off a Suno music generation. Flow:
+// Authed endpoint that kicks off a music engine music generation. Flow:
 //   1. Validate input + compute credit cost (creditsForTrack).
 //   2. Atomically debit credits from the caller (compare-and-swap so
 //      double-clicks can't double-charge).
-//   3. Call Suno's POST /api/v1/generate, passing our public webhook
+//   3. Call music engine's POST /api/v1/generate, passing our public webhook
 //      URL as the callBackUrl.
 //   4. Persist a MusicTrack row in status="processing" with the
-//      Suno taskId so the callback handler can find it later.
+//      music engine taskId so the callback handler can find it later.
 //   5. Return { trackId, taskId } to the client so it can poll
 //      /api/music/tracks/[id] for status until streamUrl appears.
 //
-// On any failure between debit + Suno acknowledgement, we refund the
+// On any failure between debit + music engine acknowledgement, we refund the
 // credits immediately so the user isn't out of pocket for a render
 // that never started.
 
@@ -19,7 +19,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { generateMusic, buildStyleString, creditsForTrack } from "@/lib/suno";
+import { generateMusic, buildStyleString, creditsForTrack, scrubVendor } from "@/lib/suno";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -62,9 +62,9 @@ export async function POST(req) {
   const vocalGender = body.vocalGender === "f" || body.vocalGender === "m"
     ? body.vocalGender
     : undefined;
-  // Optional free-text Style override — Suno's own "Style" field.
+  // Optional free-text Style override — music engine's own "Style" field.
   // When non-empty, it REPLACES the genre-derived buildStyleString.
-  // Capped at 1000 chars (Suno's V4.5+ limit).
+  // Capped at 1000 chars (music engine's V4.5+ limit).
   const customStyle = typeof body.customStyle === "string"
     ? body.customStyle.trim().slice(0, 1000)
     : "";
@@ -83,8 +83,8 @@ export async function POST(req) {
   }
 
   // ── Build callback URL ──────────────────────────────────────────────
-  // We append our own webhook secret as a query param so Suno's
-  // callback can be verified server-side (Suno doesn't sign payloads).
+  // We append our own webhook secret as a query param so music engine's
+  // callback can be verified server-side (music engine doesn't sign payloads).
   const origin =
     process.env.NEXTAUTH_URL ||
     `https://${req.headers.get("host") || "seedance.visualseffect.com"}`;
@@ -97,7 +97,7 @@ export async function POST(req) {
   }
   const callBackUrl = `${origin}/api/music/callback?secret=${encodeURIComponent(callbackSecret)}`;
 
-  // ── Translate UI selections → Suno API params ───────────────────────
+  // ── Translate UI selections → music engine API params ───────────────────────
   // customStyle (Pro-mode Style field) wins over the genre preset
   // when present. Otherwise we fall back to the canonical mapping
   // (genre → comma-separated descriptors + mood + tempo qualifier).
@@ -107,7 +107,7 @@ export async function POST(req) {
   const fallbackTitle = `${niceGenre}${mood ? " · " + mood : ""}`;
   const title = (promptRaw.slice(0, 60) || fallbackTitle).trim();
 
-  // ── Fire Suno gen ───────────────────────────────────────────────────
+  // ── Fire music engine gen ───────────────────────────────────────────────────
   let taskId;
   try {
     const result = await generateMusic({
@@ -121,14 +121,16 @@ export async function POST(req) {
       callBackUrl,
     });
     taskId = result.taskId;
-    if (!taskId) throw new Error("Suno returned no taskId");
+    if (!taskId) throw new Error("Music service returned no task id");
   } catch (err) {
     // Refund + bail. Surface a friendly error to the client.
     await prisma.user.update({ where: { id: userId }, data: { credits: { increment: cost } } });
-    console.error("[MUSIC_GENERATE] Suno call failed:", err?.message);
+    console.error("[MUSIC_GENERATE] Upstream call failed:", err?.message);
     const status = err.status >= 400 && err.status < 600 ? err.status : 502;
     return NextResponse.json(
-      { error: err?.message || "Music service unavailable", refunded: true },
+      // Scrub vendor strings so the user never sees "music engine…" in an
+      // error toast. White-label hygiene.
+      { error: scrubVendor(err?.message) || "Music service unavailable", refunded: true },
       { status }
     );
   }
@@ -155,7 +157,7 @@ export async function POST(req) {
     });
     return NextResponse.json({ ok: true, track });
   } catch (err) {
-    // Race: Suno fired but DB write failed. The callback will fail to
+    // Race: music engine fired but DB write failed. The callback will fail to
     // find the row → the user wasted credits. Refund here to be safe.
     await prisma.user.update({ where: { id: userId }, data: { credits: { increment: cost } } });
     console.error("[MUSIC_GENERATE] DB write failed:", err?.message);

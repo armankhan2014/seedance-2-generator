@@ -66,12 +66,12 @@ const TEMPLATES = [
 
 // Curated starter sets — each one fills the WHOLE form (prompt + genre
 // + mood + duration + vocal) with a combination that produces a
-// great-result on Suno V5. Used by:
+// great-result on the music engine V5. Used by:
 //   • The "✨ Surprise me" button — picks a random STARTER and slams
 //     the form full, so a brand-new user can hit Generate immediately.
 //   • The empty-library state — replaces the old dashed-box "your
 //     tracks will appear here" with four click-to-fill cards.
-// Per Suno's own best-practice docs the sweet spot is a 15–30-word
+// Per the music engine's own best-practice docs the sweet spot is a 15–30-word
 // descriptor prompt with explicit instruments + mood — these are
 // written to that pattern intentionally.
 const STARTERS = [
@@ -123,9 +123,9 @@ export default function MusicClient() {
   // ── Form state ──────────────────────────────────────────────────
   // Mode: "easy" (default — only prompt + Surprise + Generate, all
   // other fields hidden + defaulted server-side) vs "pro" (full form
-  // with genre / mood / duration / vocal / advanced). Mirrors Suno's
-  // own Simple vs Custom mental model so users who've used Suno
-  // recognise the pattern instantly. localStorage-persisted so the
+  // with genre / mood / duration / vocal / advanced). Mirrors the music engine's
+  // own Simple vs Custom mental model so users who've used other
+  // AI music tools recognise the pattern. localStorage-persisted so the
   // user's preference sticks across visits.
   const [mode, setMode] = useState("easy");
   useEffect(() => {
@@ -142,19 +142,19 @@ export default function MusicClient() {
   // Vocal mode is a 4-state choice on the form, but on the wire it
   // maps to two flags: `instrumental` (isVocal=false) vs `vocal` with
   // an optional vocalGender ("m" | "f"). "auto" means vocal but let
-  // Suno pick the gender — same as the original Pro-mode Advanced
+  // the music engine pick the gender — same as the original Pro-mode Advanced
   // setting, surfaced as a top-level radio now.
   //   states: "instrumental" | "auto" | "f" | "m"
   const [vocalMode, setVocalMode] = useState("instrumental");
   const isVocal = vocalMode !== "instrumental";
   const vocalGender = (vocalMode === "f" || vocalMode === "m") ? vocalMode : "auto";
-  // Suno's Custom Mode treats lyrics as a top-level decision: let the
+  // the music engine's Custom Mode treats lyrics as a top-level decision: let the
   // AI write them, OR write your own with [Verse]/[Chorus] structure
   // tags. We mirror that with a sub-tab inside the Lyrics section.
   //   states: "auto" | "custom"
   const [lyricsMode, setLyricsMode] = useState("auto");
   const [lyrics, setLyrics] = useState("");
-  // Free-text Style field — Suno calls this the "Style" prompt. When
+  // Free-text Style field — the music engine calls this the "Style" prompt. When
   // populated, it OVERRIDES the genre preset's built-in style string.
   // Empty = genre preset wins. Lets power users go beyond the 8
   // built-in genres (e.g. "lo-fi hip-hop, jazzy keys, mellow drums").
@@ -242,11 +242,11 @@ export default function MusicClient() {
           tempo,
           isVocal,
           // Lyrics: only sent when vocal mode is on AND the user picked
-          // Custom-write. Auto-generate sends no lyrics so Suno writes
-          // them itself (same as Suno's own "Auto-generate" toggle).
+          // Custom-write. Auto-generate sends no lyrics so the music engine writes
+          // them itself (same as the music engine's own "Auto-generate" toggle).
           lyrics: isVocal && lyricsMode === "custom" ? lyrics : undefined,
           prompt,
-          // Suno calls this the "Style" prompt. Empty string → server
+          // the music engine calls this the "Style" prompt. Empty string → server
           // falls back to buildStyleString(genre, mood, tempo, isVocal).
           customStyle: customStyle?.trim() || undefined,
           vocalGender: vocalGender === "auto" ? undefined : vocalGender,
@@ -275,7 +275,7 @@ export default function MusicClient() {
     if (stage !== "generating" || !currentTrackId) return;
     let stopped = false;
     let tries = 0;
-    const MAX_TRIES = 120; // 6 minutes at 3s — Suno can take up to ~3min
+    const MAX_TRIES = 120; // 6 minutes at 3s — the music engine can take up to ~3min
     async function poll() {
       while (!stopped && tries < MAX_TRIES) {
         await new Promise((r) => setTimeout(r, 3000));
@@ -354,7 +354,7 @@ export default function MusicClient() {
               from { opacity: 0; transform: translateY(20px); }
               to   { opacity: 1; transform: translateY(0); }
             }`}</style>
-            {/* Easy ↔ Pro mode toggle — Suno's Simple/Custom mental
+            {/* Easy ↔ Pro mode toggle — the music engine's Simple/Custom mental
                 model. Easy = just a prompt + Surprise + Generate.
                 Pro = full form. Persisted to localStorage. */}
             <ModeTabs mode={mode} onChange={changeMode} />
@@ -424,7 +424,7 @@ export default function MusicClient() {
               <>
                 {/* 1 · DESCRIBE — the user's free-form direction */}
                 <div style={{ marginTop: 22 }}>
-                  <SectionEyebrow tooltip="Suno style strings are 15–30 comma-separated descriptors. Picking a preset below auto-builds one for you.">
+                  <SectionEyebrow tooltip="Style descriptors work best as 15–30 comma-separated words (genre + mood + key instruments). Picking a preset below auto-builds one for you.">
                     1 · Describe what you want
                   </SectionEyebrow>
                   <PromptInput value={prompt} onChange={setPrompt} />
@@ -436,19 +436,19 @@ export default function MusicClient() {
 
                 {/* 2 · VOCALS — single visible row of four options.
                     Was previously buried inside a 3-col + Advanced
-                    disclosure. Now front-and-centre with Suno-parity
+                    disclosure. Now front-and-centre with parity
                     Instrumental / Auto / Female / Male radio. */}
-                <SectionEyebrow tooltip="Instrumental = no vocals at all. Auto = Suno picks the singer. Female / Male = lock the vocal gender.">
+                <SectionEyebrow tooltip="Instrumental = no vocals at all. Auto = the model picks the singer. Female / Male = lock the vocal gender.">
                   2 · Vocals
                 </SectionEyebrow>
                 <VocalModeRow value={vocalMode} onChange={setVocalMode} />
 
-                {/* 3 · LYRICS — only when vocals are on. Suno-style
+                {/* 3 · LYRICS — only when vocals are on. the music engine-style
                     Auto-generate ↔ Write yours sub-tabs. */}
                 {isVocal && (
                   <>
                     <Divider />
-                    <SectionEyebrow tooltip="Auto-generate = Suno writes lyrics for you (faster but generic). Write yours = full control; use [Verse] [Chorus] [Bridge] tags for structure.">
+                    <SectionEyebrow tooltip="Auto-generate = the model writes lyrics for you (faster but generic). Write yours = full control; use [Verse] [Chorus] [Bridge] tags for structure.">
                       3 · Lyrics
                     </SectionEyebrow>
                     <LyricsModeTabs value={lyricsMode} onChange={setLyricsMode} />
@@ -468,7 +468,7 @@ export default function MusicClient() {
                           marginTop: 10,
                         }}
                       >
-                        Suno will write lyrics based on your description above.
+                        The AI will write lyrics based on your description above.
                         Fast, but words tend toward generic. Switch to{" "}
                         <b style={{ color: C.text }}>Write yours</b> for control.
                       </div>
@@ -479,7 +479,7 @@ export default function MusicClient() {
                 <Divider />
 
                 {/* 4 · STYLE — genre grid (presets) PLUS a free-text
-                    "Style" field that mirrors Suno's Custom-mode Style
+                    "Style" field that mirrors the engine's Custom-mode Style
                     prompt. Empty = preset wins. Non-empty = override. */}
                 <SectionEyebrow tooltip="Pick a preset OR type your own comma-separated descriptors. Examples: 'lo-fi hip-hop, jazzy piano, mellow drums' or 'epic orchestral, sweeping strings, choir'.">
                   {isVocal ? "4" : "3"} · Style
@@ -490,7 +490,7 @@ export default function MusicClient() {
                 <Divider />
 
                 {/* 5 · LENGTH & MOOD */}
-                <SectionEyebrow tooltip="Longer tracks cost more credits but give Suno more room for a proper intro–build–outro arc.">
+                <SectionEyebrow tooltip="Longer tracks cost more credits but give the AI more room for a proper intro–build–outro arc.">
                   {isVocal ? "5" : "4"} · Length &amp; mood
                 </SectionEyebrow>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
@@ -591,7 +591,7 @@ function Hero() {
             boxShadow: `0 0 24px -4px ${C.accent}55`,
           }}
         >
-          <PulseDot /> New · powered by Suno V5
+          <PulseDot /> New · AI music engine v5
         </div>
         <h1
           style={{
@@ -1012,7 +1012,7 @@ function ModeTabs({ mode, onChange }) {
 }
 
 // Word-count strength meter under the prompt input. Reads the
-// 15-30-word "sweet spot" out of Suno's own best-practice docs and
+// 15-30-word "sweet spot" out of the music engine's own best-practice docs and
 // surfaces it as a horizontal bar + status label.
 function PromptStrength({ value }) {
   const words = (value || "").trim().split(/\s+/).filter(Boolean).length;
@@ -1022,7 +1022,7 @@ function PromptStrength({ value }) {
   else if (words < 15)    { label = `Decent — adding a few more descriptors will sharpen the result (${words}/15)`; color = C.warning; pct = 0.55; }
   else if (words <= 30)   { label = `✓ Sweet spot (${words} words)`; color = C.accent; pct = 0.95; }
   else if (words <= 50)   { label = `Wordy but still OK (${words} words)`; color = C.accent; pct = 0.8; }
-  else                    { label = `Too long — Suno may ignore details (${words} words)`; color = C.warning; pct = 0.65; }
+  else                    { label = `Too long — the model may ignore details (${words} words)`; color = C.warning; pct = 0.65; }
   return (
     <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10 }}>
       <div
@@ -1280,14 +1280,14 @@ function VocalToggle({ value, onChange }) {
   );
 }
 
-// Top-level 4-state vocal picker — Suno-parity replacement for the
+// Top-level 4-state vocal picker — the music engine-parity replacement for the
 // old VocalToggle. Surfaces Female / Male / Auto explicitly so users
 // don't have to dig through Advanced. Each option has an icon + a
 // one-liner subtitle so the choice is immediately understandable.
 function VocalModeRow({ value, onChange }) {
   const opts = [
     { id: "instrumental", icon: "🎼", label: "Instrumental", sub: "No vocals", credits: "" },
-    { id: "auto",         icon: "🎤", label: "Auto",         sub: "Suno picks", credits: "+4 cr" },
+    { id: "auto",         icon: "🎤", label: "Auto",         sub: "AI picks", credits: "+4 cr" },
     { id: "f",            icon: "♀",  label: "Female",       sub: "Female vocal", credits: "+4 cr" },
     { id: "m",            icon: "♂",  label: "Male",         sub: "Male vocal", credits: "+4 cr" },
   ];
@@ -1349,12 +1349,12 @@ function VocalModeRow({ value, onChange }) {
 }
 
 // Auto-generate ↔ Write yours sub-tabs inside the Lyrics section.
-// Mirrors Suno Custom Mode's lyrics toggle. Visual contract is the
+// Mirrors the music engine Custom Mode's lyrics toggle. Visual contract is the
 // same as ModeTabs (the page-level Easy/Pro switcher) so they read
 // as siblings.
 function LyricsModeTabs({ value, onChange }) {
   const tabs = [
-    { id: "auto",   label: "Auto-generate", sub: "Suno writes lyrics" },
+    { id: "auto",   label: "Auto-generate", sub: "AI writes lyrics" },
     { id: "custom", label: "Write yours",   sub: "Full control" },
   ];
   return (
@@ -1403,9 +1403,8 @@ function LyricsModeTabs({ value, onChange }) {
 }
 
 // Free-text Style override — appears below the genre grid. Empty =
-// genre preset wins (default behaviour). Non-empty = sent to Suno
-// as the canonical Style string. Matches Suno's own Custom-mode
-// Style field; capped at 1000 chars (V4.5+ limit).
+// genre preset wins (default behaviour). Non-empty = sent to the
+// music engine as the canonical Style string; capped at 1000 chars.
 function StyleOverride({ value, onChange }) {
   const [focused, setFocused] = useState(false);
   return (
@@ -1497,7 +1496,7 @@ function LyricsBox({ value, onChange }) {
         }}
       />
       <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>
-        Use [Verse], [Chorus], [Bridge] tags for structure — Suno picks up on them. Leave blank for AI-generated lyrics.
+        Use [Verse], [Chorus], [Bridge] tags for structure — the AI picks up on them. Leave blank for AI-generated lyrics.
       </div>
     </div>
   );
@@ -1721,7 +1720,7 @@ function PlayerPanel({ track, onReset }) {
   const [pos, setPos] = useState(0);
   const [dur, setDur] = useState(track.actualDuration || track.durationReq || 60);
 
-  // Prefer R2 (permanent) → audioUrl (Suno final, 15-day) → streamUrl (preview)
+  // Prefer R2 (permanent) → audioUrl (the music engine final, 15-day) → streamUrl (preview)
   const src = track.r2Url || track.audioUrl || track.streamUrl || "";
 
   // Bind play/pause + progress events.
@@ -2222,9 +2221,9 @@ function FooterNotes() {
       }}
     >
       All generated music is royalty-free for personal AND commercial use under
-      our Suno API license. Tracks are stored on your account forever (we mirror
-      Suno&rsquo;s short-retention output to our own R2 bucket the moment each
-      render finishes).
+      our music engine license. Tracks are stored on your account forever (we
+      mirror every finished render to our own R2 bucket so you keep access
+      indefinitely).
     </section>
   );
 }

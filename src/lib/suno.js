@@ -1,4 +1,16 @@
-// Thin server-side wrapper around the sunoapi.org Suno API.
+// Scrub any "music engine" / "sunoapi" mention out of strings before they
+// reach the client. Applied to every error message that originates
+// from the upstream music-engine API so the underlying vendor stays
+// invisible to end users (white-label hygiene).
+export function scrubVendor(s) {
+  if (!s) return s;
+  return String(s)
+    .replace(/sunoapi\.org/gi, "music engine")
+    .replace(/suno\s*api/gi, "music engine")
+    .replace(/\bsuno\b/gi, "the music engine");
+}
+
+// Thin server-side wrapper around the sunoapi.org music engine API.
 // Documentation: https://docs.sunoapi.org/
 //
 // Auth: SUNO_API_KEY (Bearer token in env). Never expose to the client.
@@ -8,11 +20,11 @@
 //   GET  /api/v1/generate/record-info  — poll status (fallback if
 //                                        webhook never fires)
 //
-// Generation flow is async: we POST and get back a taskId. Suno then
+// Generation flow is async: we POST and get back a taskId. music engine then
 // POSTs to our callBackUrl twice — first with stream URL ready
 // (~30–40s), then with the final mix ready (~2–3min). The callback
 // handler at /api/music/callback persists those URLs + mirrors the
-// final audio to R2 so the user's library survives Suno's 15-day
+// final audio to R2 so the user's library survives music engine's 15-day
 // retention.
 
 const SUNO_BASE = process.env.SUNO_API_BASE || "https://api.sunoapi.org";
@@ -29,7 +41,7 @@ function ensureKey() {
 
 // Generate a music track. Returns { taskId } on success.
 //
-// In NON-custom mode, Suno auto-picks style/title from the prompt
+// In NON-custom mode, music engine auto-picks style/title from the prompt
 // (good for "just give me something" quick gens). In CUSTOM mode the
 // caller supplies style + title + an optional richer prompt + lyrics
 // for vocal tracks. We use custom mode whenever the user picked a
@@ -81,7 +93,7 @@ export async function generateMusic({
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok || json.code !== 200) {
-    const err = new Error(json.msg || `Suno API ${res.status}`);
+    const err = new Error(json.msg || `Music service error ${res.status}`);
     err.status = res.status;
     err.code = json.code;
     err.body = json;
@@ -101,7 +113,7 @@ export async function getRecordInfo(taskId) {
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const err = new Error(json.msg || `Suno record-info ${res.status}`);
+    const err = new Error(json.msg || `Music service status ${res.status}`);
     err.status = res.status;
     throw err;
   }
@@ -110,7 +122,7 @@ export async function getRecordInfo(taskId) {
 
 // Helper for the /api/music/generate route — translates our UI-level
 // preset (cinematic / ambient / rock / orchestral / electronic / jazz /
-// folk / mystery) + mood + tempo into Suno's "style" string. Keeping
+// folk / mystery) + mood + tempo into music engine's "style" string. Keeping
 // this mapping in one place so we can tune it without touching the
 // route handler.
 export function buildStyleString({ genre, mood, tempo, isVocal }) {
