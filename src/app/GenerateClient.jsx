@@ -29,7 +29,6 @@ import {
   letterFor as storyLetterFor,
   estimateCreditsPerShot as storyEstimateCreditsPerShot,
 } from "@/components/saas/StoryBuilder";
-import WalkthroughTour from "@/components/saas/WalkthroughTour";
 import PushPermissionBanner from "@/components/PushPermissionBanner";
 
 export const dynamic = "force-dynamic";
@@ -432,21 +431,6 @@ export default function Home() {
       document.removeEventListener("keydown", onEsc);
     };
   }, [libraryPreview]);
-
-  // First-visit walkthrough tour. Shown once, gated on localStorage
-  // flag `seedance_walkthrough_v1`. The "👋 Show tour" link in the
-  // generator header lets users replay it anytime.
-  const [showWalkthrough, setShowWalkthrough] = useState(false);
-  useEffect(() => {
-    try {
-      const seen = localStorage.getItem("seedance_walkthrough_v1");
-      if (!seen) setShowWalkthrough(true);
-    } catch {}
-  }, []);
-  const dismissWalkthrough = () => {
-    try { localStorage.setItem("seedance_walkthrough_v1", "1"); } catch {}
-    setShowWalkthrough(false);
-  };
 
   // Hydrate Story state on mount + persist on every change.
   useEffect(() => {
@@ -1129,28 +1113,6 @@ export default function Home() {
               </h2>
               <p className="text-[10px] text-muted">Minimal Video Engine</p>
             </div>
-            {/* Replay walkthrough — for users who dismissed the first-visit
-                tour but want to see it again. Always visible so it's
-                discoverable. Resets nothing else — just re-opens the
-                animated guide. */}
-            <button
-              type="button"
-              onClick={() => setShowWalkthrough(true)}
-              title="Replay the quick tour"
-              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10.5px] font-bold text-primary-500 bg-primary-500/[0.06] border border-primary-500/25 hover:bg-primary-500/10 hover:border-primary-500/50 transition-colors"
-            >
-              <span className="text-[11px]">?</span>
-              <span>Replay tour</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowWalkthrough(true)}
-              title="Replay the quick tour"
-              aria-label="Replay the quick tour"
-              className="sm:hidden w-8 h-8 rounded-md text-primary-500 bg-primary-500/[0.06] border border-primary-500/25 hover:bg-primary-500/10 hover:border-primary-500/50 transition-colors flex items-center justify-center text-sm font-bold"
-            >
-              ?
-            </button>
           </div>
 
           {/* Mode buttons — independent floating pills (replaced the
@@ -2031,10 +1993,6 @@ export default function Home() {
         />
       )}
 
-      {/* First-visit walkthrough — modal overlay that teaches the
-          type → image(s) → expand → generate flow. Auto-shows on first
-          visit only (gated on seedance_walkthrough_v1 in localStorage). */}
-      {showWalkthrough && <WalkthroughTour onClose={dismissWalkthrough} />}
       {/* Push-permission banner — slides in bottom-right on the first
           Generate click of the session (provided OS push is supported,
           permission is still "default", and the user hasn't dismissed
