@@ -109,7 +109,10 @@ export default function Navbar() {
     { href: "/generate", label: "Generate" },
     { href: "/creations", label: "Gallery" },
     { href: "/pricing", label: "Pricing" },
-    { href: "/music", label: "Music 🎵" },
+    // Music opens in a new tab so users don't lose mid-prompt /generate
+    // state when they switch over to compose a soundtrack. `newTab`
+    // is honoured by NavLink — same-origin link with target=_blank.
+    { href: "/music", label: "Music 🎵", newTab: true },
     // Cross-subdomain link to the community site. Rendered as a
     // plain <a> by NavLink so the browser does a full navigation
     // (correct since the session cookie is shared at .visualseffect.com
@@ -199,11 +202,17 @@ export default function Navbar() {
   // and Next's <Link> for internal routes. Active styling is never
   // applied to externals — they're outbound links, not pages of
   // this app.
-  const NavLink = ({ href, label, active, external }) => {
+  const NavLink = ({ href, label, active, external, newTab }) => {
     const Tag = external ? "a" : Link;
+    // `newTab` (same-origin) and `external` both want to open in a
+    // new browser tab with safe rel attrs.
+    const targetProps = (external || newTab)
+      ? { target: "_blank", rel: "noopener noreferrer" }
+      : null;
     return (
       <Tag
         href={href}
+        {...targetProps}
         className={
           active ? "sd-nav-link sd-nav-link--active" : "sd-nav-link"
         }
@@ -412,9 +421,13 @@ export default function Navbar() {
           }} className="mobile-menu">
             {links.map(l => {
               const Tag = l.external ? "a" : Link;
-              const active = !l.external && pathname === l.href;
+              const active = !l.external && !l.newTab && pathname === l.href;
+              const targetProps = (l.external || l.newTab)
+                ? { target: "_blank", rel: "noopener noreferrer" }
+                : null;
               return (
                 <Tag key={l.href} href={l.href}
+                  {...targetProps}
                   onClick={() => setMenuOpen(false)}
                   style={{
                     padding: "10px 14px",
