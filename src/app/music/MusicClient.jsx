@@ -375,31 +375,79 @@ function WaveformBg() {
   useEffect(() => {
     const c = ref.current;
     if (!c) return;
+
+    // Mobile shortcuts: lower wave count + bigger x stride + capped DPR.
+    // Phones with DPR 3 + a 400px-wide hero were turning the canvas into
+    // a 1200×2400 paint surface each frame, which was the source of the
+    // lag Arman reported. Capping DPR to 1.5 cuts paint-area ~4× without
+    // a visible quality hit on the wavy gradients.
+    const isMobile =
+      typeof window !== "undefined" &&
+      (window.matchMedia("(max-width: 768px)").matches ||
+        window.matchMedia("(hover: none)").matches);
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+
     const ctx = c.getContext("2d");
-    let raf = 0;
+    if (!ctx) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2);
     function size() {
-      c.width = c.offsetWidth * (window.devicePixelRatio || 1);
-      c.height = c.offsetHeight * (window.devicePixelRatio || 1);
+      c.width = c.offsetWidth * dpr;
+      c.height = c.offsetHeight * dpr;
     }
     size();
     window.addEventListener("resize", size);
+
+    const WAVES = isMobile
+      ? [
+          // 2 waves on phones — visually almost identical, ~33% cheaper
+          // per frame than the desktop 3-wave version.
+          { freq: 0.008, amp: 0.13, alpha: 0.34, color: "#D9FF00" },
+          { freq: 0.018, amp: 0.14, alpha: 0.14, color: "#A6CC00" },
+        ]
+      : [
+          { freq: 0.008, amp: 0.13, alpha: 0.32, color: "#D9FF00" },
+          { freq: 0.013, amp: 0.18, alpha: 0.18, color: "#A6CC00" },
+          { freq: 0.021, amp: 0.10, alpha: 0.10, color: "#ffffff" },
+        ];
+    const STEP = isMobile ? 6 : 2;          // x-stride: 3× cheaper on phones
+    const MIN_FRAME_MS = isMobile ? 50 : 33; // ~20 fps mobile, ~30 fps desktop
+
+    // Self-healing rAF — same pattern as the home hero fix. The rAF
+    // chain never breaks; `running` only gates the draw work. That way
+    // when the page is hidden / canvas scrolls offscreen / window
+    // loses focus, the loop pauses without dying.
+    let running = true;
+    let rafId = 0;
+    let heroVisible = true;
+    let lastTickTs = 0;
     const start = performance.now();
+
     function tick(now) {
+      if (now - lastTickTs < MIN_FRAME_MS) {
+        rafId = requestAnimationFrame(tick);
+        return;
+      }
+      lastTickTs = now;
+      if (!running) {
+        rafId = requestAnimationFrame(tick);
+        return;
+      }
       const t = (now - start) / 1000;
       const w = c.width;
       const h = c.height;
       ctx.clearRect(0, 0, w, h);
-      const waves = [
-        { freq: 0.008, amp: 0.13, alpha: 0.32, color: "#D9FF00" },
-        { freq: 0.013, amp: 0.18, alpha: 0.18, color: "#A6CC00" },
-        { freq: 0.021, amp: 0.10, alpha: 0.10, color: "#ffffff" },
-      ];
-      for (const wv of waves) {
+      for (const wv of WAVES) {
         ctx.beginPath();
         ctx.globalAlpha = wv.alpha;
         ctx.strokeStyle = wv.color;
-        ctx.lineWidth = 1.5 * (window.devicePixelRatio || 1);
-        for (let x = 0; x < w; x += 2) {
+        ctx.lineWidth = 1.5 * dpr;
+        for (let x = 0; x < w; x += STEP) {
           const y =
             h / 2 +
             Math.sin(x * wv.freq + t * 0.8) * h * wv.amp +
@@ -410,12 +458,40 @@ function WaveformBg() {
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
-      raf = requestAnimationFrame(tick);
+      rafId = requestAnimationFrame(tick);
     }
-    raf = requestAnimationFrame(tick);
+    rafId = requestAnimationFrame(tick);
+
+    function shouldRun() { return heroVisible && !document.hidden; }
+    function maybeStart() {
+      if (!running && shouldRun()) running = true;
+    }
+    function onVis() {
+      if (document.hidden) running = false;
+      else maybeStart();
+    }
+    document.addEventListener("visibilitychange", onVis);
+
+    // Stop drawing when the hero scrolls out of view — saves main-
+    // thread cost while the user is reading the form / library below.
+    const visObs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          heroVisible = e.isIntersecting;
+          if (!heroVisible) running = false;
+          else maybeStart();
+        }
+      },
+      { threshold: 0 }
+    );
+    visObs.observe(c);
+
     return () => {
-      cancelAnimationFrame(raf);
+      running = false;
+      cancelAnimationFrame(rafId);
       window.removeEventListener("resize", size);
+      document.removeEventListener("visibilitychange", onVis);
+      visObs.disconnect();
     };
   }, []);
   return <canvas ref={ref} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", opacity: 0.95 }} />;
