@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -24,11 +24,53 @@ function isImageCreation(item) {
 }
 
 // ── Buffering-aware modal video ───────────────────────────────────────────────
-function ModalVideo({ src }) {
+//
+// Phase 3 music pairing — when the Creation has a `musicTrack`
+// attached (via /generate?soundtrack=<id>), we render a hidden
+// <audio> element that mirrors the video's play/pause/seek state.
+// The video itself stays muted (MuAPI renders silent video anyway)
+// and the audio supplies the soundtrack. When the video loops, the
+// audio rewinds; when the user scrubs, the audio seeks; when the
+// audio's shorter than the video, it pauses at its own end and
+// resumes on the next loop. Visible "🎵 with <Track title>" chip
+// in the corner so the user can tell music's playing.
+function ModalVideo({ src, musicTrack }) {
   const [buffering, setBuffering] = useState(true);
+  const videoRef = useRef(null);
+  const audioRef = useRef(null);
+  const audioSrc = musicTrack?.r2Url || musicTrack?.audioUrl || musicTrack?.streamUrl || null;
+
+  useEffect(() => {
+    const v = videoRef.current;
+    const a = audioRef.current;
+    if (!v || !a || !audioSrc) return;
+    function onPlay()  { a.play().catch(() => {}); }
+    function onPause() { a.pause(); }
+    function onSeek()  { a.currentTime = v.currentTime % (a.duration || Infinity); }
+    function onTime()  {
+      // Keep audio within ~150ms of video time. Drift fix only —
+      // we don't sync every frame because that's a CPU pig.
+      if (Math.abs(a.currentTime - (v.currentTime % (a.duration || Infinity))) > 0.18) {
+        a.currentTime = v.currentTime % (a.duration || Infinity);
+      }
+    }
+    v.addEventListener("play",  onPlay);
+    v.addEventListener("pause", onPause);
+    v.addEventListener("seeked", onSeek);
+    v.addEventListener("timeupdate", onTime);
+    return () => {
+      v.removeEventListener("play",  onPlay);
+      v.removeEventListener("pause", onPause);
+      v.removeEventListener("seeked", onSeek);
+      v.removeEventListener("timeupdate", onTime);
+      a.pause();
+    };
+  }, [audioSrc]);
+
   return (
     <div className="relative h-full w-full">
       <video
+        ref={videoRef}
         key={src}
         src={src}
         className="h-full w-full object-contain"
@@ -41,6 +83,24 @@ function ModalVideo({ src }) {
         onPlaying={() => setBuffering(false)}
         onWaiting={() => setBuffering(true)}
       />
+      {audioSrc && (
+        <audio
+          ref={audioRef}
+          src={audioSrc}
+          preload="auto"
+          loop
+        />
+      )}
+      {musicTrack && (
+        <a
+          href={`/m/${musicTrack.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="absolute top-3 left-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/55 backdrop-blur-md border border-primary-500/40 text-[10.5px] font-bold text-primary-500 uppercase tracking-widest no-underline hover:bg-black/70 transition-colors"
+        >
+          🎵 With {musicTrack.title}
+        </a>
+      )}
       {buffering && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none">
           <div className="w-10 h-10 border-2 border-white/20 border-t-white rounded-full animate-spin" />
@@ -475,7 +535,7 @@ export default function CreationsPage() {
                       className="h-full w-full object-contain"
                     />
                   ) : (
-                    <ModalVideo src={selectedImage.imageUrl} />
+                    <ModalVideo src={selectedImage.imageUrl} musicTrack={selectedImage.musicTrack} />
                   )
                 ) : selectedImage.status === "failed" ? (
                   <div className="w-full h-full flex flex-col items-center justify-center bg-red-500/5 gap-4">

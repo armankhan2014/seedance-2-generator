@@ -47,7 +47,7 @@ export const AIService = {
     return Math.ceil(base * mult);
   },
 
-  async generate(userId, { mode, prompt, aspect_ratio = "16:9", resolution = "720p", duration = 5, quality = "basic", images_list = [], video_files = [], audio_files = [] }) {
+  async generate(userId, { mode, prompt, aspect_ratio = "16:9", resolution = "720p", duration = 5, quality = "basic", images_list = [], video_files = [], audio_files = [], musicTrackId = null }) {
     const cost = this.getCreditCost(mode, duration, quality, resolution);
 
     // Deduct credits upfront — will be refunded automatically if the API call fails
@@ -192,6 +192,11 @@ export const AIService = {
             inputImages: images_list,
             requestId: request_id,
             status: "processing",
+            // Phase 3 music pairing — optional MusicTrack reference.
+            // The /v/[id] viewer reads this and plays the audio
+            // synced under the video. Validated at the route layer
+            // (ownership check) so we trust the value here.
+            musicTrackId: musicTrackId || undefined,
           }
         });
 

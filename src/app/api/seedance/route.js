@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { AIService } from "@/lib/services/ai";
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req) {
   try {
@@ -12,7 +13,25 @@ export async function POST(req) {
     }
 
     const body = await req.json();
-    const { mode, prompt, aspect_ratio, resolution, duration, quality, model, images_list } = body;
+    const { mode, prompt, aspect_ratio, resolution, duration, quality, model, images_list, musicTrackId: rawMusicTrackId } = body;
+
+    // Phase 3 — soundtrack pairing. Verify the caller actually owns
+    // the music track they're trying to attach (and that it's a
+    // completed track, not a half-rendered or failed one). Anything
+    // off falls through with musicTrackId=null instead of erroring,
+    // so a stale ?soundtrack=… query param doesn't block generation.
+    let musicTrackId = null;
+    if (typeof rawMusicTrackId === "string" && rawMusicTrackId) {
+      try {
+        const t = await prisma.musicTrack.findFirst({
+          where: { id: rawMusicTrackId, userId: session.user.id, status: "completed", deletedAt: null },
+          select: { id: true },
+        });
+        if (t) musicTrackId = t.id;
+      } catch (e) {
+        console.warn("[AI_SEEDANCE] music ownership check failed:", e?.message);
+      }
+    }
 
     if (!prompt && mode === 'text-to-video') {
       return NextResponse.json({ error: "Prompt is required" }, { status: 400 });
@@ -45,11 +64,11 @@ export async function POST(req) {
     let result;
     if (mode === "reference-to-video") {
       result = await AIService.edit(session.user.id, {
-        mode, prompt, images_list, aspect_ratio, resolution, duration, quality, model
+        mode, prompt, images_list, aspect_ratio, resolution, duration, quality, model, musicTrackId
       });
     } else {
       result = await AIService.generate(session.user.id, {
-        mode, prompt, aspect_ratio, resolution, duration, quality, model, images_list
+        mode, prompt, aspect_ratio, resolution, duration, quality, model, images_list, musicTrackId
       });
     }
 

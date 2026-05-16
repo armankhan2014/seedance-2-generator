@@ -57,7 +57,29 @@ export const getCachedPublicGallery = () =>
 /** User creations — cached 30s per user, tag: creations-{id} */
 export const getCachedUserCreations = (userId) =>
   unstable_cache(
-    () => prisma.creation.findMany({ where: { userId }, orderBy: { createdAt: "desc" } }),
+    () => prisma.creation.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      // Phase 3 — eagerly include the paired music track so the
+      // creations viewer can render synced audio under the video
+      // without a second round-trip. Selecting only what the player
+      // needs (URLs + duration + a couple display fields).
+      include: {
+        musicTrack: {
+          select: {
+            id: true,
+            title: true,
+            r2Url: true,
+            audioUrl: true,
+            streamUrl: true,
+            actualDuration: true,
+            durationReq: true,
+            genre: true,
+            mood: true,
+          },
+        },
+      },
+    }),
     [`user-creations-${userId}`],
     { tags: [`user-${userId}`, `creations-${userId}`], revalidate: 30 }
   )();

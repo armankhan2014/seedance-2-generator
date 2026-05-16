@@ -1940,6 +1940,13 @@ function PlayerPanel({ track, onReset }) {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <PlayerAction icon="⬇" label="Download MP3" onClick={onDownload} />
           <PlayerAction icon="↗" label="Share" onClick={onShare} />
+          <PlayerAction icon="🎬" label="Use in video" onClick={() => {
+            if (!track.id) return;
+            // Cross-route hand-off — the Generate page reads
+            // ?soundtrack=<id> on mount and shows an attached-track
+            // pill above the prompt.
+            window.location.href = `/generate?soundtrack=${track.id}`;
+          }} />
           <PlayerAction icon="↻" label="Generate another" onClick={onReset} />
         </div>
       </div>
@@ -2090,14 +2097,43 @@ function PricingSection() {
 function GallerySection({ tracks, onPickStarter }) {
   return (
     <section style={{ marginTop: 60 }}>
-      <SectionHeader
-        title={tracks.length === 0 ? "Start here" : "Your library"}
-        sub={
-          tracks.length === 0
-            ? "Tap a starter to fill the form, then hit Generate"
-            : `${tracks.length} ${tracks.length === 1 ? "track" : "tracks"} · royalty-free for commercial use`
-        }
-      />
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+        <SectionHeader
+          title={tracks.length === 0 ? "Start here" : "Your library"}
+          sub={
+            tracks.length === 0
+              ? "Tap a starter to fill the form, then hit Generate"
+              : `${tracks.length} ${tracks.length === 1 ? "track" : "tracks"} · 🔒 private · 🌐 published · ↗ shareable link`
+          }
+        />
+        {/* Discover the public gallery — tracks other filmmakers
+            have explicitly published. Always visible so users know
+            it exists; opens in a new tab so they don't lose form
+            state. */}
+        <a
+          href="/music/discover"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "8px 14px",
+            background: C.panelSoft,
+            border: `1px solid ${C.borderHover}`,
+            borderRadius: 999,
+            color: C.accent,
+            fontSize: 11.5,
+            fontWeight: 800,
+            textDecoration: "none",
+            whiteSpace: "nowrap",
+            letterSpacing: "0.04em",
+            flexShrink: 0,
+          }}
+        >
+          🌐 Discover gallery →
+        </a>
+      </div>
       {tracks.length === 0 ? (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
           {STARTERS.map((s) => (
@@ -2276,6 +2312,9 @@ function GalleryCard({ track }) {
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
           {isReady && (
+            <CardPublishButton trackId={track.id} initialPublic={!!track.public} />
+          )}
+          {isReady && (
             <CardShareButton trackId={track.id} title={track.title} />
           )}
           {isReady ? (
@@ -2310,6 +2349,53 @@ function GalleryCard({ track }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// Owner-only "🌐 Publish to gallery" toggle on every library card.
+// Flips MusicTrack.public, which controls whether the track is
+// LISTED on /music/discover. Sharing via the share button is
+// independent — the /m/[id] permalink stays open regardless.
+function CardPublishButton({ trackId, initialPublic }) {
+  const [isPublic, setIsPublic] = useState(initialPublic);
+  const [busy, setBusy] = useState(false);
+  async function toggle(e) {
+    e.stopPropagation();
+    if (busy) return;
+    setBusy(true);
+    try {
+      const method = isPublic ? "DELETE" : "POST";
+      const res = await fetch(`/api/music/tracks/${trackId}/publish`, { method });
+      if (res.ok) setIsPublic(!isPublic);
+    } catch {} finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <button
+      onClick={toggle}
+      disabled={busy}
+      aria-label={isPublic ? "Remove from public gallery" : "Publish to public gallery"}
+      title={isPublic ? "Published — tap to make private" : "Publish to /music/discover"}
+      style={{
+        width: 32,
+        height: 32,
+        borderRadius: "50%",
+        background: isPublic ? "rgba(217,255,0,0.15)" : "transparent",
+        border: `1px solid ${isPublic ? C.accent : C.border}`,
+        color: isPublic ? C.accent : C.textSoft,
+        fontSize: 13,
+        cursor: busy ? "default" : "pointer",
+        fontFamily: "inherit",
+        transition: "all 0.15s",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        opacity: busy ? 0.6 : 1,
+      }}
+    >
+      {isPublic ? "🌐" : "🔒"}
+    </button>
   );
 }
 

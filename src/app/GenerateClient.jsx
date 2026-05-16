@@ -15,7 +15,7 @@ import {
 import { IoImageOutline } from "react-icons/io5";
 import { FiDownload } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { downloadMedia } from "@/lib/utils";
 import { nativeShare, isNativeApp } from "@/lib/nativeShare";
 import ArmanGallery from "@/components/saas/ArmanGallery";
@@ -453,6 +453,37 @@ export default function Home() {
   // events.
   const [pushBannerTrigger, setPushBannerTrigger] = useState(null);
 
+  // Phase 3 music pairing — when the user arrives via
+  // /generate?soundtrack=<id> (the "Use in video" button on the
+  // music page) we fetch the track row and stash it here. The pill
+  // above the prompt makes the attached-soundtrack state obvious;
+  // the API call below sends `musicTrackId` so the Creation row
+  // persists the link.
+  const searchParams = useSearchParams();
+  const [pairedTrack, setPairedTrack] = useState(null);
+  useEffect(() => {
+    const soundtrackId = searchParams?.get("soundtrack");
+    if (!soundtrackId) return;
+    let cancelled = false;
+    fetch(`/api/music/tracks/${soundtrackId}`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancelled) return;
+        if (j?.ok && j.track) setPairedTrack(j.track);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [searchParams]);
+  function clearPairedTrack() {
+    setPairedTrack(null);
+    // Strip the query param so a refresh doesn't re-attach.
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("soundtrack");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }
+
   // Expected wall-clock seconds for a generation, based on the selected video
   // duration. Provided by the user from real-world observation:
   //   5s  → ~120s (2 min)
@@ -666,6 +697,11 @@ export default function Home() {
           images_list: imagesList,
           video_files: videoFiles,
           audio_files: audioFiles,
+          // Phase 3 — soundtrack pairing. When the user arrived at
+          // /generate via ?soundtrack=<id>, we attach the music
+          // track id so the API persists it on the Creation row and
+          // /v/[id] can play the audio synced under the video.
+          musicTrackId: pairedTrack?.id || undefined,
         }),
       });
       const data = await res.json();
@@ -1114,6 +1150,63 @@ export default function Home() {
               <p className="text-[10px] text-muted">Minimal Video Engine</p>
             </div>
           </div>
+
+          {/* Phase 3 music pairing pill — visible only when the user
+              arrived from /music or /m/<id> via the "Use in video"
+              button. Shows attached track + remove (×). The musicTrackId
+              gets persisted on the Creation row when Generate fires,
+              and /v/[id] reads it to play synced audio under the video. */}
+          {pairedTrack && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "10px 14px",
+                background: "linear-gradient(135deg, rgba(217,255,0,0.12), rgba(166,204,0,0.04))",
+                border: "1px solid rgba(217,255,0,0.40)",
+                borderRadius: 12,
+                fontFamily: "Inter, sans-serif",
+              }}
+            >
+              <div style={{
+                width: 36, height: 36, borderRadius: 8,
+                background: "linear-gradient(135deg, #D9FF00, #A6CC00)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 18, flexShrink: 0,
+              }}>🎵</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: "#D9FF00", letterSpacing: "0.14em", textTransform: "uppercase" }}>
+                  Soundtrack attached
+                </div>
+                <div style={{
+                  fontSize: 13, fontWeight: 700, color: "#f1f5f9", marginTop: 2,
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                }}>
+                  {pairedTrack.title}
+                </div>
+                <div style={{ fontSize: 10.5, color: "#64748b", marginTop: 2 }}>
+                  Plays under your video at /v/&lt;id&gt;
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={clearPairedTrack}
+                aria-label="Remove soundtrack"
+                style={{
+                  background: "transparent",
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  color: "#94a3b8",
+                  width: 28, height: 28, borderRadius: "50%",
+                  cursor: "pointer", fontSize: 14,
+                  fontFamily: "inherit",
+                  flexShrink: 0,
+                }}
+              >
+                ×
+              </button>
+            </div>
+          )}
 
           {/* Mode buttons — independent floating pills (replaced the
               segmented control 2026-05-12). On mobile they wrap to 2×2,

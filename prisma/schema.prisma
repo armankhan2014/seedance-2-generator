@@ -91,6 +91,11 @@ model Creation {
   videoFiles  String[]
   inputImages String[]
   featured    Boolean  @default(false)
+  // Phase 3 music pairing — optional link to a paired MusicTrack
+  // soundtrack. Read by /v/[id] to play synced audio under the video.
+  // SetNull on the track's delete so we never cascade-destroy videos.
+  musicTrackId String?
+  musicTrack   MusicTrack? @relation(fields: [musicTrackId], references: [id], onDelete: SetNull)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   comments    Comment[]
   notifications Notification[]
@@ -98,6 +103,7 @@ model Creation {
   @@index([userId])
   @@index([userId, createdAt(sort: Desc)])
   @@index([status])
+  @@index([musicTrackId])
 }
 
 // Community follow graph — Instagram-style follower / following relationships.
@@ -304,15 +310,19 @@ model MusicTrack {
   r2Url          String?
   credits        Int
   plays          Int      @default(0)
+  // Phase 3 — owner-toggled "Publish to gallery" flag (default off).
+  public         Boolean  @default(false)
   deletedAt      DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creations Creation[]
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([status])
   @@index([deletedAt])
+  @@index([public, createdAt(sort: Desc)])
 }
 
 // Web Push subscription for browser notifications. Mirrors the model

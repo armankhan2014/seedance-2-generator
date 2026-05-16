@@ -258,6 +258,10 @@ function PlayerCard({ track }) {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <ActionBtn icon="⬇" label="Download" onClick={onDownload} />
           <ActionBtn icon="↗" label="Share" onClick={onShare} />
+          <ActionBtn icon="🎬" label="Use in video" onClick={() => {
+            if (!track.id) return;
+            window.location.href = `/generate?soundtrack=${track.id}`;
+          }} />
         </div>
       </div>
     </div>

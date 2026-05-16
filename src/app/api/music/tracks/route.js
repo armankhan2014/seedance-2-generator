@@ -40,6 +40,7 @@ export async function GET() {
         r2Url: true,
         credits: true,
         plays: true,
+        public: true,
         createdAt: true,
       },
     });
