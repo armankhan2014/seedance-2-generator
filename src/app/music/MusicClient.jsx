@@ -15,7 +15,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useSession, signIn } from "next-auth/react";
 
 const C = {
   bg: "#0a0a0a",
@@ -234,7 +234,19 @@ export default function MusicClient() {
   async function onGenerate() {
     if (stage === "submitting" || stage === "generating") return;
     if (sessionStatus !== "authenticated") {
-      router.push("/?signin=1");
+      // BUG FIX (2026-05-17): previously pushed to /?signin=1 which
+      // dumped users on the Studio homepage — they'd sign in there,
+      // land back on /generate or /, and have to navigate to /music
+      // again, losing the prompt + any ?soundtrack=<id> they came
+      // in with from a shared WhatsApp link. Now we invoke NextAuth
+      // signIn() with an explicit callbackUrl pointing back at
+      // /music (including the soundtrack query param if present)
+      // so the post-login redirect returns them exactly where they
+      // were.
+      const here = typeof window !== "undefined"
+        ? window.location.pathname + window.location.search
+        : "/music";
+      signIn(undefined, { callbackUrl: here });
       return;
     }
     setStage("submitting");
