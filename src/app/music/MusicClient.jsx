@@ -58,6 +58,51 @@ const TEMPLATES = [
   "Cyberpunk neon city night drive",
 ];
 
+// Curated starter sets — each one fills the WHOLE form (prompt + genre
+// + mood + duration + vocal) with a combination that produces a
+// great-result on Suno V5. Used by:
+//   • The "✨ Surprise me" button — picks a random STARTER and slams
+//     the form full, so a brand-new user can hit Generate immediately.
+//   • The empty-library state — replaces the old dashed-box "your
+//     tracks will appear here" with four click-to-fill cards.
+// Per Suno's own best-practice docs the sweet spot is a 15–30-word
+// descriptor prompt with explicit instruments + mood — these are
+// written to that pattern intentionally.
+const STARTERS = [
+  {
+    id: "cinematic-hero",
+    icon: "🎬",
+    label: "Cinematic hero theme",
+    sub: "Sweeping orchestral · 60s",
+    prompt: "Sweeping cinematic orchestral hero theme, soaring strings and brass, slow build to triumphant climax, modern Hollywood film score",
+    genre: "orchestral", mood: "Triumphant", duration: 60, isVocal: false, tempo: 110,
+  },
+  {
+    id: "tense-thriller",
+    icon: "🎻",
+    label: "Tense thriller",
+    sub: "Dark suspense · 60s",
+    prompt: "Tense thriller soundtrack, low pulsing strings, dissonant piano stabs, building dread, slow heartbeat percussion",
+    genre: "mystery", mood: "Tense", duration: 60, isVocal: false, tempo: 90,
+  },
+  {
+    id: "hopeful-sunrise",
+    icon: "🌅",
+    label: "Hopeful sunrise",
+    sub: "Indie acoustic · 30s",
+    prompt: "Hopeful indie acoustic morning, fingerpicked guitar, warm pads, gentle drums, dawn-breaking optimism",
+    genre: "folk", mood: "Hopeful", duration: 30, isVocal: false, tempo: 100,
+  },
+  {
+    id: "cyberpunk-drive",
+    icon: "🌆",
+    label: "Cyberpunk night drive",
+    sub: "Synthwave · 60s",
+    prompt: "Cyberpunk neon city night drive, retro synth arpeggios, gated reverb drums, analog bassline, 80s film noir energy",
+    genre: "electronic", mood: "Mysterious", duration: 60, isVocal: false, tempo: 120,
+  },
+];
+
 // Mirror of lib/suno.js → creditsForTrack so the cost shown to the
 // user matches what gets charged server-side.
 function creditsForTrack({ duration, isVocal }) {
@@ -70,6 +115,20 @@ export default function MusicClient() {
   const { data: session, status: sessionStatus } = useSession();
 
   // ── Form state ──────────────────────────────────────────────────
+  // Mode: "easy" (default — only prompt + Surprise + Generate, all
+  // other fields hidden + defaulted server-side) vs "pro" (full form
+  // with genre / mood / duration / vocal / advanced). Mirrors Suno's
+  // own Simple vs Custom mental model so users who've used Suno
+  // recognise the pattern instantly. localStorage-persisted so the
+  // user's preference sticks across visits.
+  const [mode, setMode] = useState("easy");
+  useEffect(() => {
+    try { const m = localStorage.getItem("sd-music-mode"); if (m === "pro" || m === "easy") setMode(m); } catch {}
+  }, []);
+  function changeMode(m) {
+    setMode(m);
+    try { localStorage.setItem("sd-music-mode", m); } catch {}
+  }
   const [genre, setGenre] = useState("cinematic");
   const [mood, setMood] = useState("Epic");
   const [duration, setDuration] = useState(60);
@@ -79,6 +138,26 @@ export default function MusicClient() {
   const [lyrics, setLyrics] = useState("");
   const [prompt, setPrompt] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // ── Helpers — Surprise me + Starter prompts ────────────────────
+  // applyStarter() fills every relevant form field from one of the
+  // curated STARTER presets. Used by the empty-library cards AND the
+  // Surprise-me button (which picks at random). After applying we
+  // also push the page back into Easy mode + close the advanced
+  // disclosure so the user can hit Generate without scrolling.
+  function applyStarter(s) {
+    setPrompt(s.prompt);
+    setGenre(s.genre);
+    setMood(s.mood);
+    setDuration(s.duration);
+    setTempo(s.tempo);
+    setIsVocal(s.isVocal);
+    setAdvancedOpen(false);
+  }
+  function surpriseMe() {
+    const pick = STARTERS[Math.floor(Math.random() * STARTERS.length)];
+    applyStarter(pick);
+  }
 
   // ── Generation flow ─────────────────────────────────────────────
   // Stage: idle | submitting | generating | done | failed
@@ -219,10 +298,15 @@ export default function MusicClient() {
               background: C.panel,
               border: `1px solid ${C.border}`,
               borderRadius: 18,
-              padding: "28px 24px",
+              padding: "20px 24px 28px",
               boxShadow: "0 28px 80px -20px rgba(0,0,0,0.7)",
             }}
           >
+            {/* Easy ↔ Pro mode toggle — Suno's Simple/Custom mental
+                model. Easy = just a prompt + Surprise + Generate.
+                Pro = full form. Persisted to localStorage. */}
+            <ModeTabs mode={mode} onChange={changeMode} />
+
             {errMsg && stage === "failed" && (
               <div
                 style={{
@@ -233,38 +317,97 @@ export default function MusicClient() {
                   fontSize: 12.5,
                   color: C.danger,
                   marginBottom: 18,
+                  marginTop: 18,
                 }}
               >
                 {errMsg}. Credits were refunded — try again.
               </div>
             )}
-            <SectionEyebrow>1 · Describe what you want</SectionEyebrow>
-            <PromptInput value={prompt} onChange={setPrompt} />
-            <TemplateChips onPick={setPrompt} />
-            <Divider />
-            <SectionEyebrow>2 · Pick a vibe</SectionEyebrow>
-            <GenreGrid value={genre} onChange={setGenre} />
-            <Divider />
-            <SectionEyebrow>3 · Mood, length, vocal</SectionEyebrow>
-            <ThreeColRow>
-              <MoodPicker value={mood} onChange={setMood} />
-              <DurationPicker value={duration} onChange={setDuration} />
-              <VocalToggle value={isVocal} onChange={setIsVocal} />
-            </ThreeColRow>
-            {isVocal && <LyricsBox value={lyrics} onChange={setLyrics} />}
-            <AdvancedOptions
-              open={advancedOpen}
-              onToggle={() => setAdvancedOpen((o) => !o)}
-              tempo={tempo}
-              onTempoChange={setTempo}
-              vocalGender={vocalGender}
-              onVocalGenderChange={setVocalGender}
-            />
-            <GenerateBar
-              cost={cost}
-              busy={stage === "submitting"}
-              onGenerate={onGenerate}
-            />
+
+            {/* ─── EASY MODE ─────────────────────────────────────
+                One prompt + Surprise-me + Generate. Genre/mood/
+                duration/vocal use the most-recently-picked values
+                from Pro mode (or the defaults). New users can
+                ship a generation in two taps without learning the
+                full taxonomy first. */}
+            {mode === "easy" ? (
+              <div style={{ marginTop: 22 }}>
+                <SectionEyebrow tooltip="Aim for 15–30 words. Include genre + mood + key instruments. ‘Sweeping cinematic strings, slow build, triumphant’ beats ‘epic music’.">
+                  Describe your track
+                </SectionEyebrow>
+                <PromptInput value={prompt} onChange={setPrompt} />
+                <PromptStrength value={prompt} />
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 10, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={surpriseMe}
+                    style={{
+                      padding: "8px 14px",
+                      borderRadius: 999,
+                      background: C.panelSoft,
+                      border: `1px solid ${C.borderHover}`,
+                      color: C.accent,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                      transition: "background 0.15s",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = C.accentSoft)}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = C.panelSoft)}
+                  >
+                    ✨ Surprise me
+                  </button>
+                  <span style={{ fontSize: 11, color: C.muted }}>
+                    Fills the prompt with a great-result starter — one tap to first track.
+                  </span>
+                </div>
+                <GenerateBar
+                  cost={cost}
+                  busy={stage === "submitting"}
+                  onGenerate={onGenerate}
+                />
+              </div>
+            ) : (
+              <>
+                <div style={{ marginTop: 22 }}>
+                  <SectionEyebrow tooltip="Suno style strings are 15–30 comma-separated descriptors. Picking a preset below auto-builds one for you.">
+                    1 · Describe what you want
+                  </SectionEyebrow>
+                  <PromptInput value={prompt} onChange={setPrompt} />
+                  <PromptStrength value={prompt} />
+                  <TemplateChips onPick={setPrompt} />
+                </div>
+                <Divider />
+                <SectionEyebrow tooltip="Genre presets map to Suno style strings under the hood — picking one gives the cleanest first result.">
+                  2 · Pick a vibe
+                </SectionEyebrow>
+                <GenreGrid value={genre} onChange={setGenre} />
+                <Divider />
+                <SectionEyebrow tooltip="Longer tracks cost more credits but give Suno more room for a proper intro–build–outro arc.">
+                  3 · Mood, length, vocal
+                </SectionEyebrow>
+                <ThreeColRow>
+                  <MoodPicker value={mood} onChange={setMood} />
+                  <DurationPicker value={duration} onChange={setDuration} />
+                  <VocalToggle value={isVocal} onChange={setIsVocal} />
+                </ThreeColRow>
+                {isVocal && <LyricsBox value={lyrics} onChange={setLyrics} />}
+                <AdvancedOptions
+                  open={advancedOpen}
+                  onToggle={() => setAdvancedOpen((o) => !o)}
+                  tempo={tempo}
+                  onTempoChange={setTempo}
+                  vocalGender={vocalGender}
+                  onVocalGenderChange={setVocalGender}
+                />
+                <GenerateBar
+                  cost={cost}
+                  busy={stage === "submitting"}
+                  onGenerate={onGenerate}
+                />
+              </>
+            )}
           </section>
         ) : null}
 
@@ -275,7 +418,7 @@ export default function MusicClient() {
         )}
 
         <PricingSection />
-        <GallerySection tracks={tracks} />
+        <GallerySection tracks={tracks} onPickStarter={applyStarter} />
         <FooterNotes />
       </main>
 
@@ -497,7 +640,11 @@ function WaveformBg() {
   return <canvas ref={ref} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", opacity: 0.95 }} />;
 }
 
-function SectionEyebrow({ children }) {
+// Section eyebrow with optional "?" tooltip — surfaces 2-3 lines of
+// inline help on hover/focus so beginners learn what works without
+// us shipping a full onboarding tour. `tooltip` is plain text.
+function SectionEyebrow({ children, tooltip }) {
+  const [open, setOpen] = useState(false);
   return (
     <div
       style={{
@@ -507,9 +654,156 @@ function SectionEyebrow({ children }) {
         textTransform: "uppercase",
         color: C.accent,
         marginBottom: 12,
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
       }}
     >
-      {children}
+      <span>{children}</span>
+      {tooltip && (
+        <span style={{ position: "relative" }}>
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            onMouseEnter={() => setOpen(true)}
+            onMouseLeave={() => setOpen(false)}
+            aria-label="What does this do?"
+            style={{
+              width: 16,
+              height: 16,
+              borderRadius: "50%",
+              background: C.panelSoft,
+              border: `1px solid ${C.border}`,
+              color: C.textSoft,
+              fontSize: 10,
+              fontWeight: 800,
+              cursor: "help",
+              fontFamily: "inherit",
+              padding: 0,
+              lineHeight: 1,
+            }}
+          >
+            ?
+          </button>
+          {open && (
+            <span
+              style={{
+                position: "absolute",
+                top: "calc(100% + 6px)",
+                left: -8,
+                width: 260,
+                background: "#0d0d0f",
+                border: `1px solid ${C.border}`,
+                borderRadius: 8,
+                padding: "8px 10px",
+                fontSize: 11.5,
+                fontWeight: 500,
+                letterSpacing: 0,
+                textTransform: "none",
+                color: C.textSoft,
+                lineHeight: 1.5,
+                zIndex: 5,
+                boxShadow: "0 12px 32px -8px rgba(0,0,0,0.6)",
+              }}
+            >
+              {tooltip}
+            </span>
+          )}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Easy ↔ Pro mode tabs at the top of the form. Easy is the default
+// for new users — single prompt + Surprise-me + Generate. Pro is for
+// users who want full control over genre / mood / duration / vocal.
+function ModeTabs({ mode, onChange }) {
+  const tabs = [
+    { id: "easy", label: "Easy", sub: "1 prompt → 1 track" },
+    { id: "pro",  label: "Pro",  sub: "Full control" },
+  ];
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        background: C.panelSoft,
+        border: `1px solid ${C.border}`,
+        borderRadius: 999,
+        padding: 3,
+        gap: 2,
+      }}
+    >
+      {tabs.map((t) => {
+        const on = t.id === mode;
+        return (
+          <button
+            key={t.id}
+            onClick={() => onChange(t.id)}
+            style={{
+              padding: "6px 14px",
+              borderRadius: 999,
+              border: "none",
+              background: on ? "linear-gradient(135deg, #D9FF00, #A6CC00)" : "transparent",
+              color: on ? "#0a0a0a" : C.textSoft,
+              fontSize: 12,
+              fontWeight: 800,
+              letterSpacing: "0.04em",
+              cursor: "pointer",
+              fontFamily: "inherit",
+              transition: "all 0.15s",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            {t.label}
+            <span style={{ fontSize: 9.5, opacity: 0.7, fontWeight: 600, letterSpacing: 0 }}>
+              {t.sub}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Word-count strength meter under the prompt input. Reads the
+// 15-30-word "sweet spot" out of Suno's own best-practice docs and
+// surfaces it as a horizontal bar + status label.
+function PromptStrength({ value }) {
+  const words = (value || "").trim().split(/\s+/).filter(Boolean).length;
+  let label, color, pct;
+  if (words === 0)        { label = "Type a prompt or pick a starter below";  color = C.muted;   pct = 0; }
+  else if (words < 8)     { label = "Too short — add genre + mood + instruments"; color = C.warning; pct = 0.2; }
+  else if (words < 15)    { label = `Decent — adding a few more descriptors will sharpen the result (${words}/15)`; color = C.warning; pct = 0.55; }
+  else if (words <= 30)   { label = `✓ Sweet spot (${words} words)`; color = C.accent; pct = 0.95; }
+  else if (words <= 50)   { label = `Wordy but still OK (${words} words)`; color = C.accent; pct = 0.8; }
+  else                    { label = `Too long — Suno may ignore details (${words} words)`; color = C.warning; pct = 0.65; }
+  return (
+    <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 10 }}>
+      <div
+        style={{
+          flex: 1,
+          height: 4,
+          background: C.panelSoft,
+          borderRadius: 999,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            width: `${pct * 100}%`,
+            height: "100%",
+            background: color,
+            transition: "width 0.25s, background 0.25s",
+            borderRadius: 999,
+          }}
+        />
+      </div>
+      <span style={{ fontSize: 10.5, color, fontWeight: 600, flexShrink: 0 }}>
+        {label}
+      </span>
     </div>
   );
 }
@@ -1180,30 +1474,29 @@ function PricingSection() {
   );
 }
 
-function GallerySection({ tracks }) {
+function GallerySection({ tracks, onPickStarter }) {
   return (
     <section style={{ marginTop: 60 }}>
       <SectionHeader
-        title="Your library"
+        title={tracks.length === 0 ? "Start here" : "Your library"}
         sub={
           tracks.length === 0
-            ? "Your generated tracks will appear here · royalty-free for commercial use"
+            ? "Tap a starter to fill the form, then hit Generate"
             : `${tracks.length} ${tracks.length === 1 ? "track" : "tracks"} · royalty-free for commercial use`
         }
       />
       {tracks.length === 0 ? (
-        <div
-          style={{
-            padding: "48px 24px",
-            background: C.panel,
-            border: `1px dashed ${C.border}`,
-            borderRadius: 14,
-            textAlign: "center",
-            color: C.muted,
-            fontSize: 13,
-          }}
-        >
-          You haven&rsquo;t generated any tracks yet. Compose your first one above.
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+          {STARTERS.map((s) => (
+            <StarterCard key={s.id} starter={s} onPick={() => {
+              onPickStarter(s);
+              // Scroll the form back into view so they see the
+              // prompt got filled.
+              if (typeof window !== "undefined") {
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }
+            }} />
+          ))}
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
@@ -1213,6 +1506,58 @@ function GallerySection({ tracks }) {
         </div>
       )}
     </section>
+  );
+}
+
+// Click-to-fill starter card — replaces the empty-library dashed box.
+// Tapping fills the entire form with the curated starter's values,
+// scrolls back to the top, and the user can hit Generate immediately.
+function StarterCard({ starter, onPick }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onPick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        textAlign: "left",
+        padding: "16px 16px 14px",
+        background: hover ? C.accentSoft : C.panel,
+        border: `1px solid ${hover ? C.borderHover : C.border}`,
+        borderRadius: 14,
+        cursor: "pointer",
+        fontFamily: "inherit",
+        transition: "all 0.15s",
+        transform: hover ? "translateY(-2px)" : "translateY(0)",
+        boxShadow: hover ? `0 12px 24px -10px ${C.accent}33` : "none",
+      }}
+    >
+      <div style={{ fontSize: 24, lineHeight: 1, marginBottom: 8 }}>{starter.icon}</div>
+      <div style={{ fontSize: 14, fontWeight: 800, color: hover ? C.accent : C.text }}>
+        {starter.label}
+      </div>
+      <div style={{ fontSize: 11, color: C.muted, marginTop: 3, letterSpacing: "0.04em" }}>
+        {starter.sub}
+      </div>
+      <div
+        style={{
+          marginTop: 10,
+          fontSize: 11.5,
+          color: C.textSoft,
+          lineHeight: 1.45,
+          display: "-webkit-box",
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: "vertical",
+          overflow: "hidden",
+        }}
+      >
+        “{starter.prompt}”
+      </div>
+      <div style={{ marginTop: 10, fontSize: 10.5, fontWeight: 700, color: C.accent, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+        Tap to load →
+      </div>
+    </button>
   );
 }
 
