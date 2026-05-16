@@ -32,16 +32,22 @@ const C = {
   danger: "#ef4444",
 };
 
+// Each genre gets its own HSL hue so cards can wash in a brand-aware
+// accent — warmer for cinematic/jazz, cooler for ambient/electronic,
+// vibrant for rock, regal for orchestral, etc. The lime accent stays
+// the page's primary brand color; these are SECONDARY washes that
+// give the genre grid visual variety without fighting for attention.
 const GENRES = [
-  { id: "cinematic",  icon: "🎬", label: "Cinematic",  sub: "Film score" },
-  { id: "ambient",    icon: "🎹", label: "Ambient",    sub: "Background" },
-  { id: "rock",       icon: "🎸", label: "Rock",       sub: "Energetic" },
-  { id: "orchestral", icon: "🎻", label: "Orchestral", sub: "Epic" },
-  { id: "electronic", icon: "🎧", label: "Electronic", sub: "EDM" },
-  { id: "jazz",       icon: "🎷", label: "Jazz",       sub: "Lounge" },
-  { id: "folk",       icon: "🪕", label: "Folk",       sub: "Acoustic" },
-  { id: "mystery",    icon: "🌌", label: "Mysterious", sub: "Suspense" },
+  { id: "cinematic",  icon: "🎬", label: "Cinematic",  sub: "Film score", hue: 38  /* gold */ },
+  { id: "ambient",    icon: "🎹", label: "Ambient",    sub: "Background", hue: 180 /* teal */ },
+  { id: "rock",       icon: "🎸", label: "Rock",       sub: "Energetic",  hue: 0   /* red */  },
+  { id: "orchestral", icon: "🎻", label: "Orchestral", sub: "Epic",       hue: 280 /* violet */ },
+  { id: "electronic", icon: "🎧", label: "Electronic", sub: "EDM",        hue: 195 /* cyan */ },
+  { id: "jazz",       icon: "🎷", label: "Jazz",       sub: "Lounge",     hue: 28  /* amber */ },
+  { id: "folk",       icon: "🪕", label: "Folk",       sub: "Acoustic",   hue: 95  /* olive */ },
+  { id: "mystery",    icon: "🌌", label: "Mysterious", sub: "Suspense",   hue: 240 /* indigo */ },
 ];
+const GENRE_BY_ID = Object.fromEntries(GENRES.map((g) => [g.id, g]));
 const MOODS = ["Epic", "Sad", "Hopeful", "Tense", "Mysterious", "Romantic", "Triumphant", "Calm"];
 const DURATIONS = [
   { sec: 30,  label: "30s",  credits: 4 },
@@ -292,16 +298,29 @@ export default function MusicClient() {
         {stage === "idle" || stage === "submitting" || stage === "failed" ? (
           <section
             style={{
-              marginTop: -80,
+              marginTop: -100,
               position: "relative",
               zIndex: 2,
-              background: C.panel,
+              // Layered panel: faint accent wash + glass border so the
+              // form "lifts" off the hero instead of being a plain
+              // dark box. Brand-aware (lime + magenta whispers).
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01))," +
+                "radial-gradient(ellipse 80% 60% at 50% -20%, rgba(217,255,0,0.10), transparent 70%)," +
+                C.panel,
               border: `1px solid ${C.border}`,
-              borderRadius: 18,
-              padding: "20px 24px 28px",
-              boxShadow: "0 28px 80px -20px rgba(0,0,0,0.7)",
+              borderRadius: 22,
+              padding: "24px 24px 32px",
+              boxShadow:
+                "0 28px 80px -20px rgba(0,0,0,0.8), " +
+                "0 0 0 1px rgba(217,255,0,0.04) inset",
+              animation: "musicFormIn 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both",
             }}
           >
+            <style>{`@keyframes musicFormIn {
+              from { opacity: 0; transform: translateY(20px); }
+              to   { opacity: 1; transform: translateY(0); }
+            }`}</style>
             {/* Easy ↔ Pro mode toggle — Suno's Simple/Custom mental
                 model. Easy = just a prompt + Surprise + Generate.
                 Pro = full form. Persisted to localStorage. */}
@@ -456,60 +475,197 @@ function Hero() {
       style={{
         position: "relative",
         overflow: "hidden",
-        padding: "80px 16px 140px",
-        background: "linear-gradient(180deg, #0a0a0a 0%, #0f1a05 65%, #0a0a0a 100%)",
+        padding: "96px 16px 160px",
+        background:
+          "radial-gradient(ellipse 80% 60% at 20% 20%, rgba(217,255,0,0.10), transparent 70%)," +
+          "radial-gradient(ellipse 60% 50% at 80% 70%, rgba(236,72,153,0.08), transparent 70%)," +
+          "linear-gradient(180deg, #050505 0%, #0d1606 65%, #050505 100%)",
         borderBottom: `1px solid ${C.border}`,
       }}
     >
       <WaveformBg />
+      <FloatingNotes />
       <div style={{ position: "relative", maxWidth: 1200, margin: "0 auto", textAlign: "center" }}>
         <div
           style={{
             display: "inline-flex",
             alignItems: "center",
             gap: 8,
-            padding: "5px 14px",
+            padding: "6px 16px",
             borderRadius: 999,
             background: C.accentSoft,
             border: `1px solid ${C.borderHover}`,
             fontSize: 10.5,
             fontWeight: 800,
             color: C.accent,
-            letterSpacing: "0.18em",
+            letterSpacing: "0.20em",
             textTransform: "uppercase",
-            marginBottom: 22,
+            marginBottom: 28,
+            boxShadow: `0 0 24px -4px ${C.accent}55`,
           }}
         >
-          🎵 New · powered by Suno V5
+          <PulseDot /> New · powered by Suno V5
         </div>
         <h1
           style={{
-            fontSize: "clamp(38px, 7vw, 76px)",
-            fontWeight: 800,
-            letterSpacing: "-0.025em",
-            lineHeight: 1.05,
+            fontSize: "clamp(46px, 9vw, 96px)",
+            fontWeight: 900,
+            letterSpacing: "-0.035em",
+            lineHeight: 0.98,
             margin: 0,
             color: C.text,
+            textShadow: "0 4px 40px rgba(0,0,0,0.6)",
           }}
         >
           Compose your{" "}
           <span
             style={{
-              background: `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`,
+              background:
+                "linear-gradient(135deg, #ffffff 0%, #D9FF00 35%, #A6CC00 70%, #ec4899 100%)",
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
               backgroundClip: "text",
+              fontStyle: "italic",
             }}
           >
             soundtrack
           </span>
         </h1>
-        <p style={{ margin: "16px auto 0", maxWidth: 580, fontSize: 16, lineHeight: 1.55, color: C.muted }}>
+        <p
+          style={{
+            margin: "20px auto 0",
+            maxWidth: 600,
+            fontSize: 18,
+            lineHeight: 1.55,
+            color: C.textSoft,
+            fontWeight: 500,
+          }}
+        >
           Royalty-free AI music for your films. Genre, mood, tempo, lyrics — go from
           idea to download in under three minutes.
         </p>
+        <HeroStats />
       </div>
     </section>
+  );
+}
+
+// Pulsing dot inside the "New" pill — CSS keyframe, GPU-composited.
+function PulseDot() {
+  return (
+    <>
+      <span
+        aria-hidden="true"
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: "50%",
+          background: "#D9FF00",
+          boxShadow: "0 0 8px #D9FF00",
+          animation: "musicPulse 1.6s ease-in-out infinite",
+          display: "inline-block",
+        }}
+      />
+      <style>{`@keyframes musicPulse { 0%, 100% { opacity: 0.5; transform: scale(0.9); } 50% { opacity: 1; transform: scale(1.15); } }`}</style>
+    </>
+  );
+}
+
+// Floating music-note glyphs drifting up the hero. Pure CSS keyframes
+// (no rAF) so it costs ~0 main-thread work. Each glyph has its own
+// random delay + duration so they don't look in lockstep.
+function FloatingNotes() {
+  const notes = ["♪", "♫", "♬", "♩", "𝄞", "♭"];
+  // 12 floating elements scattered across the hero.
+  const floats = Array.from({ length: 12 }, (_, i) => ({
+    left: `${(i * 8.3 + 5) % 100}%`,
+    delay: `${(i * 1.3) % 8}s`,
+    duration: `${10 + (i % 5)}s`,
+    size: 18 + (i % 4) * 6,
+    note: notes[i % notes.length],
+    color: i % 3 === 0 ? "rgba(217,255,0,0.20)" : i % 3 === 1 ? "rgba(166,204,0,0.16)" : "rgba(236,72,153,0.14)",
+  }));
+  return (
+    <>
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          overflow: "hidden",
+        }}
+      >
+        {floats.map((f, i) => (
+          <span
+            key={i}
+            style={{
+              position: "absolute",
+              left: f.left,
+              bottom: -40,
+              fontSize: f.size,
+              color: f.color,
+              fontFamily: "serif",
+              animation: `musicFloat ${f.duration} linear ${f.delay} infinite`,
+              willChange: "transform, opacity",
+            }}
+          >
+            {f.note}
+          </span>
+        ))}
+      </div>
+      <style>{`
+        @keyframes musicFloat {
+          0%   { transform: translate3d(0, 0, 0) rotate(-8deg);  opacity: 0; }
+          12%  { opacity: 1; }
+          85%  { opacity: 1; }
+          100% { transform: translate3d(40px, -110vh, 0) rotate(8deg); opacity: 0; }
+        }
+      `}</style>
+    </>
+  );
+}
+
+// Three-stat strip under the hero subtitle. Pure presentation — no
+// live numbers wired yet, just visual weight.
+function HeroStats() {
+  const stats = [
+    { value: "8", label: "Genres" },
+    { value: "<3 min", label: "Avg generate" },
+    { value: "MP3 + WAV", label: "Royalty-free" },
+  ];
+  return (
+    <div
+      style={{
+        marginTop: 36,
+        display: "inline-flex",
+        gap: 0,
+        background: "rgba(255,255,255,0.03)",
+        border: `1px solid ${C.border}`,
+        borderRadius: 16,
+        padding: "12px 4px",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+      }}
+    >
+      {stats.map((s, i) => (
+        <div
+          key={s.label}
+          style={{
+            padding: "0 22px",
+            borderLeft: i === 0 ? "none" : `1px solid ${C.border}`,
+            textAlign: "center",
+          }}
+        >
+          <div style={{ fontSize: 18, fontWeight: 800, color: C.accent, letterSpacing: "-0.01em" }}>
+            {s.value}
+          </div>
+          <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, letterSpacing: "0.16em", textTransform: "uppercase", marginTop: 3 }}>
+            {s.label}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -883,32 +1039,98 @@ function TemplateChips({ onPick }) {
 
 function GenreGrid({ value, onChange }) {
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8 }}>
-      {GENRES.map((g) => {
-        const on = g.id === value;
-        return (
-          <button
-            key={g.id}
-            onClick={() => onChange(g.id)}
-            style={{
-              textAlign: "left",
-              padding: "12px 14px",
-              borderRadius: 12,
-              background: on ? C.accentSoft : C.panelSoft,
-              border: `1px solid ${on ? C.accent : C.border}`,
-              color: on ? C.accent : C.text,
-              cursor: "pointer",
-              fontFamily: "inherit",
-              transition: "all 0.15s",
-            }}
-          >
-            <div style={{ fontSize: 22, lineHeight: 1, marginBottom: 6 }}>{g.icon}</div>
-            <div style={{ fontSize: 12.5, fontWeight: 700 }}>{g.label}</div>
-            <div style={{ fontSize: 10.5, color: on ? C.accentDark : C.muted, marginTop: 2 }}>{g.sub}</div>
-          </button>
-        );
-      })}
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+      {GENRES.map((g) => (
+        <GenreCard key={g.id} g={g} on={g.id === value} onClick={() => onChange(g.id)} />
+      ))}
     </div>
+  );
+}
+
+// Each genre card is themed in its own hue — gold for cinematic,
+// teal for ambient, red for rock, violet for orchestral, etc. The
+// selected card lights up with a deeper wash + glow ring; unselected
+// cards show a hint of the hue on the border so the grid reads as
+// "a palette of choices" rather than a wall of identical boxes.
+function GenreCard({ g, on, onClick }) {
+  const [hover, setHover] = useState(false);
+  const lit = on || hover;
+  // Inline gradient backdrop scaled by hover state — costs ~0 because
+  // it's a single linear-gradient (CSS compositor handles it).
+  const bg = lit
+    ? `linear-gradient(135deg, hsl(${g.hue} 70% 14%) 0%, hsl(${g.hue} 60% 6%) 100%)`
+    : `linear-gradient(135deg, hsl(${g.hue} 30% 9%) 0%, #1c1c1c 100%)`;
+  const borderColor = on
+    ? `hsl(${g.hue} 85% 60%)`
+    : hover
+      ? `hsl(${g.hue} 65% 45%)`
+      : `hsl(${g.hue} 30% 22%)`;
+  const labelColor = on ? `hsl(${g.hue} 95% 75%)` : "#f1f5f9";
+  const subColor = on ? `hsl(${g.hue} 60% 70%)` : "#64748b";
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        position: "relative",
+        textAlign: "left",
+        padding: "16px 16px 14px",
+        borderRadius: 14,
+        background: bg,
+        border: `1px solid ${borderColor}`,
+        color: "#f1f5f9",
+        cursor: "pointer",
+        fontFamily: "inherit",
+        transition: "all 0.2s ease",
+        transform: hover && !on ? "translateY(-2px)" : "translateY(0)",
+        boxShadow: on ? `0 0 0 1px hsl(${g.hue} 70% 50% / 0.25) inset, 0 12px 28px -12px hsl(${g.hue} 80% 50% / 0.45)` : "none",
+        overflow: "hidden",
+      }}
+    >
+      {/* Decorative noise/grain overlay using a radial gradient —
+          gives the card a slight "texture" without needing an image. */}
+      <span
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: `radial-gradient(circle at 80% 0%, hsl(${g.hue} 80% 50% / ${on ? 0.18 : 0.05}), transparent 60%)`,
+          pointerEvents: "none",
+          transition: "opacity 0.2s",
+        }}
+      />
+      <div style={{ position: "relative", fontSize: 26, lineHeight: 1, marginBottom: 8 }}>{g.icon}</div>
+      <div style={{ position: "relative", fontSize: 13, fontWeight: 800, color: labelColor, letterSpacing: "-0.005em" }}>
+        {g.label}
+      </div>
+      <div style={{ position: "relative", fontSize: 10.5, color: subColor, marginTop: 3, fontWeight: 600 }}>
+        {g.sub}
+      </div>
+      {on && (
+        <span
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            top: 10,
+            right: 10,
+            width: 16,
+            height: 16,
+            borderRadius: "50%",
+            background: `hsl(${g.hue} 85% 55%)`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 10,
+            fontWeight: 900,
+            color: "#0a0a0a",
+            boxShadow: `0 0 12px hsl(${g.hue} 80% 50% / 0.6)`,
+          }}
+        >
+          ✓
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -1509,11 +1731,19 @@ function GallerySection({ tracks, onPickStarter }) {
   );
 }
 
-// Click-to-fill starter card — replaces the empty-library dashed box.
-// Tapping fills the entire form with the curated starter's values,
-// scrolls back to the top, and the user can hit Generate immediately.
+// Click-to-fill starter card — themed by its starter's genre hue so
+// the empty-library row reads as a vibrant palette instead of four
+// identical dark rectangles. Matches the GenreCard treatment.
 function StarterCard({ starter, onPick }) {
   const [hover, setHover] = useState(false);
+  // Look up the matching genre's hue. Fall back to the brand lime.
+  const genre = GENRE_BY_ID[starter.genre];
+  const hue = genre?.hue ?? 70;
+  const bg = hover
+    ? `linear-gradient(135deg, hsl(${hue} 70% 14%) 0%, hsl(${hue} 60% 6%) 100%)`
+    : `linear-gradient(135deg, hsl(${hue} 35% 10%) 0%, #161616 100%)`;
+  const borderColor = hover ? `hsl(${hue} 75% 55%)` : `hsl(${hue} 30% 22%)`;
+  const labelColor = hover ? `hsl(${hue} 95% 78%)` : "#f1f5f9";
   return (
     <button
       type="button"
@@ -1521,41 +1751,80 @@ function StarterCard({ starter, onPick }) {
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
+        position: "relative",
         textAlign: "left",
-        padding: "16px 16px 14px",
-        background: hover ? C.accentSoft : C.panel,
-        border: `1px solid ${hover ? C.borderHover : C.border}`,
-        borderRadius: 14,
+        padding: "18px 18px 16px",
+        background: bg,
+        border: `1px solid ${borderColor}`,
+        borderRadius: 16,
         cursor: "pointer",
         fontFamily: "inherit",
-        transition: "all 0.15s",
-        transform: hover ? "translateY(-2px)" : "translateY(0)",
-        boxShadow: hover ? `0 12px 24px -10px ${C.accent}33` : "none",
+        transition: "all 0.2s ease",
+        transform: hover ? "translateY(-3px)" : "translateY(0)",
+        boxShadow: hover ? `0 18px 36px -14px hsl(${hue} 80% 50% / 0.45)` : "none",
+        overflow: "hidden",
+        color: "#f1f5f9",
       }}
     >
-      <div style={{ fontSize: 24, lineHeight: 1, marginBottom: 8 }}>{starter.icon}</div>
-      <div style={{ fontSize: 14, fontWeight: 800, color: hover ? C.accent : C.text }}>
+      {/* Glow disc anchored top-right of the card — gives it depth */}
+      <span
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          top: -20,
+          right: -20,
+          width: 100,
+          height: 100,
+          borderRadius: "50%",
+          background: `radial-gradient(circle, hsl(${hue} 85% 55% / ${hover ? 0.32 : 0.14}) 0%, transparent 70%)`,
+          pointerEvents: "none",
+          transition: "all 0.3s",
+        }}
+      />
+      <div style={{ position: "relative", fontSize: 28, lineHeight: 1, marginBottom: 10 }}>
+        {starter.icon}
+      </div>
+      <div style={{ position: "relative", fontSize: 14.5, fontWeight: 800, color: labelColor, letterSpacing: "-0.005em" }}>
         {starter.label}
       </div>
-      <div style={{ fontSize: 11, color: C.muted, marginTop: 3, letterSpacing: "0.04em" }}>
+      <div style={{ position: "relative", fontSize: 10.5, color: hover ? `hsl(${hue} 60% 75%)` : "#64748b", marginTop: 3, letterSpacing: "0.06em", fontWeight: 700, textTransform: "uppercase" }}>
         {starter.sub}
       </div>
       <div
         style={{
-          marginTop: 10,
+          position: "relative",
+          marginTop: 12,
           fontSize: 11.5,
-          color: C.textSoft,
-          lineHeight: 1.45,
+          color: "#cbd5e1",
+          lineHeight: 1.5,
           display: "-webkit-box",
           WebkitLineClamp: 2,
           WebkitBoxOrient: "vertical",
           overflow: "hidden",
+          fontStyle: "italic",
+          opacity: 0.85,
         }}
       >
         “{starter.prompt}”
       </div>
-      <div style={{ marginTop: 10, fontSize: 10.5, fontWeight: 700, color: C.accent, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-        Tap to load →
+      <div
+        style={{
+          position: "relative",
+          marginTop: 14,
+          fontSize: 10.5,
+          fontWeight: 800,
+          color: hover ? `hsl(${hue} 90% 70%)` : C.accent,
+          letterSpacing: "0.10em",
+          textTransform: "uppercase",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+        }}
+      >
+        Tap to load
+        <span style={{ transform: hover ? "translateX(4px)" : "translateX(0)", transition: "transform 0.2s" }}>
+          →
+        </span>
       </div>
     </button>
   );
