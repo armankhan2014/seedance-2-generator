@@ -14,6 +14,7 @@
 // Arman signed off on — only the data wiring changed.
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 
@@ -3726,6 +3727,107 @@ const PRO_STEM_LABELS = [
   { key: "backingVocalsUrl",  icon: "🎤", label: "Backing vocals" },
 ];
 
+// Shared shell that renders ANY popover into document.body via a
+// React portal — escapes every parent stacking context (cards,
+// grids, transforms) that would otherwise clip / draw over the
+// popover. Backdrop click + Escape key both close. Position is
+// computed from the trigger button's bounding rect (passed in via
+// the `rect` prop) and clamped to the viewport so it doesn't fall
+// off the right/bottom edge on small screens.
+//
+// Bug fix 2026-05-18: Arman reported the basic 2-stem stem-split
+// popover was rendering behind adjacent music cards and mixing
+// with their text. Root cause: the popover lived inside the card
+// (position: absolute with zIndex: 30), but cards have no
+// stacking context of their own, so later-DOM-order cards painted
+// on top regardless of internal z-index. Portal + position: fixed
+// + viewport-clamped coords fixes it once and for all.
+function PortalPopover({ rect, onClose, children, minWidth = 220, maxHeight = 380 }) {
+  // Mount-flag so we never call createPortal during SSR (document
+  // is undefined on the server). The portal mounts after hydration.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Close on Escape, close on outside-click (we render a full-
+  // viewport invisible backdrop that captures the click), close
+  // on scroll (otherwise the popover drifts away from the trigger
+  // since fixed-positioning doesn't follow page scroll).
+  useEffect(() => {
+    if (!mounted) return;
+    function onKey(e) { if (e.key === "Escape") onClose(); }
+    function onScroll() { onClose(); }
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [mounted, onClose]);
+
+  if (!mounted || !rect) return null;
+
+  // Clamp to viewport. Anchor under the trigger button by default;
+  // if there isn't enough room below, flip above.
+  const popoverWidth = Math.max(minWidth, 220);
+  const viewportW = typeof window !== "undefined" ? window.innerWidth : 1024;
+  const viewportH = typeof window !== "undefined" ? window.innerHeight : 768;
+  // Prefer right-aligned to the trigger; clamp to keep 8px margin.
+  let right = Math.max(8, viewportW - rect.right);
+  // If the popover would extend past the left edge, switch to
+  // left-anchored instead.
+  if (viewportW - right - popoverWidth < 8) {
+    right = Math.max(8, viewportW - rect.left - popoverWidth);
+  }
+  // Vertical: default below the trigger with a 6px gap. If that
+  // would overflow the viewport, flip above.
+  const below = rect.bottom + 6;
+  const wouldOverflow = below + maxHeight > viewportH - 8;
+  const top = wouldOverflow
+    ? Math.max(8, rect.top - 6 - maxHeight)
+    : below;
+
+  return createPortal(
+    <>
+      {/* Invisible click-catcher. Covers the whole viewport so any
+          tap outside the popover closes it. */}
+      <div
+        onClick={(e) => { e.stopPropagation(); onClose(); }}
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 1000,
+          background: "transparent",
+        }}
+      />
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: "fixed",
+          top,
+          right,
+          minWidth: popoverWidth,
+          maxHeight,
+          overflowY: "auto",
+          background: C.panel,
+          border: `1px solid ${C.borderHover}`,
+          borderRadius: 10,
+          padding: 8,
+          boxShadow: "0 18px 48px -12px rgba(0,0,0,0.85)",
+          zIndex: 1001,
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+        }}
+      >
+        {children}
+      </div>
+    </>,
+    document.body
+  );
+}
+
 // Stem-split control on every library card. Now supports both modes:
 //   • 2-stem ("vocal", 4 credits)  — vocal + instrumental
 //   • 12-stem ("split", 18 credits) — full Pro split: drums, bass,
@@ -3734,16 +3836,31 @@ const PRO_STEM_LABELS = [
 //                                      fx, lead vocal, backing vocals
 //
 // State machine:
-//   • stemStatus = null              → 🎚️ button → opens a mode-picker
-//                                       popover (Basic vs Pro)
+//   • stemStatus = null              → 🎚️ button → mode-picker popover
+//                                       (Basic vs Pro) via PortalPopover
 //   • stemStatus = "processing"      → ⏳ spinner
-//   • stemStatus = "completed"       → 🎚️ button → opens download
-//                                       chips popover (2 or up to 12)
-//   • stemStatus = "failed"          → ↻ retry button with error in title
+//   • stemStatus = "completed"       → 🎚️ button → download chips
+//                                       (2 or up to 12) via PortalPopover
+//   • stemStatus = "failed"          → ↻ retry button — same mode picker
 function CardStemControl({ trackId, stemStatus, stemMode, vocalUrl, instrumentalUrl, stemError, onSplit, allStems }) {
   const [busy, setBusy] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [triggerRect, setTriggerRect] = useState(null);
+  const triggerRef = useRef(null);
+
+  function openPicker(e) {
+    e.stopPropagation();
+    if (!triggerRef.current) return;
+    setTriggerRect(triggerRef.current.getBoundingClientRect());
+    setPickerOpen(true);
+  }
+  function openDownloads(e) {
+    e.stopPropagation();
+    if (!triggerRef.current) return;
+    setTriggerRect(triggerRef.current.getBoundingClientRect());
+    setDownloadOpen(true);
+  }
 
   async function trigger(mode) {
     if (busy) return;
@@ -3756,11 +3873,9 @@ function CardStemControl({ trackId, stemStatus, stemMode, vocalUrl, instrumental
     }
   }
 
-  // Done — popover with download chips for every present stem URL.
+  // ── Completed: download chips popover ──────────────────────────
   if (stemStatus === "completed" && vocalUrl) {
     const proMode = stemMode === "split";
-    // For 12-stem mode, walk PRO_STEM_LABELS and emit only present
-    // stems. For 2-stem mode, just vocal + instrumental.
     const chips = proMode
       ? PRO_STEM_LABELS
           .map((s) => ({ ...s, url: allStems?.[s.key] }))
@@ -3770,9 +3885,10 @@ function CardStemControl({ trackId, stemStatus, stemMode, vocalUrl, instrumental
           { key: "instrumentalUrl", icon: "🎵", label: "Instrumental", url: instrumentalUrl },
         ];
     return (
-      <div style={{ position: "relative" }}>
+      <>
         <button
-          onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+          ref={triggerRef}
+          onClick={openDownloads}
           aria-label="Stem downloads"
           title={proMode ? `${chips.length} Pro stems ready` : "Stems ready"}
           style={{
@@ -3812,27 +3928,8 @@ function CardStemControl({ trackId, stemStatus, stemMode, vocalUrl, instrumental
             </span>
           )}
         </button>
-        {open && (
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              position: "absolute",
-              top: 38,
-              right: 0,
-              minWidth: 220,
-              maxHeight: 380,
-              overflowY: "auto",
-              background: C.panel,
-              border: `1px solid ${C.borderHover}`,
-              borderRadius: 10,
-              padding: 8,
-              boxShadow: "0 12px 32px -10px rgba(0,0,0,0.7)",
-              zIndex: 30,
-              display: "flex",
-              flexDirection: "column",
-              gap: 4,
-            }}
-          >
+        {downloadOpen && (
+          <PortalPopover rect={triggerRect} onClose={() => setDownloadOpen(false)} minWidth={240}>
             <div style={{
               fontSize: 10,
               color: C.muted,
@@ -3870,7 +3967,7 @@ function CardStemControl({ trackId, stemStatus, stemMode, vocalUrl, instrumental
               </a>
             ))}
             <button
-              onClick={() => setOpen(false)}
+              onClick={() => setDownloadOpen(false)}
               style={{
                 marginTop: 2,
                 padding: "5px 8px",
@@ -3886,13 +3983,13 @@ function CardStemControl({ trackId, stemStatus, stemMode, vocalUrl, instrumental
             >
               Close
             </button>
-          </div>
+          </PortalPopover>
         )}
-      </div>
+      </>
     );
   }
 
-  // In progress — pulse indicator.
+  // ── In progress ───────────────────────────────────────────────
   if (stemStatus === "processing") {
     return (
       <div
@@ -3918,12 +4015,13 @@ function CardStemControl({ trackId, stemStatus, stemMode, vocalUrl, instrumental
     );
   }
 
-  // Failed → show retry. Reuses the same picker so user can pick mode again.
+  // ── Failed → retry via the same mode picker ──────────────────
   if (stemStatus === "failed") {
     return (
-      <div style={{ position: "relative" }}>
+      <>
         <button
-          onClick={(e) => { e.stopPropagation(); setPickerOpen((o) => !o); }}
+          ref={triggerRef}
+          onClick={openPicker}
           disabled={busy}
           aria-label="Retry stem split"
           title={stemError ? `Stem split failed: ${stemError} — tap to retry` : "Tap to retry"}
@@ -3945,16 +4043,21 @@ function CardStemControl({ trackId, stemStatus, stemMode, vocalUrl, instrumental
         >
           ↻
         </button>
-        {pickerOpen && <StemModePicker onPick={trigger} onClose={() => setPickerOpen(false)} />}
-      </div>
+        {pickerOpen && (
+          <PortalPopover rect={triggerRect} onClose={() => setPickerOpen(false)} minWidth={280}>
+            <StemModePickerContent onPick={trigger} onClose={() => setPickerOpen(false)} />
+          </PortalPopover>
+        )}
+      </>
     );
   }
 
-  // Idle — clicking opens the mode picker so user chooses Basic vs Pro.
+  // ── Idle — clicking opens the mode picker ────────────────────
   return (
-    <div style={{ position: "relative" }}>
+    <>
       <button
-        onClick={(e) => { e.stopPropagation(); setPickerOpen((o) => !o); }}
+        ref={triggerRef}
+        onClick={openPicker}
         disabled={busy}
         aria-label="Split into stems"
         title="Split into vocal + instrumental, or 12 Pro stems"
@@ -3977,34 +4080,21 @@ function CardStemControl({ trackId, stemStatus, stemMode, vocalUrl, instrumental
       >
         🎚️
       </button>
-      {pickerOpen && <StemModePicker onPick={trigger} onClose={() => setPickerOpen(false)} />}
-    </div>
+      {pickerOpen && (
+        <PortalPopover rect={triggerRect} onClose={() => setPickerOpen(false)} minWidth={280}>
+          <StemModePickerContent onPick={trigger} onClose={() => setPickerOpen(false)} />
+        </PortalPopover>
+      )}
+    </>
   );
 }
 
-// Mode picker popover — used from CardStemControl idle + failed states.
-// Two big buttons: Basic (vocal + instrumental, 4 credits) and Pro
-// (12 stems, 18 credits). Closes after the user picks one.
-function StemModePicker({ onPick, onClose }) {
+// Just the popover BODY of the mode picker — wrapped by
+// PortalPopover at the call site. Two big buttons: Basic (4 credits,
+// 2 stems) and Pro (18 credits, 12 stems).
+function StemModePickerContent({ onPick, onClose }) {
   return (
-    <div
-      onClick={(e) => e.stopPropagation()}
-      style={{
-        position: "absolute",
-        top: 38,
-        right: 0,
-        minWidth: 260,
-        background: C.panel,
-        border: `1px solid ${C.borderHover}`,
-        borderRadius: 10,
-        padding: 8,
-        boxShadow: "0 12px 32px -10px rgba(0,0,0,0.7)",
-        zIndex: 30,
-        display: "flex",
-        flexDirection: "column",
-        gap: 6,
-      }}
-    >
+    <>
       <div style={{
         fontSize: 10,
         color: C.muted,
@@ -4084,7 +4174,7 @@ function StemModePicker({ onPick, onClose }) {
       >
         Cancel
       </button>
-    </div>
+    </>
   );
 }
 
