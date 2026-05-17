@@ -513,6 +513,76 @@ export default function MusicClient() {
     return () => { stopped = true; };
   }, [stage, currentTrackId]);
 
+  // ── Stem-split polling ────────────────────────────────────────────
+  // Suno's vocal-removal endpoint typically completes in 30-90s. While
+  // any track in the user's library shows stemStatus === "processing"
+  // we refetch the library every 6s so the "Splitting…" chips flip to
+  // download links automatically — same UX as the main generation
+  // poll but lighter (only fires when stems are in flight).
+  useEffect(() => {
+    const hasPending = tracks.some((t) => t.stemStatus === "processing");
+    if (!hasPending) return;
+    let stopped = false;
+    let tries = 0;
+    const MAX = 30; // 30 × 6s = 3 min cap
+    async function tick() {
+      while (!stopped && tries < MAX) {
+        await new Promise((r) => setTimeout(r, 6000));
+        if (stopped) return;
+        tries++;
+        try {
+          const res = await fetch("/api/music/tracks");
+          if (!res.ok) continue;
+          const j = await res.json();
+          if (!j.ok || !Array.isArray(j.tracks)) continue;
+          setTracks(j.tracks);
+          // Bail once nothing is processing anymore.
+          if (!j.tracks.some((t) => t.stemStatus === "processing")) return;
+        } catch {}
+      }
+    }
+    tick();
+    return () => { stopped = true; };
+  }, [tracks]);
+
+  // Kick off a stem split on a finished track. Optimistically marks
+  // the row as processing so the UI flips immediately; the polling
+  // loop above will refetch the real state once Suno's callback lands.
+  async function onSplitStems(trackId) {
+    try {
+      const res = await fetch(`/api/music/tracks/${trackId}/stems`, { method: "POST" });
+      const j = await res.json();
+      if (!res.ok) {
+        flashToast(j.error || "Couldn't start stem split");
+        return;
+      }
+      // Optimistic update: flip the row's stemStatus locally so the
+      // button immediately shows "Splitting…" without waiting for
+      // the next poll. If it was already done, j.stemStatus is
+      // "completed" + j.vocalUrl + j.instrumentalUrl are set.
+      setTracks((prev) =>
+        prev.map((t) =>
+          t.id === trackId
+            ? {
+                ...t,
+                stemStatus: j.stemStatus || "processing",
+                vocalUrl: j.vocalUrl ?? t.vocalUrl,
+                instrumentalUrl: j.instrumentalUrl ?? t.instrumentalUrl,
+                stemError: null,
+              }
+            : t
+        )
+      );
+      if (j.alreadyDone) {
+        flashToast("Stems are already split — download links are ready");
+      } else if (j.stemStatus === "processing") {
+        flashToast(`Splitting stems · ${j.cost ?? 4} credits — ~60s`);
+      }
+    } catch (e) {
+      flashToast(e?.message || "Couldn't start stem split");
+    }
+  }
+
   function onReset() {
     setStage("idle");
     setCurrentTrackId(null);
@@ -774,7 +844,7 @@ export default function MusicClient() {
         )}
 
         <PricingSection />
-        <GallerySection tracks={tracks} onPickStarter={applyStarter} />
+        <GallerySection tracks={tracks} onPickStarter={applyStarter} onSplitStems={onSplitStems} />
         <FooterNotes />
       </main>
 
@@ -3071,7 +3141,7 @@ function PricingSection() {
   );
 }
 
-function GallerySection({ tracks, onPickStarter }) {
+function GallerySection({ tracks, onPickStarter, onSplitStems }) {
   return (
     <section style={{ marginTop: 60 }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
@@ -3127,7 +3197,7 @@ function GallerySection({ tracks, onPickStarter }) {
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
           {tracks.map((t) => (
-            <GalleryCard key={t.id} track={t} />
+            <GalleryCard key={t.id} track={t} onSplitStems={onSplitStems} />
           ))}
         </div>
       )}
@@ -3234,7 +3304,7 @@ function StarterCard({ starter, onPick }) {
   );
 }
 
-function GalleryCard({ track }) {
+function GalleryCard({ track, onSplitStems }) {
   const [hover, setHover] = useState(false);
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
@@ -3288,6 +3358,16 @@ function GalleryCard({ track }) {
           </div>
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+          {isReady && onSplitStems && (
+            <CardStemControl
+              trackId={track.id}
+              stemStatus={track.stemStatus}
+              vocalUrl={track.vocalUrl}
+              instrumentalUrl={track.instrumentalUrl}
+              stemError={track.stemError}
+              onSplit={onSplitStems}
+            />
+          )}
           {isReady && (
             <CardPublishButton trackId={track.id} initialPublic={!!track.public} />
           )}
@@ -3372,6 +3452,225 @@ function CardPublishButton({ trackId, initialPublic }) {
       }}
     >
       {isPublic ? "🌐" : "🔒"}
+    </button>
+  );
+}
+
+// Stem-split control on every library card. Four states:
+//   • null            — show "🎚️ Split" trigger button (kicks off the
+//                        Suno vocal-removal job, costs 4 credits)
+//   • "processing"    — show a small spinner badge ("Splitting…")
+//   • "completed"     — show two download buttons (🎤 Vocal + 🎵 Instr.)
+//                        that pop open the stem URLs in a new tab
+//   • "failed"        — show "↻ Retry" button with the error in title
+//
+// Self-contained — the parent (GalleryCard / MusicClient) just hands
+// us the trackId + the current state fields + an onSplit callback.
+function CardStemControl({ trackId, stemStatus, vocalUrl, instrumentalUrl, stemError, onSplit }) {
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  async function trigger(e) {
+    e.stopPropagation();
+    if (busy) return;
+    setBusy(true);
+    try {
+      await onSplit(trackId);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Done — show a tiny stem-bar with two download chips behind a
+  // popover. Saves horizontal space on mobile cards.
+  if (stemStatus === "completed" && vocalUrl && instrumentalUrl) {
+    return (
+      <div style={{ position: "relative" }}>
+        <button
+          onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+          aria-label="Stem downloads"
+          title="Stem downloads ready"
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            background: "rgba(217,255,0,0.15)",
+            border: `1px solid ${C.accent}`,
+            color: C.accent,
+            fontSize: 13,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          🎚️
+        </button>
+        {open && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: "absolute",
+              top: 38,
+              right: 0,
+              minWidth: 180,
+              background: C.panel,
+              border: `1px solid ${C.borderHover}`,
+              borderRadius: 10,
+              padding: 8,
+              boxShadow: "0 12px 32px -10px rgba(0,0,0,0.7)",
+              zIndex: 30,
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+            }}
+          >
+            <a
+              href={vocalUrl}
+              download
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                background: C.panelSoft,
+                border: `1px solid ${C.border}`,
+                color: C.text,
+                textDecoration: "none",
+                fontSize: 12,
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              🎤 <span>Download vocal</span>
+            </a>
+            <a
+              href={instrumentalUrl}
+              download
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                padding: "8px 12px",
+                borderRadius: 8,
+                background: C.panelSoft,
+                border: `1px solid ${C.border}`,
+                color: C.text,
+                textDecoration: "none",
+                fontSize: 12,
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              🎵 <span>Download instrumental</span>
+            </a>
+            <button
+              onClick={() => setOpen(false)}
+              style={{
+                marginTop: 2,
+                padding: "5px 8px",
+                borderRadius: 6,
+                background: "transparent",
+                border: "none",
+                color: C.muted,
+                fontSize: 10.5,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              Close
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // In progress — pulse indicator.
+  if (stemStatus === "processing") {
+    return (
+      <div
+        title="Splitting stems… typically 60s"
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: "50%",
+          background: C.panelSoft,
+          border: `1px solid ${C.borderHover}`,
+          color: C.accent,
+          fontSize: 13,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <style>{`@keyframes stemSpin{to{transform:rotate(360deg)}}`}</style>
+        <span style={{ display: "inline-block", animation: "stemSpin 1.4s linear infinite" }}>
+          ⏳
+        </span>
+      </div>
+    );
+  }
+
+  // Failed → show retry.
+  if (stemStatus === "failed") {
+    return (
+      <button
+        onClick={trigger}
+        disabled={busy}
+        aria-label="Retry stem split"
+        title={stemError ? `Stem split failed: ${stemError} — tap to retry` : "Tap to retry"}
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: "50%",
+          background: "transparent",
+          border: `1px solid rgba(239,68,68,0.5)`,
+          color: "#fca5a5",
+          fontSize: 13,
+          cursor: busy ? "default" : "pointer",
+          fontFamily: "inherit",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          opacity: busy ? 0.6 : 1,
+        }}
+      >
+        ↻
+      </button>
+    );
+  }
+
+  // Idle — initial CTA.
+  return (
+    <button
+      onClick={trigger}
+      disabled={busy}
+      aria-label="Split into vocal + instrumental stems"
+      title="Split into vocal + instrumental stems · 4 credits · ~60s"
+      style={{
+        width: 32,
+        height: 32,
+        borderRadius: "50%",
+        background: "transparent",
+        border: `1px solid ${C.border}`,
+        color: C.textSoft,
+        fontSize: 13,
+        cursor: busy ? "default" : "pointer",
+        fontFamily: "inherit",
+        transition: "all 0.15s",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        opacity: busy ? 0.6 : 1,
+      }}
+    >
+      🎚️
     </button>
   );
 }

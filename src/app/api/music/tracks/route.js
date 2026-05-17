@@ -41,6 +41,13 @@ export async function GET() {
         credits: true,
         plays: true,
         public: true,
+        // Stem-split state — surfaced on each card so the UI can
+        // show "Split stems" CTA / "Splitting…" indicator / vocal +
+        // instrumental download chips depending on stemStatus.
+        stemStatus: true,
+        vocalUrl: true,
+        instrumentalUrl: true,
+        stemError: true,
         createdAt: true,
       },
     });

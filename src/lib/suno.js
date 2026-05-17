@@ -246,6 +246,61 @@ export async function addInstrumentalToVocal({
   return { taskId: json.data?.taskId, raw: json };
 }
 
+// ── Stem split (vocal removal) ──────────────────────────────────────
+//
+// Suno's vocal-removal endpoint takes a previously-generated track
+// (identified by its original generation taskId + audioId) and returns
+// two separated stems: vocals-only and instrumental-only.
+//
+// Two modes available upstream:
+//   • separate_vocal (default, ~10 wholesale credits) — 2 stems
+//   • split_stem    (~50 wholesale credits)           — up to 12 stems
+//     (drums, bass, guitar, keys, strings, brass, woodwinds, percussion,
+//      synth, FX, plus lead + backing vocals)
+//
+// We ship `separate_vocal` only for now — it's by far the most
+// common request (filmmakers want the instrumental under dialogue;
+// musicians want the vocal stem for remixing). Adding `split_stem`
+// later is a one-param change.
+//
+// Async: returns a stemTaskId immediately, the actual stem URLs
+// arrive via callBackUrl webhook with payload data.vocal_removal_info.
+export async function separateVocals({
+  taskId,
+  audioId,
+  callBackUrl,
+  type = "separate_vocal",
+}) {
+  const apiKey = ensureKey();
+  if (!taskId) throw new Error("taskId is required");
+  if (!audioId) throw new Error("audioId is required");
+  if (!callBackUrl) throw new Error("callBackUrl is required");
+
+  const body = {
+    taskId,
+    audioId,
+    type,
+    callBackUrl,
+  };
+  const res = await fetch(`${SUNO_BASE}/api/v1/vocal-removal/generate`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json.code !== 200) {
+    const err = new Error(json.msg || `Music service error ${res.status}`);
+    err.status = res.status;
+    err.code = json.code;
+    err.body = json;
+    throw err;
+  }
+  return { stemTaskId: json.data?.taskId, raw: json };
+}
+
 // Polling fallback — used by a cron sweep that picks up tracks stuck
 // in "processing" for > 5 minutes (callback may have missed us if we
 // were deploying at that exact second).
@@ -299,3 +354,11 @@ export function creditsForTrack({ duration, isVocal }) {
   // Vocal upcharge — +4 across the board.
   return base + (isVocal ? 4 : 0);
 }
+
+// Flat credit cost for stem split (vocal + instrumental separation).
+// Single source of truth — imported by both the kickoff route AND
+// the callback handler (for refund-on-failure), so a price change
+// only needs to touch this one file. Wholesale cost upstream is ~10
+// of Suno's credits per split; we charge 4 of ours for a ~3× margin
+// without making it feel pricey.
+export const STEM_COST = 4;

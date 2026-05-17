@@ -312,6 +312,21 @@ model MusicTrack {
   plays          Int      @default(0)
   // Phase 3 — owner-toggled "Publish to gallery" flag (default off).
   public         Boolean  @default(false)
+  // Stem-split state (Phase 4 — vocal/instrumental separation).
+  // Populated by /api/music/tracks/[id]/stems + /api/music/stems/callback
+  // when the owner asks Suno to split a finished track into separate
+  // vocal + instrumental WAVs (filmmakers want the instrumental under
+  // dialogue; musicians want the vocal stem for remixing).
+  //   • stemTaskId      — Suno's vocal-removal task id (for callback lookup)
+  //   • stemStatus      — null | "processing" | "completed" | "failed"
+  //   • vocalUrl        — R2-mirrored vocal-only mp3
+  //   • instrumentalUrl — R2-mirrored instrumental-only mp3
+  //   • stemError       — friendly error string surfaced in the UI on failure
+  stemTaskId      String?
+  stemStatus      String?
+  vocalUrl        String?
+  instrumentalUrl String?
+  stemError       String?  @db.Text
   deletedAt      DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -323,6 +338,7 @@ model MusicTrack {
   @@index([status])
   @@index([deletedAt])
   @@index([public, createdAt(sort: Desc)])
+  @@index([stemTaskId])
 }
 
 // Web Push subscription for browser notifications. Mirrors the model

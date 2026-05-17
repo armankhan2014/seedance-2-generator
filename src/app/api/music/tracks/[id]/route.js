@@ -37,6 +37,13 @@ export async function GET(_req, { params }) {
       r2Url: true,
       credits: true,
       plays: true,
+      // Stem-split state — surfaced so the client polling loop can
+      // flip the UI from "Splitting…" to download chips when the
+      // upstream callback lands.
+      stemStatus: true,
+      vocalUrl: true,
+      instrumentalUrl: true,
+      stemError: true,
       createdAt: true,
     },
   });
