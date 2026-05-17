@@ -130,12 +130,30 @@ export default function MusicClient() {
   // user's preference sticks across visits.
   const [mode, setMode] = useState("easy");
   useEffect(() => {
-    try { const m = localStorage.getItem("sd-music-mode"); if (m === "pro" || m === "easy") setMode(m); } catch {}
+    try {
+      const m = localStorage.getItem("sd-music-mode");
+      if (m === "pro" || m === "easy" || m === "studio-pro") setMode(m);
+    } catch {}
   }, []);
   function changeMode(m) {
     setMode(m);
     try { localStorage.setItem("sd-music-mode", m); } catch {}
+    // Studio Pro auto-flips pro-friendly defaults so composers /
+    // sound designers don't have to dig: highest model (V5_5),
+    // advanced options open. Stays in effect for the session; user
+    // can still tweak individual fields. Not applied retroactively
+    // when switching FROM studio-pro back to pro/easy — once set,
+    // their model/advanced choices stick.
+    if (m === "studio-pro") {
+      setModel("V5_5");
+      setAdvancedOpen(true);
+    }
   }
+  // Pro form is shown for both "pro" AND "studio-pro" — the latter
+  // just layers smarter defaults + a banner on top. Used throughout
+  // the render below as a shorthand for "should we show the full
+  // form vs the easy single-prompt UI?"
+  const isPro = mode === "pro" || mode === "studio-pro";
   const [genre, setGenre] = useState("cinematic");
   const [mood, setMood] = useState("Epic");
   const [duration, setDuration] = useState(60);
@@ -758,6 +776,11 @@ export default function MusicClient() {
               </div>
             ) : (
               <>
+                {/* Studio Pro banner — only shown when mode ===
+                    "studio-pro". Pro mode (regular) skips this so
+                    the form looks identical to before. */}
+                {mode === "studio-pro" && <StudioProBanner />}
+
                 {/* 1 · DESCRIBE — the user's free-form direction.
                     Copy adapts based on reference mode so the
                     placeholder + helper text match what the prompt is
@@ -1367,13 +1390,77 @@ function SectionEyebrow({ children, tooltip }) {
   );
 }
 
-// Easy ↔ Pro mode tabs at the top of the form. Easy is the default
-// for new users — single prompt + Surprise-me + Generate. Pro is for
-// users who want full control over genre / mood / duration / vocal.
+// Banner that appears at the top of the form when the user is in
+// Studio Pro mode. Explains the pro tier perks + sets visual
+// context so users understand WHY they picked this mode. Same
+// lime→pink gradient as the active Studio Pro tab so the two are
+// visually linked.
+function StudioProBanner() {
+  return (
+    <div
+      style={{
+        marginTop: 18,
+        padding: "12px 16px",
+        background:
+          "linear-gradient(135deg, rgba(217,255,0,0.10) 0%, rgba(236,72,153,0.10) 100%)",
+        border: "1px solid rgba(217,255,0,0.30)",
+        borderRadius: 12,
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 12,
+        flexWrap: "wrap",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 22,
+          lineHeight: 1,
+          flexShrink: 0,
+          marginTop: 1,
+        }}
+      >
+        🎛️
+      </div>
+      <div style={{ flex: 1, minWidth: 220 }}>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: "0.18em",
+            textTransform: "uppercase",
+            color: C.accent,
+            marginBottom: 4,
+          }}
+        >
+          Studio Pro
+        </div>
+        <div style={{ fontSize: 12.5, color: C.textSoft, lineHeight: 1.55 }}>
+          The pro tier for composers, sound designers + mix engineers.
+          Generations default to V5_5 (highest quality model) with
+          advanced controls open. After a track finishes, you can{" "}
+          <b style={{ color: C.text }}>split it into 12 individual stems</b>
+          {" "}(drums, bass, keys, strings, brass, synth, FX, lead + backing
+          vocals) ready to drop into your DAW. Every track shows BPM for
+          easy sync work.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Three-way mode tabs at the top of the form:
+//   • Easy       — single prompt + Surprise-me + Generate.
+//   • Pro        — full control: genre / mood / duration / vocal / lyrics.
+//   • Studio Pro — same Pro form + pro-friendly defaults (V5_5 model,
+//                  advanced options open) + a banner explaining the
+//                  Pro tier (12-stem split, BPM display, lossless
+//                  export soon). Distinct lime→pink gradient signals
+//                  the premium tier without breaking brand.
 function ModeTabs({ mode, onChange }) {
   const tabs = [
-    { id: "easy", label: "Easy", sub: "1 prompt → 1 track" },
-    { id: "pro",  label: "Pro",  sub: "Full control" },
+    { id: "easy",       label: "Easy",          sub: "1 prompt → 1 track" },
+    { id: "pro",        label: "Pro",           sub: "Full control" },
+    { id: "studio-pro", label: "🎛️ Studio Pro", sub: "Composers + sound designers" },
   ];
   return (
     <div
@@ -1384,10 +1471,17 @@ function ModeTabs({ mode, onChange }) {
         borderRadius: 999,
         padding: 3,
         gap: 2,
+        flexWrap: "wrap",
       }}
     >
       {tabs.map((t) => {
         const on = t.id === mode;
+        // Studio Pro gets a distinct lime→pink gradient so users can
+        // see at a glance which tier they're in. Pro stays straight
+        // lime (brand accent).
+        const activeBg = t.id === "studio-pro"
+          ? "linear-gradient(135deg, #D9FF00 0%, #ec4899 100%)"
+          : "linear-gradient(135deg, #D9FF00, #A6CC00)";
         return (
           <button
             key={t.id}
@@ -1396,7 +1490,7 @@ function ModeTabs({ mode, onChange }) {
               padding: "6px 14px",
               borderRadius: 999,
               border: "none",
-              background: on ? "linear-gradient(135deg, #D9FF00, #A6CC00)" : "transparent",
+              background: on ? activeBg : "transparent",
               color: on ? "#0a0a0a" : C.textSoft,
               fontSize: 12,
               fontWeight: 800,
