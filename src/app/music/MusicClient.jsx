@@ -225,6 +225,38 @@ export default function MusicClient() {
       .catch(() => {});
   }, [sessionStatus]);
 
+  // ── Restore form snapshot after sign-in redirect ────────────────
+  // When the user clicked Generate without being signed in, we
+  // stashed the whole form to sessionStorage (see onGenerate
+  // above). On mount we look for that stash and restore it so the
+  // user lands back with their prompt + genre + mood + everything
+  // exactly as they left it. Snapshot is consumed (cleared) after
+  // restore so a future deliberate page-load doesn't re-fill.
+  // 10-minute TTL guards against stale snapshots from days-old
+  // sessions.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("sd-music-pending");
+      if (!raw) return;
+      sessionStorage.removeItem("sd-music-pending");
+      const s = JSON.parse(raw);
+      if (!s || typeof s !== "object") return;
+      if (s.savedAt && Date.now() - s.savedAt > 10 * 60 * 1000) return;
+      if (typeof s.mode === "string") changeMode(s.mode);
+      if (typeof s.prompt === "string") setPrompt(s.prompt);
+      if (typeof s.genre === "string") setGenre(s.genre);
+      if (typeof s.mood === "string") setMood(s.mood);
+      if (Number.isFinite(s.duration)) setDuration(s.duration);
+      if (Number.isFinite(s.tempo)) setTempo(s.tempo);
+      if (typeof s.vocalMode === "string") setVocalMode(s.vocalMode);
+      if (typeof s.lyricsMode === "string") setLyricsMode(s.lyricsMode);
+      if (typeof s.lyrics === "string") setLyrics(s.lyrics);
+      if (typeof s.customStyle === "string") setCustomStyle(s.customStyle);
+      if (typeof s.model === "string") setModel(s.model);
+      if (typeof s.negativeTags === "string") setNegativeTags(s.negativeTags);
+    } catch {}
+  }, []);
+
   function flashToast(msg) {
     setToast(msg);
     setTimeout(() => setToast(""), 3500);
@@ -240,12 +272,20 @@ export default function MusicClient() {
       // again, losing the prompt + any ?soundtrack=<id> they came
       // in with from a shared WhatsApp link. Now we invoke NextAuth
       // signIn() with an explicit callbackUrl pointing back at
-      // /music (including the soundtrack query param if present)
-      // so the post-login redirect returns them exactly where they
-      // were.
+      // /music + a sessionStorage snapshot of every field on the
+      // form so the user lands back with their work intact (no
+      // re-typing the prompt). The snapshot is restored on mount
+      // below by readPendingSnapshot().
       const here = typeof window !== "undefined"
         ? window.location.pathname + window.location.search
         : "/music";
+      try {
+        sessionStorage.setItem("sd-music-pending", JSON.stringify({
+          mode, prompt, genre, mood, duration, tempo, vocalMode,
+          lyricsMode, lyrics, customStyle, model, negativeTags,
+          savedAt: Date.now(),
+        }));
+      } catch {}
       signIn(undefined, { callbackUrl: here });
       return;
     }
