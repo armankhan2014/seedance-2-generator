@@ -583,6 +583,39 @@ export default function MusicClient() {
     }
   }
 
+  // Kick off an "extend this track" job. Creates a new MusicTrack row
+  // on the server (so the original stays untouched + the user can
+  // compare them) and returns immediately. The new row appears at the
+  // top of the library in "processing" state; the existing main-track
+  // poll won't pick it up because that only watches currentTrackId,
+  // but the next manual library refresh (or generation completion)
+  // will surface it. To make it appear instantly we refetch the list.
+  async function onExtendTrack(trackId) {
+    try {
+      const res = await fetch(`/api/music/tracks/${trackId}/extend`, { method: "POST" });
+      const j = await res.json();
+      if (!res.ok) {
+        flashToast(j.error || "Couldn't extend track");
+        return;
+      }
+      // Refetch so the new row shows up alongside the original.
+      try {
+        const list = await fetch("/api/music/tracks");
+        const lj = await list.json();
+        if (lj.ok && Array.isArray(lj.tracks)) setTracks(lj.tracks);
+      } catch {}
+      // Set the new row as the "currently watched" track so the
+      // existing per-track poll kicks in and flips it from processing
+      // → completed without the user needing to refresh.
+      setCurrentTrackId(j.track.id);
+      setCurrentTrack({ ...j.track, status: "processing" });
+      setStage("generating");
+      flashToast(`Extending track · 8 credits — ~2-3 min`);
+    } catch (e) {
+      flashToast(e?.message || "Couldn't extend track");
+    }
+  }
+
   function onReset() {
     setStage("idle");
     setCurrentTrackId(null);
@@ -844,7 +877,7 @@ export default function MusicClient() {
         )}
 
         <PricingSection />
-        <GallerySection tracks={tracks} onPickStarter={applyStarter} onSplitStems={onSplitStems} />
+        <GallerySection tracks={tracks} onPickStarter={applyStarter} onSplitStems={onSplitStems} onExtend={onExtendTrack} />
         <FooterNotes />
       </main>
 
@@ -3141,7 +3174,7 @@ function PricingSection() {
   );
 }
 
-function GallerySection({ tracks, onPickStarter, onSplitStems }) {
+function GallerySection({ tracks, onPickStarter, onSplitStems, onExtend }) {
   return (
     <section style={{ marginTop: 60 }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
@@ -3197,7 +3230,7 @@ function GallerySection({ tracks, onPickStarter, onSplitStems }) {
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
           {tracks.map((t) => (
-            <GalleryCard key={t.id} track={t} onSplitStems={onSplitStems} />
+            <GalleryCard key={t.id} track={t} onSplitStems={onSplitStems} onExtend={onExtend} />
           ))}
         </div>
       )}
@@ -3304,7 +3337,7 @@ function StarterCard({ starter, onPick }) {
   );
 }
 
-function GalleryCard({ track, onSplitStems }) {
+function GalleryCard({ track, onSplitStems, onExtend }) {
   const [hover, setHover] = useState(false);
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
@@ -3367,6 +3400,9 @@ function GalleryCard({ track, onSplitStems }) {
               stemError={track.stemError}
               onSplit={onSplitStems}
             />
+          )}
+          {isReady && onExtend && (
+            <CardExtendButton trackId={track.id} onExtend={onExtend} />
           )}
           {isReady && (
             <CardPublishButton trackId={track.id} initialPublic={!!track.public} />
@@ -3452,6 +3488,53 @@ function CardPublishButton({ trackId, initialPublic }) {
       }}
     >
       {isPublic ? "🌐" : "🔒"}
+    </button>
+  );
+}
+
+// "Extend track" button on every completed library card. Kicks off a
+// Suno upload-extend call which creates a NEW MusicTrack row with the
+// original audio + ~30-90s of continuation in the same style.
+// Disabled while busy (debounce double-click) — once the upstream
+// call lands the new row appears in the library in "processing"
+// state. The existing main-track poll picks it up + flips it to
+// "completed" when ready.
+function CardExtendButton({ trackId, onExtend }) {
+  const [busy, setBusy] = useState(false);
+  async function trigger(e) {
+    e.stopPropagation();
+    if (busy) return;
+    setBusy(true);
+    try {
+      await onExtend(trackId);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <button
+      onClick={trigger}
+      disabled={busy}
+      aria-label="Extend this track"
+      title="Add ~30-90s in the same style · 8 credits"
+      style={{
+        width: 32,
+        height: 32,
+        borderRadius: "50%",
+        background: "transparent",
+        border: `1px solid ${C.border}`,
+        color: C.textSoft,
+        fontSize: 13,
+        cursor: busy ? "default" : "pointer",
+        fontFamily: "inherit",
+        transition: "all 0.15s",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        opacity: busy ? 0.6 : 1,
+      }}
+    >
+      ⏩
     </button>
   );
 }

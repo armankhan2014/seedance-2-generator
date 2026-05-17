@@ -246,6 +246,90 @@ export async function addInstrumentalToVocal({
   return { taskId: json.data?.taskId, raw: json };
 }
 
+// ── Extend a track (upload-extend) ───────────────────────────────────
+//
+// Takes an existing audio URL (must be publicly fetchable — we feed it
+// the track's r2Url or audioUrl) and asks the engine to extend it.
+// We use `defaultParamFlag: false` ("Default Mode") which inherits
+// the original audio's style automatically — no need to pass style,
+// prompt, or continueAt unless the user wants to override. Cleaner UX
+// than asking them to retype the style.
+//
+// Returns the same taskId pattern as a regular generation; the
+// callback fires through /api/music/callback with the FULL extended
+// audio (original + new continuation merged into one file).
+//
+// Cost: flat EXTEND_COST credits (see below). Output duration is
+// determined by the model + the original's length; we don't directly
+// control it but typical extensions add 30-90s.
+export async function extendTrack({
+  uploadUrl,
+  model = "V5",
+  callBackUrl,
+  prompt,
+  style,
+  title,
+  instrumental,
+  vocalGender,
+  audioWeight,
+  styleWeight,
+  negativeTags,
+  continueAt,
+}) {
+  const apiKey = ensureKey();
+  if (!uploadUrl) throw new Error("uploadUrl is required");
+  if (!callBackUrl) throw new Error("callBackUrl is required");
+
+  // Default-mode body: just the upload + model + callback. The
+  // engine sniffs the original track's style itself. Any explicit
+  // style/prompt/title overrides flip us to custom-mode.
+  const useCustom = !!(style || title || continueAt || prompt);
+  const body = {
+    uploadUrl,
+    defaultParamFlag: useCustom,
+    model,
+    callBackUrl,
+  };
+  if (useCustom) {
+    if (style) body.style = style;
+    if (title) body.title = title;
+    if (typeof continueAt === "number") body.continueAt = continueAt;
+    if (typeof instrumental === "boolean") body.instrumental = instrumental;
+    // In custom + vocal mode, prompt is the exact lyrics.
+    if (prompt && instrumental === false) body.prompt = prompt;
+  } else if (prompt) {
+    body.prompt = prompt;
+  }
+  if (vocalGender) body.vocalGender = vocalGender;
+  if (negativeTags) body.negativeTags = negativeTags;
+  if (typeof audioWeight === "number") body.audioWeight = audioWeight;
+  if (typeof styleWeight === "number") body.styleWeight = styleWeight;
+
+  const res = await fetch(`${SUNO_BASE}/api/v1/generate/upload-extend`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json.code !== 200) {
+    const err = new Error(json.msg || `Music service error ${res.status}`);
+    err.status = res.status;
+    err.code = json.code;
+    err.body = json;
+    throw err;
+  }
+  return { taskId: json.data?.taskId, raw: json };
+}
+
+// Flat credit cost for "extend this track". Wholesale cost is similar
+// to a regular ~60s generation upstream; 8 credits gives us margin
+// while staying cheaper than a fresh generation (since you're
+// building on existing audio, not from scratch).
+export const EXTEND_COST = 8;
+
 // ── Stem split (vocal removal) ──────────────────────────────────────
 //
 // Suno's vocal-removal endpoint takes a previously-generated track
