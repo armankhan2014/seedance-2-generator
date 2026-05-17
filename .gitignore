@@ -48,3 +48,4 @@ next-env.d.ts
 
 # FCM service-account JSON + any other server-side credentials.
 secrets/
+.env.vercel

@@ -154,6 +154,14 @@ export default function MusicClient() {
   //   states: "auto" | "custom"
   const [lyricsMode, setLyricsMode] = useState("auto");
   const [lyrics, setLyrics] = useState("");
+  // ✨ Lyric helper — one-line idea → full structured lyrics via
+  // Claude Haiku. Arman flagged 2026-05-16: newcomers landing on
+  // /music with zero songwriting experience need an on-ramp into the
+  // Pro "Write your own lyrics" workflow. The helper modal opens when
+  // the user clicks the "✨ Help me write lyrics" button — on
+  // successful generation it auto-fills the textarea, flips to Pro +
+  // vocal=on + lyricsMode=custom so the lyrics actually get used.
+  const [lyricHelperOpen, setLyricHelperOpen] = useState(false);
   // Free-text Style field — the music engine calls this the "Style" prompt. When
   // populated, it OVERRIDES the genre preset's built-in style string.
   // Empty = genre preset wins. Lets power users go beyond the 8
@@ -178,6 +186,29 @@ export default function MusicClient() {
   function setVocalGender(g) {
     if (g === "f" || g === "m") setVocalMode(g);
     else setVocalMode(isVocal ? "auto" : "instrumental");
+  }
+
+  // Opens the lyric helper. We also pre-configure the form so the
+  // generated lyrics will actually be used:
+  //   • Switch to Pro mode (Easy mode hides the lyrics field).
+  //   • Turn vocals on if currently instrumental (otherwise lyrics
+  //     are inert).
+  //   • Flip to "Write yours" lyrics mode so the auto-fill lands in
+  //     the visible textarea.
+  function openLyricHelper() {
+    changeMode("pro");
+    if (vocalMode === "instrumental") setVocalMode("auto");
+    setLyricsMode("custom");
+    setLyricHelperOpen(true);
+  }
+  // Called when the helper successfully generates lyrics. Drops the
+  // string into the textarea + closes the modal + flashes a toast so
+  // the user notices the change (the lyrics section may be far below
+  // the fold on mobile).
+  function applyHelperLyrics(text) {
+    setLyrics(text);
+    setLyricHelperOpen(false);
+    flashToast("✨ Lyrics drafted — review and edit before generating");
   }
 
   // ── Helpers — Surprise me + Starter prompts ────────────────────
@@ -515,7 +546,11 @@ export default function MusicClient() {
                     </SectionEyebrow>
                     <LyricsModeTabs value={lyricsMode} onChange={setLyricsMode} />
                     {lyricsMode === "custom" && (
-                      <LyricsBox value={lyrics} onChange={setLyrics} />
+                      <LyricsBox
+                        value={lyrics}
+                        onChange={setLyrics}
+                        onOpenHelper={openLyricHelper}
+                      />
                     )}
                     {lyricsMode === "auto" && (
                       <div
@@ -532,7 +567,11 @@ export default function MusicClient() {
                       >
                         The AI will write lyrics based on your description above.
                         Fast, but words tend toward generic. Switch to{" "}
-                        <b style={{ color: C.text }}>Write yours</b> for control.
+                        <b style={{ color: C.text }}>Write yours</b> for control —
+                        or let us draft them for you in any language.
+                        <div style={{ marginTop: 10 }}>
+                          <LyricHelperLaunchButton onClick={openLyricHelper} />
+                        </div>
                       </div>
                     )}
                   </>
@@ -615,6 +654,14 @@ export default function MusicClient() {
           {toast}
         </div>
       )}
+
+      <LyricHelperModal
+        open={lyricHelperOpen}
+        onClose={() => setLyricHelperOpen(false)}
+        onApply={applyHelperLyrics}
+        genre={genre}
+        mood={mood}
+      />
     </div>
   );
 }
@@ -1538,10 +1585,22 @@ function vocalBtn(on) {
   };
 }
 
-function LyricsBox({ value, onChange }) {
+function LyricsBox({ value, onChange, onOpenHelper }) {
   return (
     <div style={{ marginTop: 14 }}>
-      <SectionEyebrow>Lyrics</SectionEyebrow>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          flexWrap: "wrap",
+          marginBottom: 6,
+        }}
+      >
+        <SectionEyebrow>Lyrics</SectionEyebrow>
+        {onOpenHelper && <LyricHelperLaunchButton onClick={onOpenHelper} />}
+      </div>
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -1562,9 +1621,41 @@ function LyricsBox({ value, onChange }) {
         }}
       />
       <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>
-        Use [Verse], [Chorus], [Bridge] tags for structure — the AI picks up on them. Leave blank for AI-generated lyrics.
+        Use [Verse], [Chorus], [Bridge] tags for structure — the AI picks up on them.
+        Stuck? Tap <b style={{ color: C.text }}>✨ Help me write lyrics</b> above to draft a full song from one line.
       </div>
     </div>
+  );
+}
+
+// Pill button that opens the LyricHelperModal. Lime-bordered ghost
+// style so it reads as a secondary helper, not a primary CTA — the
+// main Generate button stays the visual focal point.
+function LyricHelperLaunchButton({ onClick }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        padding: "7px 14px",
+        borderRadius: 999,
+        background: hover ? C.accentSoft : C.panelSoft,
+        border: `1px solid ${C.borderHover}`,
+        color: C.accent,
+        fontSize: 12,
+        fontWeight: 800,
+        letterSpacing: "0.02em",
+        cursor: "pointer",
+        fontFamily: "inherit",
+        transition: "background 0.15s",
+        whiteSpace: "nowrap",
+      }}
+    >
+      ✨ Help me write lyrics
+    </button>
   );
 }
 
@@ -2551,5 +2642,402 @@ function FooterNotes() {
       mirror every finished render to our own R2 bucket so you keep access
       indefinitely).
     </section>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// LyricHelperModal — one-line idea → full structured lyrics.
+//
+// Calls POST /api/music/lyrics/generate (Claude Haiku 4.5). 1 credit
+// per generation, refunded on every failure path server-side. The
+// returned lyrics string is dropped straight into the parent's
+// <textarea> via onApply().
+//
+// Multi-language by design — newcomers writing for Bollywood, K-drama,
+// Spanish-language film, etc. can pick their language and Claude
+// outputs in that language's native script while keeping the
+// structural [Verse]/[Chorus] tags in English so the music engine
+// parses them as cues.
+// ────────────────────────────────────────────────────────────────────
+const LYRIC_LANGUAGES = [
+  { id: "",         label: "Auto-detect" },
+  { id: "English",  label: "English" },
+  { id: "Hindi",    label: "Hindi" },
+  { id: "Punjabi",  label: "Punjabi" },
+  { id: "Spanish",  label: "Spanish" },
+  { id: "French",   label: "French" },
+  { id: "Portuguese", label: "Portuguese" },
+  { id: "Italian",  label: "Italian" },
+  { id: "German",   label: "German" },
+  { id: "Korean",   label: "Korean" },
+  { id: "Japanese", label: "Japanese" },
+  { id: "Mandarin", label: "Mandarin" },
+  { id: "Arabic",   label: "Arabic" },
+  { id: "Tamil",    label: "Tamil" },
+  { id: "Telugu",   label: "Telugu" },
+  { id: "Turkish",  label: "Turkish" },
+];
+
+const LYRIC_IDEA_EXAMPLES = [
+  "Sad song for a Bollywood film, hero loses his love",
+  "Hollywood action movie credits, hero rises from defeat",
+  "Romantic ballad in Hindi for a wedding scene",
+  "Punjabi banger for a road-trip montage",
+  "Korean ballad about staying up missing someone",
+  "Spanish reggaeton, summer night in Madrid",
+];
+
+function LyricHelperModal({ open, onClose, onApply, genre, mood }) {
+  const [idea, setIdea] = useState("");
+  const [language, setLanguage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  // Local preview so users can see the draft + edit it before
+  // accepting. Lets them re-roll if the first draft misses the mark
+  // without burning credits silently in the background.
+  const [draft, setDraft] = useState("");
+
+  // Reset when the modal closes so re-opening starts fresh.
+  useEffect(() => {
+    if (!open) {
+      setIdea("");
+      setBusy(false);
+      setErr("");
+      setDraft("");
+    }
+  }, [open]);
+
+  async function generate() {
+    if (!idea.trim() || busy) return;
+    setBusy(true);
+    setErr("");
+    setDraft("");
+    try {
+      const res = await fetch("/api/music/lyrics/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idea: idea.trim(),
+          language,
+          genre,
+          mood,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        setErr(j.error || "Couldn't draft lyrics. Try again.");
+        return;
+      }
+      setDraft(j.lyrics || "");
+    } catch (e) {
+      setErr(e.message || "Network error — try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function accept() {
+    if (!draft.trim()) return;
+    onApply(draft);
+  }
+
+  if (!open) return null;
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.72)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
+        zIndex: 200,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%",
+          maxWidth: 560,
+          maxHeight: "90vh",
+          overflowY: "auto",
+          background: C.panel,
+          border: `1px solid ${C.borderHover}`,
+          borderRadius: 18,
+          padding: 22,
+          boxShadow: "0 28px 80px -20px rgba(0,0,0,0.85), 0 0 0 1px rgba(217,255,0,0.06) inset",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+          <div>
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 800,
+                color: C.accent,
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+              }}
+            >
+              ✨ Lyric helper
+            </div>
+            <h3 style={{ fontSize: 20, fontWeight: 800, margin: "4px 0 0", letterSpacing: "-0.01em" }}>
+              One line → full song
+            </h3>
+            <p style={{ fontSize: 12.5, color: C.muted, margin: "6px 0 0", lineHeight: 1.55 }}>
+              Describe your song in plain language — any language. We&rsquo;ll draft a
+              full set of lyrics with verses, a chorus, and a bridge.{" "}
+              <b style={{ color: C.text }}>Costs 1 credit per draft</b> (refunded if
+              the AI fails).
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              background: C.panelSoft,
+              border: `1px solid ${C.border}`,
+              color: C.textSoft,
+              cursor: "pointer",
+              fontSize: 16,
+              fontFamily: "inherit",
+              flexShrink: 0,
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        <div style={{ marginTop: 18 }}>
+          <SectionEyebrow>Your idea</SectionEyebrow>
+          <textarea
+            value={idea}
+            onChange={(e) => setIdea(e.target.value.slice(0, 600))}
+            placeholder="e.g. Sad song for a Bollywood film, hero loses his love in Mumbai monsoon"
+            rows={3}
+            disabled={busy}
+            style={{
+              width: "100%",
+              background: C.panelSoft,
+              border: `1px solid ${C.border}`,
+              borderRadius: 12,
+              padding: "12px 14px",
+              color: C.text,
+              fontSize: 13.5,
+              fontFamily: "inherit",
+              lineHeight: 1.55,
+              resize: "vertical",
+              outline: "none",
+              opacity: busy ? 0.6 : 1,
+            }}
+          />
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+            {LYRIC_IDEA_EXAMPLES.map((ex) => (
+              <button
+                key={ex}
+                type="button"
+                onClick={() => setIdea(ex)}
+                disabled={busy}
+                style={{
+                  padding: "5px 10px",
+                  borderRadius: 999,
+                  background: C.panelSoft,
+                  border: `1px solid ${C.border}`,
+                  color: C.textSoft,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: busy ? "default" : "pointer",
+                  fontFamily: "inherit",
+                  opacity: busy ? 0.5 : 1,
+                }}
+              >
+                {ex}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 16 }}>
+          <SectionEyebrow>Language</SectionEyebrow>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
+              gap: 6,
+            }}
+          >
+            {LYRIC_LANGUAGES.map((l) => {
+              const on = language === l.id;
+              return (
+                <button
+                  key={l.id || "auto"}
+                  type="button"
+                  onClick={() => setLanguage(l.id)}
+                  disabled={busy}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: 8,
+                    background: on ? C.accent : C.panelSoft,
+                    border: `1px solid ${on ? C.accent : C.border}`,
+                    color: on ? "#0a0a0a" : C.text,
+                    fontSize: 12,
+                    fontWeight: on ? 800 : 600,
+                    cursor: busy ? "default" : "pointer",
+                    fontFamily: "inherit",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  {l.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {err && (
+          <div
+            style={{
+              marginTop: 14,
+              padding: "10px 14px",
+              background: "rgba(239,68,68,0.10)",
+              border: `1px solid rgba(239,68,68,0.32)`,
+              borderRadius: 10,
+              fontSize: 12.5,
+              color: C.danger,
+            }}
+          >
+            {err}
+          </div>
+        )}
+
+        {draft && (
+          <div style={{ marginTop: 18 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                marginBottom: 6,
+              }}
+            >
+              <SectionEyebrow>Draft</SectionEyebrow>
+              <span style={{ fontSize: 11, color: C.muted }}>
+                Edit before applying — or re-roll for a different take.
+              </span>
+            </div>
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={10}
+              style={{
+                width: "100%",
+                background: C.panelSoft,
+                border: `1px solid ${C.borderHover}`,
+                borderRadius: 12,
+                padding: "12px 14px",
+                color: C.text,
+                fontSize: 13,
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                lineHeight: 1.55,
+                resize: "vertical",
+                outline: "none",
+              }}
+            />
+          </div>
+        )}
+
+        <div
+          style={{
+            marginTop: 20,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ fontSize: 11.5, color: C.muted }}>
+            {busy ? "Drafting…" : "1 credit per draft · refunded on failure"}
+          </span>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {draft && (
+              <button
+                type="button"
+                onClick={generate}
+                disabled={busy || !idea.trim()}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 10,
+                  background: C.panelSoft,
+                  border: `1px solid ${C.border}`,
+                  color: C.textSoft,
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: busy ? "default" : "pointer",
+                  fontFamily: "inherit",
+                  opacity: busy ? 0.5 : 1,
+                }}
+              >
+                ↻ Re-roll
+              </button>
+            )}
+            {!draft && (
+              <button
+                type="button"
+                onClick={generate}
+                disabled={busy || !idea.trim()}
+                style={{
+                  padding: "10px 18px",
+                  borderRadius: 10,
+                  background: idea.trim() && !busy
+                    ? `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`
+                    : C.panelSoft,
+                  border: `1px solid ${idea.trim() && !busy ? C.accent : C.border}`,
+                  color: idea.trim() && !busy ? "#0a0a0a" : C.muted,
+                  fontSize: 13,
+                  fontWeight: 800,
+                  cursor: idea.trim() && !busy ? "pointer" : "default",
+                  fontFamily: "inherit",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                {busy ? "Drafting…" : "✨ Draft lyrics"}
+              </button>
+            )}
+            {draft && (
+              <button
+                type="button"
+                onClick={accept}
+                disabled={!draft.trim()}
+                style={{
+                  padding: "10px 18px",
+                  borderRadius: 10,
+                  background: `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`,
+                  border: `1px solid ${C.accent}`,
+                  color: "#0a0a0a",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                ✓ Use these lyrics
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
