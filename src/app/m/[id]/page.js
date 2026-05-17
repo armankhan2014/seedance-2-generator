@@ -32,7 +32,7 @@ async function loadTrack(id) {
         r2Url: true,
         imageUrl: true,
         createdAt: true,
-        user: { select: { name: true, image: true } },
+        user: { select: { name: true, image: true, verified: true } },
       },
     });
   } catch {
@@ -92,6 +92,7 @@ export default async function PublicTrackPage({ params }) {
     imageUrl: track.imageUrl || null,
     creator: track.user?.name || "Filmmaker",
     creatorImage: track.user?.image || null,
+    creatorVerified: !!track.user?.verified,
     createdAt: track.createdAt.toISOString(),
   };
   return <MusicEmbed track={shaped} />;

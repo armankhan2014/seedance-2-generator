@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import VerifiedBadge from "@/components/saas/VerifiedBadge";
 
 const C = {
   bg: "#0a0a0a",
@@ -235,27 +236,12 @@ function DiscoverCard({ track, playing, onPlay }) {
         }}
       />
       <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 10 }}>
-        {track.creatorImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={track.creatorImage}
-            alt=""
-            style={{
-              width: 32, height: 32, borderRadius: "50%", objectFit: "cover",
-              border: `1.5px solid hsl(${hue} 70% 50% / 0.5)`,
-            }}
-          />
-        ) : (
-          <div style={{
-            width: 32, height: 32, borderRadius: "50%",
-            background: `hsl(${hue} 60% 30%)`,
-            color: `hsl(${hue} 90% 80%)`,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 13, fontWeight: 800,
-          }}>
-            {(track.creator?.[0] || "?").toUpperCase()}
-          </div>
-        )}
+        <CardAvatar
+          image={track.creatorImage}
+          name={track.creator}
+          verified={track.creatorVerified}
+          hue={hue}
+        />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
             fontSize: 11, fontWeight: 700, color: `hsl(${hue} 70% 75%)`,
@@ -263,7 +249,13 @@ function DiscoverCard({ track, playing, onPlay }) {
           }}>
             {track.genre}{track.mood ? ` · ${track.mood}` : ""}
           </div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>by {track.creator}</div>
+          <div style={{
+            fontSize: 11, color: C.muted, marginTop: 1,
+            display: "inline-flex", alignItems: "center", gap: 4,
+          }}>
+            by {track.creator}
+            {track.creatorVerified && <VerifiedBadge size={10} />}
+          </div>
         </div>
         <button
           onClick={onPlay}
@@ -319,4 +311,61 @@ function formatTime(s) {
   const m = Math.floor(s / 60);
   const ss = Math.floor(s % 60);
   return `${m}:${ss.toString().padStart(2, "0")}`;
+}
+
+// Discover-card avatar with optional bottom-right pink verified
+// badge — mirrors the Navbar avatar treatment so verified creators
+// look consistent everywhere their photo appears.
+function CardAvatar({ image, name, verified, hue }) {
+  const size = 32;
+  const inner = image ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={image}
+      alt=""
+      style={{
+        width: size, height: size, borderRadius: "50%", objectFit: "cover",
+        border: `1.5px solid hsl(${hue} 70% 50% / 0.5)`,
+        display: "block",
+      }}
+    />
+  ) : (
+    <div style={{
+      width: size, height: size, borderRadius: "50%",
+      background: `hsl(${hue} 60% 30%)`,
+      color: `hsl(${hue} 90% 80%)`,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: 13, fontWeight: 800,
+    }}>
+      {(name?.[0] || "?").toUpperCase()}
+    </div>
+  );
+  if (!verified) return inner;
+  return (
+    <span
+      style={{
+        position: "relative",
+        width: size,
+        height: size,
+        display: "inline-block",
+        flexShrink: 0,
+      }}
+    >
+      {inner}
+      <span
+        style={{
+          position: "absolute",
+          bottom: -2,
+          right: -2,
+          display: "inline-flex",
+          background: "#0a0a0a",
+          borderRadius: "50%",
+          padding: 1,
+          lineHeight: 0,
+        }}
+      >
+        <VerifiedBadge size={13} />
+      </span>
+    </span>
+  );
 }

@@ -11,6 +11,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import VerifiedBadge from "@/components/saas/VerifiedBadge";
 
 const C = {
   bg: "#0a0a0a",
@@ -161,43 +162,23 @@ function PlayerCard({ track }) {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {/* Creator avatar */}
-          {track.creatorImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={track.creatorImage}
-              alt={track.creator}
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: "50%",
-                objectFit: "cover",
-                border: "2px solid rgba(217,255,0,0.4)",
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: "50%",
-                background: `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`,
-                color: "#0a0a0a",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 16,
-                fontWeight: 800,
-              }}
-            >
-              {(track.creator?.[0] || "?").toUpperCase()}
-            </div>
-          )}
+          {/* Creator avatar — wrapped in a relative span so the pink
+              verified badge can be absolutely positioned at the
+              bottom-right, mirroring the Navbar avatar treatment. */}
+          <CreatorAvatar
+            image={track.creatorImage}
+            name={track.creator}
+            verified={track.creatorVerified}
+            size={40}
+          />
           <div>
             <div style={{ fontSize: 10.5, fontWeight: 800, color: C.accent, letterSpacing: "0.16em", textTransform: "uppercase" }}>
               {track.genre ? `${track.genre}${track.mood ? " · " + track.mood : ""}` : "AI music"}
             </div>
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>by {track.creator}</div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 3, display: "inline-flex", alignItems: "center", gap: 4 }}>
+              by {track.creator}
+              {track.creatorVerified && <VerifiedBadge size={11} />}
+            </div>
           </div>
         </div>
       </div>
@@ -391,4 +372,75 @@ function formatTime(s) {
   const m = Math.floor(s / 60);
   const ss = Math.floor(s % 60);
   return `${m}:${ss.toString().padStart(2, "0")}`;
+}
+
+// Round avatar with an optional pink verified badge anchored to the
+// bottom-right corner. Same overlay treatment as the Navbar avatar
+// (dark pad behind the badge so it reads cleanly against any image)
+// — kept in sync visually so a verified user looks identical
+// everywhere their photo appears.
+function CreatorAvatar({ image, name, verified, size = 40 }) {
+  // Badge sized as 45% of avatar so it scales gracefully if size
+  // changes. Floor at 12px so the tick stays legible at small sizes.
+  const badgeSize = Math.max(12, Math.round(size * 0.45));
+  const inner = image ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={image}
+      alt={name || ""}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        objectFit: "cover",
+        border: "2px solid rgba(217,255,0,0.4)",
+        display: "block",
+      }}
+    />
+  ) : (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        background: `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`,
+        color: "#0a0a0a",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontSize: Math.round(size * 0.4),
+        fontWeight: 800,
+      }}
+    >
+      {(name?.[0] || "?").toUpperCase()}
+    </div>
+  );
+  if (!verified) return inner;
+  return (
+    <span
+      style={{
+        position: "relative",
+        width: size,
+        height: size,
+        display: "inline-block",
+        flexShrink: 0,
+      }}
+    >
+      {inner}
+      <span
+        style={{
+          position: "absolute",
+          bottom: -2,
+          right: -2,
+          display: "inline-flex",
+          background: "#0a0a0a",
+          borderRadius: "50%",
+          padding: 1,
+          lineHeight: 0,
+        }}
+      >
+        <VerifiedBadge size={badgeSize} />
+      </span>
+    </span>
+  );
 }

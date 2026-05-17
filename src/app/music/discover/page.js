@@ -35,7 +35,7 @@ async function loadPublicTracks() {
         imageUrl: true,
         plays: true,
         createdAt: true,
-        user: { select: { name: true, image: true } },
+        user: { select: { name: true, image: true, verified: true } },
       },
     });
     // Shape so the client doesn't need to negotiate the URL fallback
@@ -52,6 +52,7 @@ async function loadPublicTracks() {
       plays: r.plays,
       creator: r.user?.name || "Filmmaker",
       creatorImage: r.user?.image || null,
+      creatorVerified: !!r.user?.verified,
       createdAt: r.createdAt.toISOString(),
     }));
   } catch {
