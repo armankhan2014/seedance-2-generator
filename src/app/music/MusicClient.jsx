@@ -138,16 +138,6 @@ export default function MusicClient() {
   function changeMode(m) {
     setMode(m);
     try { localStorage.setItem("sd-music-mode", m); } catch {}
-    // Studio Pro auto-flips pro-friendly defaults so composers /
-    // sound designers don't have to dig: highest model (V5_5),
-    // advanced options open. Stays in effect for the session; user
-    // can still tweak individual fields. Not applied retroactively
-    // when switching FROM studio-pro back to pro/easy — once set,
-    // their model/advanced choices stick.
-    if (m === "studio-pro") {
-      setModel("V5_5");
-      setAdvancedOpen(true);
-    }
   }
   // Pro form is shown for both "pro" AND "studio-pro" — the latter
   // just layers smarter defaults + a banner on top. Used throughout
@@ -776,11 +766,6 @@ export default function MusicClient() {
               </div>
             ) : (
               <>
-                {/* Studio Pro banner — only shown when mode ===
-                    "studio-pro". Pro mode (regular) skips this so
-                    the form looks identical to before. */}
-                {mode === "studio-pro" && <StudioProBanner />}
-
                 {/* 1 · DESCRIBE — the user's free-form direction.
                     Copy adapts based on reference mode so the
                     placeholder + helper text match what the prompt is
@@ -1386,64 +1371,6 @@ function SectionEyebrow({ children, tooltip }) {
           )}
         </span>
       )}
-    </div>
-  );
-}
-
-// Banner that appears at the top of the form when the user is in
-// Studio Pro mode. Explains the pro tier perks + sets visual
-// context so users understand WHY they picked this mode. Same
-// lime→pink gradient as the active Studio Pro tab so the two are
-// visually linked.
-function StudioProBanner() {
-  return (
-    <div
-      style={{
-        marginTop: 18,
-        padding: "12px 16px",
-        background:
-          "linear-gradient(135deg, rgba(217,255,0,0.10) 0%, rgba(236,72,153,0.10) 100%)",
-        border: "1px solid rgba(217,255,0,0.30)",
-        borderRadius: 12,
-        display: "flex",
-        alignItems: "flex-start",
-        gap: 12,
-        flexWrap: "wrap",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 22,
-          lineHeight: 1,
-          flexShrink: 0,
-          marginTop: 1,
-        }}
-      >
-        🎛️
-      </div>
-      <div style={{ flex: 1, minWidth: 220 }}>
-        <div
-          style={{
-            fontSize: 11,
-            fontWeight: 800,
-            letterSpacing: "0.18em",
-            textTransform: "uppercase",
-            color: C.accent,
-            marginBottom: 4,
-          }}
-        >
-          Studio Pro
-        </div>
-        <div style={{ fontSize: 12.5, color: C.textSoft, lineHeight: 1.55 }}>
-          The pro tier for composers, sound designers + mix engineers.
-          Generations default to V5_5 (highest quality model) with
-          advanced controls open. After a track finishes, you can{" "}
-          <b style={{ color: C.text }}>split it into 12 individual stems</b>
-          {" "}(drums, bass, keys, strings, brass, synth, FX, lead + backing
-          vocals) ready to drop into your DAW. Every track shows BPM for
-          easy sync work.
-        </div>
-      </div>
     </div>
   );
 }
