@@ -324,8 +324,31 @@ model MusicTrack {
   //   • stemError       — friendly error string surfaced in the UI on failure
   stemTaskId      String?
   stemStatus      String?
+  // stemMode: null | "vocal" (2-stem) | "split" (12-stem)
+  // Surfaces in the UI as "Basic split (vocal + instrumental)"
+  // vs "Pro split (12 stems)". Determines which columns below
+  // are populated.
+  stemMode        String?
+  // 2-stem split URLs (always populated when stemStatus=completed)
   vocalUrl        String?
   instrumentalUrl String?
+  // 12-stem split URLs (populated only when stemMode="split").
+  // Naming + order matches the engine's vocal_removal_info shape so
+  // the callback handler can copy fields in a single sweep without
+  // a hand-rolled mapping. Any individual URL can be null if the
+  // engine couldn't isolate that stem on a given track (e.g. a
+  // synthwave track may have null brassUrl + null woodwindsUrl).
+  backingVocalsUrl String?
+  drumsUrl         String?
+  bassUrl          String?
+  guitarUrl        String?
+  keyboardUrl      String?
+  stringsUrl       String?
+  brassUrl         String?
+  woodwindsUrl     String?
+  percussionUrl    String?
+  synthUrl         String?
+  fxUrl            String?
   stemError       String?  @db.Text
   // Phase 4 feature 3 — A/B variations. The music engine returns 2
   // variants per generation call; we used to discard the 2nd. Now we

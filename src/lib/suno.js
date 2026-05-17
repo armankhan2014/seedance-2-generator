@@ -439,10 +439,16 @@ export function creditsForTrack({ duration, isVocal }) {
   return base + (isVocal ? 4 : 0);
 }
 
-// Flat credit cost for stem split (vocal + instrumental separation).
-// Single source of truth — imported by both the kickoff route AND
-// the callback handler (for refund-on-failure), so a price change
-// only needs to touch this one file. Wholesale cost upstream is ~10
-// of Suno's credits per split; we charge 4 of ours for a ~3× margin
-// without making it feel pricey.
+// Flat credit cost for stem split. Two tiers:
+//   • STEM_COST       — 2-stem mode (vocal + instrumental). Wholesale
+//                       ~10 of the engine's credits; we charge 4.
+//   • STEM_SPLIT_COST — 12-stem Pro mode (drums/bass/guitar/keys/
+//                       strings/brass/woodwinds/percussion/synth/fx/
+//                       lead+backing vocals). Wholesale ~50 upstream;
+//                       we charge 18 (~3× margin, still notably
+//                       cheaper than going to a third-party stem
+//                       separation service).
+// Single source of truth — imported by the kickoff route AND the
+// callback (for refund-on-failure) so a price change touches one file.
 export const STEM_COST = 4;
+export const STEM_SPLIT_COST = 18;

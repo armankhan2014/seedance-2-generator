@@ -45,8 +45,23 @@ export async function GET() {
         // show "Split stems" CTA / "Splitting…" indicator / vocal +
         // instrumental download chips depending on stemStatus.
         stemStatus: true,
+        stemMode: true,
         vocalUrl: true,
         instrumentalUrl: true,
+        // 12-stem Pro split URLs — populated only when stemMode="split".
+        // Surfaced so the library card can show all download chips
+        // when Pro split is done.
+        backingVocalsUrl: true,
+        drumsUrl: true,
+        bassUrl: true,
+        guitarUrl: true,
+        keyboardUrl: true,
+        stringsUrl: true,
+        brassUrl: true,
+        woodwindsUrl: true,
+        percussionUrl: true,
+        synthUrl: true,
+        fxUrl: true,
         stemError: true,
         // A/B variations: non-null on the 2nd-take row pointing back
         // at the original. UI groups paired rows under one card.

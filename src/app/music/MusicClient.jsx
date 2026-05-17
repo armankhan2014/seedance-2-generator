@@ -545,38 +545,59 @@ export default function MusicClient() {
     return () => { stopped = true; };
   }, [tracks]);
 
-  // Kick off a stem split on a finished track. Optimistically marks
-  // the row as processing so the UI flips immediately; the polling
-  // loop above will refetch the real state once Suno's callback lands.
-  async function onSplitStems(trackId) {
+  // Kick off a stem split on a finished track. Mode is either "vocal"
+  // (2-stem, 4 credits — default) or "split" (12-stem Pro, 18 credits).
+  // Optimistically marks the row as processing so the UI flips
+  // immediately; the polling loop above will refetch real state when
+  // the engine's callback lands.
+  async function onSplitStems(trackId, mode = "vocal") {
     try {
-      const res = await fetch(`/api/music/tracks/${trackId}/stems`, { method: "POST" });
+      const res = await fetch(`/api/music/tracks/${trackId}/stems`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      });
       const j = await res.json();
       if (!res.ok) {
         flashToast(j.error || "Couldn't start stem split");
         return;
       }
-      // Optimistic update: flip the row's stemStatus locally so the
-      // button immediately shows "Splitting…" without waiting for
-      // the next poll. If it was already done, j.stemStatus is
-      // "completed" + j.vocalUrl + j.instrumentalUrl are set.
+      // Optimistic update — flip the row + clear stale stem URLs so
+      // the previous mode's chips don't linger.
       setTracks((prev) =>
         prev.map((t) =>
           t.id === trackId
             ? {
                 ...t,
                 stemStatus: j.stemStatus || "processing",
-                vocalUrl: j.vocalUrl ?? t.vocalUrl,
-                instrumentalUrl: j.instrumentalUrl ?? t.instrumentalUrl,
+                stemMode: j.stemMode || mode,
+                vocalUrl: j.vocalUrl ?? (j.stemStatus === "completed" ? t.vocalUrl : null),
+                instrumentalUrl: j.instrumentalUrl ?? (j.stemStatus === "completed" ? t.instrumentalUrl : null),
+                backingVocalsUrl: j.backingVocalsUrl ?? (j.stemStatus === "completed" ? t.backingVocalsUrl : null),
+                drumsUrl: j.drumsUrl ?? (j.stemStatus === "completed" ? t.drumsUrl : null),
+                bassUrl: j.bassUrl ?? (j.stemStatus === "completed" ? t.bassUrl : null),
+                guitarUrl: j.guitarUrl ?? (j.stemStatus === "completed" ? t.guitarUrl : null),
+                keyboardUrl: j.keyboardUrl ?? (j.stemStatus === "completed" ? t.keyboardUrl : null),
+                stringsUrl: j.stringsUrl ?? (j.stemStatus === "completed" ? t.stringsUrl : null),
+                brassUrl: j.brassUrl ?? (j.stemStatus === "completed" ? t.brassUrl : null),
+                woodwindsUrl: j.woodwindsUrl ?? (j.stemStatus === "completed" ? t.woodwindsUrl : null),
+                percussionUrl: j.percussionUrl ?? (j.stemStatus === "completed" ? t.percussionUrl : null),
+                synthUrl: j.synthUrl ?? (j.stemStatus === "completed" ? t.synthUrl : null),
+                fxUrl: j.fxUrl ?? (j.stemStatus === "completed" ? t.fxUrl : null),
                 stemError: null,
               }
             : t
         )
       );
       if (j.alreadyDone) {
-        flashToast("Stems are already split — download links are ready");
+        flashToast(
+          mode === "split"
+            ? "12 stems already split — download links are ready"
+            : "Stems are already split — download links are ready"
+        );
       } else if (j.stemStatus === "processing") {
-        flashToast(`Splitting stems · ${j.cost ?? 4} credits — ~60s`);
+        const note = mode === "split" ? "12 Pro stems" : "vocal + instrumental";
+        flashToast(`Splitting ${note} · ${j.cost} credits — ~60s`);
       }
     } catch (e) {
       flashToast(e?.message || "Couldn't start stem split");
@@ -3500,10 +3521,12 @@ function GalleryCard({ track, alt, onSplitStems, onExtend, onTranslate }) {
             <CardStemControl
               trackId={current.id}
               stemStatus={current.stemStatus}
+              stemMode={current.stemMode}
               vocalUrl={current.vocalUrl}
               instrumentalUrl={current.instrumentalUrl}
               stemError={current.stemError}
               onSplit={onSplitStems}
+              allStems={current}
             />
           )}
           {isReady && onExtend && (
@@ -3680,40 +3703,73 @@ function CardExtendButton({ trackId, onExtend }) {
   );
 }
 
-// Stem-split control on every library card. Four states:
-//   • null            — show "🎚️ Split" trigger button (kicks off the
-//                        Suno vocal-removal job, costs 4 credits)
-//   • "processing"    — show a small spinner badge ("Splitting…")
-//   • "completed"     — show two download buttons (🎤 Vocal + 🎵 Instr.)
-//                        that pop open the stem URLs in a new tab
-//   • "failed"        — show "↻ Retry" button with the error in title
+// Stem labels for the 12-stem Pro split popover. Order matches the
+// audio engineering convention (rhythm section → harmony → melody →
+// vocals → fx) so the chips read naturally in a DAW workflow.
+const PRO_STEM_LABELS = [
+  { key: "drumsUrl",          icon: "🥁", label: "Drums" },
+  { key: "bassUrl",           icon: "🎸", label: "Bass" },
+  { key: "percussionUrl",     icon: "🪘", label: "Percussion" },
+  { key: "guitarUrl",         icon: "🎸", label: "Guitar" },
+  { key: "keyboardUrl",       icon: "🎹", label: "Keyboard" },
+  { key: "stringsUrl",        icon: "🎻", label: "Strings" },
+  { key: "brassUrl",          icon: "🎺", label: "Brass" },
+  { key: "woodwindsUrl",      icon: "🎷", label: "Woodwinds" },
+  { key: "synthUrl",          icon: "🎛️", label: "Synth" },
+  { key: "fxUrl",             icon: "💫", label: "FX / Other" },
+  { key: "vocalUrl",          icon: "🎤", label: "Lead vocal" },
+  { key: "backingVocalsUrl",  icon: "🎤", label: "Backing vocals" },
+];
+
+// Stem-split control on every library card. Now supports both modes:
+//   • 2-stem ("vocal", 4 credits)  — vocal + instrumental
+//   • 12-stem ("split", 18 credits) — full Pro split: drums, bass,
+//                                      guitar, keys, strings, brass,
+//                                      woodwinds, percussion, synth,
+//                                      fx, lead vocal, backing vocals
 //
-// Self-contained — the parent (GalleryCard / MusicClient) just hands
-// us the trackId + the current state fields + an onSplit callback.
-function CardStemControl({ trackId, stemStatus, vocalUrl, instrumentalUrl, stemError, onSplit }) {
+// State machine:
+//   • stemStatus = null              → 🎚️ button → opens a mode-picker
+//                                       popover (Basic vs Pro)
+//   • stemStatus = "processing"      → ⏳ spinner
+//   • stemStatus = "completed"       → 🎚️ button → opens download
+//                                       chips popover (2 or up to 12)
+//   • stemStatus = "failed"          → ↻ retry button with error in title
+function CardStemControl({ trackId, stemStatus, stemMode, vocalUrl, instrumentalUrl, stemError, onSplit, allStems }) {
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
-  async function trigger(e) {
-    e.stopPropagation();
+  async function trigger(mode) {
     if (busy) return;
     setBusy(true);
+    setPickerOpen(false);
     try {
-      await onSplit(trackId);
+      await onSplit(trackId, mode);
     } finally {
       setBusy(false);
     }
   }
 
-  // Done — show a tiny stem-bar with two download chips behind a
-  // popover. Saves horizontal space on mobile cards.
-  if (stemStatus === "completed" && vocalUrl && instrumentalUrl) {
+  // Done — popover with download chips for every present stem URL.
+  if (stemStatus === "completed" && vocalUrl) {
+    const proMode = stemMode === "split";
+    // For 12-stem mode, walk PRO_STEM_LABELS and emit only present
+    // stems. For 2-stem mode, just vocal + instrumental.
+    const chips = proMode
+      ? PRO_STEM_LABELS
+          .map((s) => ({ ...s, url: allStems?.[s.key] }))
+          .filter((s) => !!s.url)
+      : [
+          { key: "vocalUrl",        icon: "🎤", label: "Vocal",        url: vocalUrl },
+          { key: "instrumentalUrl", icon: "🎵", label: "Instrumental", url: instrumentalUrl },
+        ];
     return (
       <div style={{ position: "relative" }}>
         <button
           onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
           aria-label="Stem downloads"
-          title="Stem downloads ready"
+          title={proMode ? `${chips.length} Pro stems ready` : "Stems ready"}
           style={{
             width: 32,
             height: 32,
@@ -3727,9 +3783,29 @@ function CardStemControl({ trackId, stemStatus, vocalUrl, instrumentalUrl, stemE
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
+            position: "relative",
           }}
         >
           🎚️
+          {proMode && (
+            <span
+              style={{
+                position: "absolute",
+                top: -4,
+                right: -4,
+                background: C.accent,
+                color: "#0a0a0a",
+                borderRadius: 999,
+                fontSize: 8.5,
+                fontWeight: 900,
+                padding: "1px 4px",
+                lineHeight: 1.2,
+                letterSpacing: "0.04em",
+              }}
+            >
+              PRO
+            </span>
+          )}
         </button>
         {open && (
           <div
@@ -3738,7 +3814,9 @@ function CardStemControl({ trackId, stemStatus, vocalUrl, instrumentalUrl, stemE
               position: "absolute",
               top: 38,
               right: 0,
-              minWidth: 180,
+              minWidth: 220,
+              maxHeight: 380,
+              overflowY: "auto",
               background: C.panel,
               border: `1px solid ${C.borderHover}`,
               borderRadius: 10,
@@ -3747,51 +3825,45 @@ function CardStemControl({ trackId, stemStatus, vocalUrl, instrumentalUrl, stemE
               zIndex: 30,
               display: "flex",
               flexDirection: "column",
-              gap: 6,
+              gap: 4,
             }}
           >
-            <a
-              href={vocalUrl}
-              download
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                padding: "8px 12px",
-                borderRadius: 8,
-                background: C.panelSoft,
-                border: `1px solid ${C.border}`,
-                color: C.text,
-                textDecoration: "none",
-                fontSize: 12,
-                fontWeight: 700,
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              🎤 <span>Download vocal</span>
-            </a>
-            <a
-              href={instrumentalUrl}
-              download
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                padding: "8px 12px",
-                borderRadius: 8,
-                background: C.panelSoft,
-                border: `1px solid ${C.border}`,
-                color: C.text,
-                textDecoration: "none",
-                fontSize: 12,
-                fontWeight: 700,
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              🎵 <span>Download instrumental</span>
-            </a>
+            <div style={{
+              fontSize: 10,
+              color: C.muted,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+              fontWeight: 700,
+              padding: "4px 8px 2px",
+            }}>
+              {proMode ? `Pro stems · ${chips.length} files` : "Stems"}
+            </div>
+            {chips.map((s) => (
+              <a
+                key={s.key}
+                href={s.url}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  padding: "7px 10px",
+                  borderRadius: 8,
+                  background: C.panelSoft,
+                  border: `1px solid ${C.border}`,
+                  color: C.text,
+                  textDecoration: "none",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <span>{s.icon}</span>
+                <span style={{ flex: 1 }}>{s.label}</span>
+                <span style={{ fontSize: 10, color: C.muted, fontWeight: 600 }}>↓</span>
+              </a>
+            ))}
             <button
               onClick={() => setOpen(false)}
               style={{
@@ -3819,7 +3891,7 @@ function CardStemControl({ trackId, stemStatus, vocalUrl, instrumentalUrl, stemE
   if (stemStatus === "processing") {
     return (
       <div
-        title="Splitting stems… typically 60s"
+        title={`Splitting ${stemMode === "split" ? "12 Pro stems" : "stems"}… typically 60s`}
         style={{
           width: 32,
           height: 32,
@@ -3841,61 +3913,173 @@ function CardStemControl({ trackId, stemStatus, vocalUrl, instrumentalUrl, stemE
     );
   }
 
-  // Failed → show retry.
+  // Failed → show retry. Reuses the same picker so user can pick mode again.
   if (stemStatus === "failed") {
     return (
+      <div style={{ position: "relative" }}>
+        <button
+          onClick={(e) => { e.stopPropagation(); setPickerOpen((o) => !o); }}
+          disabled={busy}
+          aria-label="Retry stem split"
+          title={stemError ? `Stem split failed: ${stemError} — tap to retry` : "Tap to retry"}
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: "50%",
+            background: "transparent",
+            border: `1px solid rgba(239,68,68,0.5)`,
+            color: "#fca5a5",
+            fontSize: 13,
+            cursor: busy ? "default" : "pointer",
+            fontFamily: "inherit",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            opacity: busy ? 0.6 : 1,
+          }}
+        >
+          ↻
+        </button>
+        {pickerOpen && <StemModePicker onPick={trigger} onClose={() => setPickerOpen(false)} />}
+      </div>
+    );
+  }
+
+  // Idle — clicking opens the mode picker so user chooses Basic vs Pro.
+  return (
+    <div style={{ position: "relative" }}>
       <button
-        onClick={trigger}
+        onClick={(e) => { e.stopPropagation(); setPickerOpen((o) => !o); }}
         disabled={busy}
-        aria-label="Retry stem split"
-        title={stemError ? `Stem split failed: ${stemError} — tap to retry` : "Tap to retry"}
+        aria-label="Split into stems"
+        title="Split into vocal + instrumental, or 12 Pro stems"
         style={{
           width: 32,
           height: 32,
           borderRadius: "50%",
           background: "transparent",
-          border: `1px solid rgba(239,68,68,0.5)`,
-          color: "#fca5a5",
+          border: `1px solid ${C.border}`,
+          color: C.textSoft,
           fontSize: 13,
           cursor: busy ? "default" : "pointer",
           fontFamily: "inherit",
+          transition: "all 0.15s",
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
           opacity: busy ? 0.6 : 1,
         }}
       >
-        ↻
+        🎚️
       </button>
-    );
-  }
+      {pickerOpen && <StemModePicker onPick={trigger} onClose={() => setPickerOpen(false)} />}
+    </div>
+  );
+}
 
-  // Idle — initial CTA.
+// Mode picker popover — used from CardStemControl idle + failed states.
+// Two big buttons: Basic (vocal + instrumental, 4 credits) and Pro
+// (12 stems, 18 credits). Closes after the user picks one.
+function StemModePicker({ onPick, onClose }) {
   return (
-    <button
-      onClick={trigger}
-      disabled={busy}
-      aria-label="Split into vocal + instrumental stems"
-      title="Split into vocal + instrumental stems · 4 credits · ~60s"
+    <div
+      onClick={(e) => e.stopPropagation()}
       style={{
-        width: 32,
-        height: 32,
-        borderRadius: "50%",
-        background: "transparent",
-        border: `1px solid ${C.border}`,
-        color: C.textSoft,
-        fontSize: 13,
-        cursor: busy ? "default" : "pointer",
-        fontFamily: "inherit",
-        transition: "all 0.15s",
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        opacity: busy ? 0.6 : 1,
+        position: "absolute",
+        top: 38,
+        right: 0,
+        minWidth: 260,
+        background: C.panel,
+        border: `1px solid ${C.borderHover}`,
+        borderRadius: 10,
+        padding: 8,
+        boxShadow: "0 12px 32px -10px rgba(0,0,0,0.7)",
+        zIndex: 30,
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
       }}
     >
-      🎚️
-    </button>
+      <div style={{
+        fontSize: 10,
+        color: C.muted,
+        letterSpacing: "0.12em",
+        textTransform: "uppercase",
+        fontWeight: 700,
+        padding: "4px 8px 2px",
+      }}>
+        Split into stems
+      </div>
+      <button
+        onClick={() => onPick("vocal")}
+        style={{
+          padding: "10px 12px",
+          borderRadius: 8,
+          background: C.panelSoft,
+          border: `1px solid ${C.border}`,
+          color: C.text,
+          fontSize: 12.5,
+          fontWeight: 700,
+          cursor: "pointer",
+          fontFamily: "inherit",
+          textAlign: "left",
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+        }}
+      >
+        <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>🎚️ Basic split</span>
+          <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 600 }}>4 credits</span>
+        </span>
+        <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 500 }}>
+          Vocal + instrumental
+        </span>
+      </button>
+      <button
+        onClick={() => onPick("split")}
+        style={{
+          padding: "10px 12px",
+          borderRadius: 8,
+          background: "rgba(217,255,0,0.10)",
+          border: `1px solid ${C.borderHover}`,
+          color: C.text,
+          fontSize: 12.5,
+          fontWeight: 700,
+          cursor: "pointer",
+          fontFamily: "inherit",
+          textAlign: "left",
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+        }}
+      >
+        <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>🎛️ Pro split <span style={{ fontSize: 8.5, color: "#0a0a0a", background: C.accent, padding: "1px 5px", borderRadius: 999, fontWeight: 900, letterSpacing: "0.04em" }}>PRO</span></span>
+          <span style={{ fontSize: 10.5, color: C.accent, fontWeight: 700 }}>18 credits</span>
+        </span>
+        <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 500 }}>
+          12 stems: drums · bass · keys · strings · brass · synth · FX · vocals
+        </span>
+      </button>
+      <button
+        onClick={onClose}
+        style={{
+          marginTop: 2,
+          padding: "5px 8px",
+          borderRadius: 6,
+          background: "transparent",
+          border: "none",
+          color: C.muted,
+          fontSize: 10.5,
+          fontWeight: 700,
+          cursor: "pointer",
+          fontFamily: "inherit",
+        }}
+      >
+        Cancel
+      </button>
+    </div>
   );
 }
 
