@@ -31,6 +31,9 @@ export async function GET() {
         durationReq: true,
         actualDuration: true,
         isVocal: true,
+        // BPM — surfaced on each card so pro users see tempo at
+        // a glance for DAW sync.
+        tempo: true,
         model: true,
         status: true,
         error: true,

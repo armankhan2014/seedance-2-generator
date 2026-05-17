@@ -3474,6 +3474,11 @@ function GalleryCard({ track, alt, onSplitStems, onExtend, onTranslate }) {
             <span>
               {current.genre || track.genre || "—"}{(current.mood || track.mood) ? ` · ${current.mood || track.mood}` : ""}
               {isReady && ` · ${formatTime(current.actualDuration || current.durationReq)}`}
+              {/* BPM badge — surfaced from the stored tempo column so
+                  pro sound designers see tempo at a glance for DAW
+                  sync work. Only shown on ready tracks where we
+                  actually have a value. */}
+              {isReady && (current.tempo || track.tempo) && ` · ${current.tempo || track.tempo} BPM`}
               {isProcessing && " · generating…"}
               {isFailed && " · failed"}
             </span>

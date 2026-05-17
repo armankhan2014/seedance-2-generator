@@ -29,6 +29,7 @@ export async function GET(_req, { params }) {
       durationReq: true,
       actualDuration: true,
       isVocal: true,
+      tempo: true,
       status: true,
       error: true,
       streamUrl: true,
