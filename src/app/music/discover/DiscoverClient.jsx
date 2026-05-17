@@ -249,13 +249,7 @@ function DiscoverCard({ track, playing, onPlay }) {
           }}>
             {track.genre}{track.mood ? ` · ${track.mood}` : ""}
           </div>
-          <div style={{
-            fontSize: 11, color: C.muted, marginTop: 1,
-            display: "inline-flex", alignItems: "center", gap: 4,
-          }}>
-            by {track.creator}
-            {track.creatorVerified && <VerifiedBadge size={10} />}
-          </div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>by {track.creator}</div>
         </div>
         <button
           onClick={onPlay}
@@ -355,16 +349,13 @@ function CardAvatar({ image, name, verified, hue }) {
       <span
         style={{
           position: "absolute",
-          bottom: -2,
-          right: -2,
+          bottom: -1,
+          right: -1,
           display: "inline-flex",
-          background: "#0a0a0a",
-          borderRadius: "50%",
-          padding: 1,
           lineHeight: 0,
         }}
       >
-        <VerifiedBadge size={13} />
+        <VerifiedBadge size={11} />
       </span>
     </span>
   );

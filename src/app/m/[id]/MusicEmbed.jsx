@@ -175,10 +175,7 @@ function PlayerCard({ track }) {
             <div style={{ fontSize: 10.5, fontWeight: 800, color: C.accent, letterSpacing: "0.16em", textTransform: "uppercase" }}>
               {track.genre ? `${track.genre}${track.mood ? " · " + track.mood : ""}` : "AI music"}
             </div>
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 3, display: "inline-flex", alignItems: "center", gap: 4 }}>
-              by {track.creator}
-              {track.creatorVerified && <VerifiedBadge size={11} />}
-            </div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>by {track.creator}</div>
           </div>
         </div>
       </div>
@@ -380,9 +377,10 @@ function formatTime(s) {
 // — kept in sync visually so a verified user looks identical
 // everywhere their photo appears.
 function CreatorAvatar({ image, name, verified, size = 40 }) {
-  // Badge sized as 45% of avatar so it scales gracefully if size
-  // changes. Floor at 12px so the tick stays legible at small sizes.
-  const badgeSize = Math.max(12, Math.round(size * 0.45));
+  // Badge sized as 35% of avatar — small + understated, sits flush on
+  // the photo without a backing pad. Floor at 11px so the tick stays
+  // legible at small sizes.
+  const badgeSize = Math.max(11, Math.round(size * 0.35));
   const inner = image ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img
@@ -430,12 +428,9 @@ function CreatorAvatar({ image, name, verified, size = 40 }) {
       <span
         style={{
           position: "absolute",
-          bottom: -2,
-          right: -2,
+          bottom: -1,
+          right: -1,
           display: "inline-flex",
-          background: "#0a0a0a",
-          borderRadius: "50%",
-          padding: 1,
           lineHeight: 0,
         }}
       >
