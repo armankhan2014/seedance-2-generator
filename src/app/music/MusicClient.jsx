@@ -3466,12 +3466,16 @@ function GalleryCard({ track, alt, onSplitStems, onExtend, onTranslate }) {
       }}
     >
       <MiniWaveform color={hover ? C.accent : C.accentDark} />
-      <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {track.title}
-          </div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      {/* Title + meta block — full card width so long genre + mood +
+          BPM strings don't compete with the action buttons for
+          horizontal real estate. Buttons now sit BELOW in their own
+          row (was a single flex row that overlapped on narrow cards,
+          Arman flagged 2026-05-18). */}
+      <div style={{ marginTop: 12 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {track.title}
+        </div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <span>
               {current.genre || track.genre || "—"}{(current.mood || track.mood) ? ` · ${current.mood || track.mood}` : ""}
               {isReady && ` · ${formatTime(current.actualDuration || current.durationReq)}`}
@@ -3520,9 +3524,30 @@ function GalleryCard({ track, alt, onSplitStems, onExtend, onTranslate }) {
                 })}
               </span>
             )}
-          </div>
         </div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+      </div>
+      {/* Action row — sits BELOW the title+meta block now so the
+          buttons don't overlap with wrapped meta text on narrow
+          cards. Secondary actions (stem split / extend / translate /
+          publish / share) cluster on the left; the primary Play
+          button sits on the right. Buttons can wrap if needed. */}
+      <div
+        style={{
+          marginTop: 14,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            flexWrap: "wrap",
+          }}
+        >
           {isReady && onSplitStems && (
             <CardStemControl
               trackId={current.id}
@@ -3547,36 +3572,46 @@ function GalleryCard({ track, alt, onSplitStems, onExtend, onTranslate }) {
           {isReady && (
             <CardShareButton trackId={current.id} title={current.title || track.title} />
           )}
-          {isReady ? (
-            <button
-              onClick={toggle}
-              aria-label={playing ? "Pause" : "Play"}
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: "50%",
-                background: hover ? `linear-gradient(135deg, ${C.accent}, ${C.accentDark})` : C.panelSoft,
-                border: `1px solid ${hover ? C.accent : C.border}`,
-                color: hover ? "#0a0a0a" : C.accent,
-                fontSize: 14,
-                cursor: "pointer",
-              }}
-            >
-              {playing ? "❚❚" : "▶"}
-            </button>
-          ) : (
-            <div style={{
-              width: 36, height: 36, borderRadius: "50%",
+        </div>
+        {isReady ? (
+          <button
+            onClick={toggle}
+            aria-label={playing ? "Pause" : "Play"}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              background: hover
+                ? `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`
+                : C.panelSoft,
+              border: `1px solid ${hover ? C.accent : C.border}`,
+              color: hover ? "#0a0a0a" : C.accent,
+              fontSize: 15,
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            {playing ? "❚❚" : "▶"}
+          </button>
+        ) : (
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
               background: C.panelSoft,
               border: `1px solid ${C.border}`,
               color: isFailed ? C.danger : C.muted,
-              fontSize: 14,
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              {isFailed ? "✕" : "⏳"}
-            </div>
-          )}
-        </div>
+              fontSize: 15,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            {isFailed ? "✕" : "⏳"}
+          </div>
+        )}
       </div>
     </div>
   );
