@@ -1679,11 +1679,405 @@ function ReferenceModeRow({ value, onChange }) {
   );
 }
 
-// Combined file-picker + URL-paster used by both reference modes.
-// Single component because the upload pipeline is the same — only the
-// helper copy below changes per mode.
+// ────────────────────────────────────────────────────────────────────
+// RecorderPanel — in-browser audio recorder using MediaRecorder.
+//
+// Used inside ReferenceUploadBox when the user taps "🎙️ Tap to record"
+// instead of picking a file or pasting a URL. Captures vocals from
+// the device mic, shows a live timer + animated red indicator while
+// recording, then offers a preview <audio> player + "Re-record" /
+// "Use this recording" actions.
+//
+// On accept, the recorded Blob is wrapped in a File (so it has a
+// stable name + type) and passed to the parent's onComplete callback,
+// which feeds it into the same /api/music/reference/upload pipeline
+// as a normal file picker upload. Server already accepts audio/webm
+// + audio/mp4 in its MIME allow-list.
+//
+// Codec choice: Chrome/Firefox/Android prefer audio/webm + opus;
+// Safari (desktop + iOS) doesn't support webm but does support
+// audio/mp4. We pick whichever the browser advertises support for.
+//
+// 5-minute hard cap on recording length — auto-stops at 300s so a
+// user who leaves the tab open doesn't blow past R2's 25 MB upload
+// cap with a forgotten recording.
+// ────────────────────────────────────────────────────────────────────
+function RecorderPanel({ onComplete, onCancel, uploading }) {
+  const [phase, setPhase] = useState("idle"); // idle | recording | recorded
+  const [elapsed, setElapsed] = useState(0);
+  const [error, setError] = useState("");
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const recorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const blobRef = useRef(null);
+  const mimeRef = useRef("audio/webm");
+  const streamRef = useRef(null);
+  const timerRef = useRef(null);
+
+  const MAX_SECONDS = 300; // 5 min hard cap
+
+  // Tear down everything on unmount: stop the mic, drop the preview
+  // ObjectURL, clear the timer. Prevents the red mic-recording light
+  // from staying on if the user navigates away mid-record.
+  useEffect(() => {
+    return () => {
+      try { streamRef.current?.getTracks().forEach((t) => t.stop()); } catch {}
+      streamRef.current = null;
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = null;
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-stop at the cap. Defensive — the user normally stops
+  // manually well before 5 min, but if they wander away from the
+  // tab we don't want to record indefinitely.
+  useEffect(() => {
+    if (phase === "recording" && elapsed >= MAX_SECONDS) {
+      stopRecording();
+    }
+  }, [elapsed, phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function startRecording() {
+    setError("");
+    // Drop any previous preview so the UI shows a clean recording state.
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setError("Your browser doesn't support in-page recording. Try Chrome / Safari on a more recent device.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          // Voice-optimised constraints. echoCancellation + noiseSuppression
+          // give cleaner takes for the AI to read.
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+      streamRef.current = stream;
+
+      // Pick the best supported MIME. Order matters: webm/opus on
+      // Chrome/Firefox/Android, mp4 on Safari.
+      const candidates = [
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/mp4",
+        "audio/mp4;codecs=mp4a.40.2",
+      ];
+      let chosen = "";
+      for (const c of candidates) {
+        if (typeof MediaRecorder.isTypeSupported === "function" && MediaRecorder.isTypeSupported(c)) {
+          chosen = c;
+          break;
+        }
+      }
+      mimeRef.current = chosen || "audio/webm";
+
+      const rec = chosen
+        ? new MediaRecorder(stream, { mimeType: chosen })
+        : new MediaRecorder(stream);
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      rec.onstop = () => {
+        // Some browsers report mimeType "" — fall back to what we
+        // requested so the Blob has a sensible type for the upload.
+        const type = rec.mimeType || mimeRef.current || "audio/webm";
+        mimeRef.current = type;
+        const blob = new Blob(chunksRef.current, { type });
+        blobRef.current = blob;
+        const url = URL.createObjectURL(blob);
+        setPreviewUrl(url);
+        setPhase("recorded");
+        try { streamRef.current?.getTracks().forEach((t) => t.stop()); } catch {}
+        streamRef.current = null;
+      };
+      rec.start();
+      recorderRef.current = rec;
+      setPhase("recording");
+      setElapsed(0);
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
+    } catch (e) {
+      if (e?.name === "NotAllowedError" || e?.name === "PermissionDeniedError") {
+        setError("Mic permission denied. Enable it in your browser settings and try again.");
+      } else if (e?.name === "NotFoundError") {
+        setError("No microphone found on this device.");
+      } else {
+        setError(`Couldn't access mic: ${e?.message || "unknown error"}`);
+      }
+    }
+  }
+
+  function stopRecording() {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (recorderRef.current && recorderRef.current.state === "recording") {
+      try { recorderRef.current.stop(); } catch {}
+    }
+  }
+
+  function reRecord() {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+    blobRef.current = null;
+    chunksRef.current = [];
+    setElapsed(0);
+    setPhase("idle");
+    setError("");
+  }
+
+  function accept() {
+    if (!blobRef.current) return;
+    const type = mimeRef.current || blobRef.current.type || "audio/webm";
+    // Pick a file extension that the server's MIME allow-list
+    // recognises (webm + mp4/m4a are in EXT_TO_MIME on the server).
+    const ext = type.includes("mp4") ? "m4a" : "webm";
+    const file = new File(
+      [blobRef.current],
+      `voice-recording-${Date.now()}.${ext}`,
+      { type }
+    );
+    onComplete(file);
+  }
+
+  const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
+  const ss = String(elapsed % 60).padStart(2, "0");
+
+  return (
+    <div
+      style={{
+        padding: 16,
+        background: C.panel,
+        border: `1px solid ${C.borderHover}`,
+        borderRadius: 12,
+        display: "flex",
+        flexDirection: "column",
+        gap: 14,
+      }}
+    >
+      <style>{`@keyframes recPulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50%      { opacity: 0.55; transform: scale(0.88); }
+      }`}</style>
+
+      {phase === "idle" && (
+        <>
+          <div style={{ textAlign: "center", padding: "8px 0 4px" }}>
+            <button
+              type="button"
+              onClick={startRecording}
+              disabled={uploading}
+              aria-label="Start recording"
+              style={{
+                width: 88,
+                height: 88,
+                borderRadius: "50%",
+                background: "linear-gradient(135deg, #ef4444, #b91c1c)",
+                border: `2px solid rgba(239,68,68,0.45)`,
+                color: "#fff",
+                fontSize: 32,
+                cursor: uploading ? "default" : "pointer",
+                opacity: uploading ? 0.5 : 1,
+                fontFamily: "inherit",
+                boxShadow: "0 16px 40px -16px rgba(239,68,68,0.6)",
+                transition: "transform 0.15s",
+              }}
+              onMouseDown={(e) => (e.currentTarget.style.transform = "scale(0.95)")}
+              onMouseUp={(e) => (e.currentTarget.style.transform = "scale(1)")}
+              onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+            >
+              🎙️
+            </button>
+          </div>
+          <div style={{ textAlign: "center", fontSize: 13, color: C.textSoft, lineHeight: 1.55 }}>
+            Tap the mic to start recording. Hum, sing your verse, sketch a raag —
+            up to 5 minutes.
+          </div>
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <button
+              type="button"
+              onClick={onCancel}
+              style={{
+                padding: "8px 14px",
+                borderRadius: 8,
+                background: "transparent",
+                border: `1px solid ${C.border}`,
+                color: C.muted,
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              Back
+            </button>
+          </div>
+        </>
+      )}
+
+      {phase === "recording" && (
+        <>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 12,
+              padding: "10px 0 6px",
+            }}
+          >
+            <span
+              aria-hidden="true"
+              style={{
+                width: 14,
+                height: 14,
+                borderRadius: "50%",
+                background: "#ef4444",
+                boxShadow: "0 0 0 5px rgba(239,68,68,0.25)",
+                animation: "recPulse 1.1s ease-in-out infinite",
+                display: "inline-block",
+              }}
+            />
+            <span
+              style={{
+                fontSize: 28,
+                fontWeight: 800,
+                letterSpacing: "-0.02em",
+                color: C.text,
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {mm}:{ss}
+            </span>
+          </div>
+          <div style={{ textAlign: "center", fontSize: 11.5, color: C.muted }}>
+            Recording… auto-stops at 5:00 if you forget.
+          </div>
+          <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
+            <button
+              type="button"
+              onClick={stopRecording}
+              style={{
+                padding: "12px 22px",
+                borderRadius: 10,
+                background: "linear-gradient(135deg, #ef4444, #b91c1c)",
+                border: "none",
+                color: "#fff",
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                letterSpacing: "0.02em",
+                boxShadow: "0 10px 24px -12px rgba(239,68,68,0.6)",
+              }}
+            >
+              ■ Stop
+            </button>
+          </div>
+        </>
+      )}
+
+      {phase === "recorded" && (
+        <>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ fontSize: 12, color: C.textSoft, fontWeight: 600 }}>
+              Recording · {mm}:{ss}
+            </div>
+            {previewUrl && (
+              <audio
+                src={previewUrl}
+                controls
+                style={{ width: "100%", borderRadius: 8 }}
+              />
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={reRecord}
+              disabled={uploading}
+              style={{
+                flex: "1 1 120px",
+                padding: "10px 14px",
+                borderRadius: 10,
+                background: C.panelSoft,
+                border: `1px solid ${C.border}`,
+                color: C.textSoft,
+                fontSize: 12.5,
+                fontWeight: 700,
+                cursor: uploading ? "default" : "pointer",
+                fontFamily: "inherit",
+                opacity: uploading ? 0.6 : 1,
+              }}
+            >
+              ↻ Re-record
+            </button>
+            <button
+              type="button"
+              onClick={accept}
+              disabled={uploading}
+              style={{
+                flex: "2 1 200px",
+                padding: "10px 14px",
+                borderRadius: 10,
+                background: uploading
+                  ? C.panelSoft
+                  : `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`,
+                border: `1px solid ${uploading ? C.border : C.accent}`,
+                color: uploading ? C.muted : "#0a0a0a",
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: uploading ? "default" : "pointer",
+                fontFamily: "inherit",
+                letterSpacing: "0.02em",
+              }}
+            >
+              {uploading ? "Uploading…" : "✓ Use this recording"}
+            </button>
+          </div>
+        </>
+      )}
+
+      {error && (
+        <div
+          style={{
+            padding: "8px 12px",
+            background: "rgba(239,68,68,0.10)",
+            border: `1px solid rgba(239,68,68,0.32)`,
+            borderRadius: 8,
+            fontSize: 12,
+            color: C.danger,
+          }}
+        >
+          {error}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Combined file-picker + URL-paster + tap-to-record used by both
+// reference modes. The upload pipeline is the same regardless of input
+// source — file, fetched URL, or browser-recorded blob — so this one
+// component handles all three and only the helper copy adapts per
+// mode (cover vs add-instrumental).
 function ReferenceUploadBox({ mode, file, uploading, error, onFile, onUrl, onClear }) {
   const [urlInput, setUrlInput] = useState("");
+  // Recording mode: when true, the box hides the picker controls and
+  // shows the live RecorderPanel instead. Switches back to picker on
+  // cancel OR on successful upload (the parent clears it via `file`).
+  const [recording, setRecording] = useState(false);
   const fileInputRef = useRef(null);
   const explainer =
     mode === "cover"
@@ -1754,9 +2148,22 @@ function ReferenceUploadBox({ mode, file, uploading, error, onFile, onUrl, onCle
             Remove
           </button>
         </div>
+      ) : recording ? (
+        // Live recording panel — mic capture inside the page. On
+        // completion the recorded blob is wrapped in a File and
+        // handed back to onFile() so it goes through the same R2
+        // upload pipeline as a file picker upload.
+        <RecorderPanel
+          uploading={uploading}
+          onComplete={(recordedFile) => {
+            setRecording(false);
+            onFile(recordedFile);
+          }}
+          onCancel={() => setRecording(false)}
+        />
       ) : (
         <>
-          {/* File picker */}
+          {/* File picker + tap-to-record — two big primary actions */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <input
               ref={fileInputRef}
@@ -1774,7 +2181,7 @@ function ReferenceUploadBox({ mode, file, uploading, error, onFile, onUrl, onCle
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
               style={{
-                flex: "1 1 200px",
+                flex: "1 1 180px",
                 padding: "12px 16px",
                 borderRadius: 10,
                 background: uploading ? C.panelSoft : C.panel,
@@ -1788,6 +2195,26 @@ function ReferenceUploadBox({ mode, file, uploading, error, onFile, onUrl, onCle
               }}
             >
               {uploading ? "Uploading…" : "📁 Choose audio file"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setRecording(true)}
+              disabled={uploading}
+              style={{
+                flex: "1 1 180px",
+                padding: "12px 16px",
+                borderRadius: 10,
+                background: uploading ? C.panelSoft : C.panel,
+                border: `1px solid rgba(239,68,68,0.40)`,
+                color: uploading ? C.muted : "#fca5a5",
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: uploading ? "default" : "pointer",
+                fontFamily: "inherit",
+                transition: "all 0.15s",
+              }}
+            >
+              🎙️ Tap to record
             </button>
           </div>
           {/* URL input */}
