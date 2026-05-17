@@ -583,6 +583,20 @@ export default function MusicClient() {
     }
   }
 
+  // ── Lyric translation state ───────────────────────────────────────
+  // Opens a modal that translates any track's stored lyrics into a
+  // picked language while preserving rhyme + meter. The translated
+  // text is presented for copy-out; user can drop it into the lyrics
+  // textarea of a NEW generation to release the song in another
+  // language. Stays out of MusicTrack state — translations are
+  // ephemeral, not persisted on the original row.
+  const [translateOpen, setTranslateOpen] = useState(false);
+  const [translateTrackId, setTranslateTrackId] = useState(null);
+  function openTranslate(trackId) {
+    setTranslateTrackId(trackId);
+    setTranslateOpen(true);
+  }
+
   // Kick off an "extend this track" job. Creates a new MusicTrack row
   // on the server (so the original stays untouched + the user can
   // compare them) and returns immediately. The new row appears at the
@@ -877,7 +891,13 @@ export default function MusicClient() {
         )}
 
         <PricingSection />
-        <GallerySection tracks={tracks} onPickStarter={applyStarter} onSplitStems={onSplitStems} onExtend={onExtendTrack} />
+        <GallerySection
+          tracks={tracks}
+          onPickStarter={applyStarter}
+          onSplitStems={onSplitStems}
+          onExtend={onExtendTrack}
+          onTranslate={openTranslate}
+        />
         <FooterNotes />
       </main>
 
@@ -909,6 +929,12 @@ export default function MusicClient() {
         onApply={applyHelperLyrics}
         genre={genre}
         mood={mood}
+      />
+
+      <LyricTranslateModal
+        open={translateOpen}
+        trackId={translateTrackId}
+        onClose={() => { setTranslateOpen(false); setTranslateTrackId(null); }}
       />
     </div>
   );
@@ -3174,7 +3200,7 @@ function PricingSection() {
   );
 }
 
-function GallerySection({ tracks, onPickStarter, onSplitStems, onExtend }) {
+function GallerySection({ tracks, onPickStarter, onSplitStems, onExtend, onTranslate }) {
   return (
     <section style={{ marginTop: 60 }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
@@ -3252,6 +3278,7 @@ function GallerySection({ tracks, onPickStarter, onSplitStems, onExtend }) {
                   alt={altByParent.get(t.id) || null}
                   onSplitStems={onSplitStems}
                   onExtend={onExtend}
+                  onTranslate={onTranslate}
                 />
               ));
           })()}
@@ -3360,7 +3387,7 @@ function StarterCard({ starter, onPick }) {
   );
 }
 
-function GalleryCard({ track, alt, onSplitStems, onExtend }) {
+function GalleryCard({ track, alt, onSplitStems, onExtend, onTranslate }) {
   const [hover, setHover] = useState(false);
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
@@ -3482,6 +3509,9 @@ function GalleryCard({ track, alt, onSplitStems, onExtend }) {
           {isReady && onExtend && (
             <CardExtendButton trackId={current.id} onExtend={onExtend} />
           )}
+          {isReady && onTranslate && current.isVocal && (
+            <CardTranslateButton trackId={current.id} onTranslate={onTranslate} />
+          )}
           {isReady && (
             <CardPublishButton trackId={current.id} initialPublic={!!current.public} />
           )}
@@ -3566,6 +3596,39 @@ function CardPublishButton({ trackId, initialPublic }) {
       }}
     >
       {isPublic ? "🌐" : "🔒"}
+    </button>
+  );
+}
+
+// Tiny 🌐 "Translate lyrics" button on each completed VOCAL card.
+// Opens the LyricTranslateModal which calls /api/music/lyrics/translate.
+// Instrumental tracks don't get this button (nothing to translate).
+function CardTranslateButton({ trackId, onTranslate }) {
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        onTranslate(trackId);
+      }}
+      aria-label="Translate lyrics to another language"
+      title="Translate the lyrics to another language · 1 credit"
+      style={{
+        width: 32,
+        height: 32,
+        borderRadius: "50%",
+        background: "transparent",
+        border: `1px solid ${C.border}`,
+        color: C.textSoft,
+        fontSize: 13,
+        cursor: "pointer",
+        fontFamily: "inherit",
+        transition: "all 0.15s",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      🌐
     </button>
   );
 }
@@ -3980,6 +4043,334 @@ const LYRIC_IDEA_EXAMPLES = [
   "Korean ballad about staying up missing someone",
   "Spanish reggaeton, summer night in Madrid",
 ];
+
+// ────────────────────────────────────────────────────────────────────
+// LyricTranslateModal — translate any track's stored lyrics to another
+// language while preserving rhyme + meter (server-side prompt anchors
+// Claude on syllable-count + rhyme-scheme preservation so the output
+// is actually singable to the original melody).
+//
+// Used from the 🌐 button on every completed vocal MusicCard. Calls
+// POST /api/music/lyrics/translate which charges 1 credit (refunded
+// on failure). The translated text is shown in a textarea with a
+// "Copy" button — translations are NOT persisted to the original
+// track. Workflow: user copies the translated lyrics + pastes them
+// into the lyrics box of a NEW generation to release the song in
+// another language.
+//
+// 29 target languages, ordered so the most common Bollywood + global
+// release languages bubble to the top.
+// ────────────────────────────────────────────────────────────────────
+const TRANSLATE_LANGUAGES = [
+  "English", "Hindi", "Punjabi", "Urdu", "Tamil", "Telugu", "Bengali", "Marathi", "Gujarati",
+  "Spanish", "French", "Portuguese", "Italian", "German", "Dutch", "Russian",
+  "Korean", "Japanese", "Mandarin", "Cantonese", "Vietnamese", "Thai", "Indonesian",
+  "Arabic", "Turkish", "Persian", "Hebrew", "Swahili", "Yoruba",
+];
+
+function LyricTranslateModal({ open, trackId, onClose }) {
+  const [language, setLanguage] = useState("English");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [translated, setTranslated] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setLanguage("English");
+      setBusy(false);
+      setErr("");
+      setTranslated("");
+      setCopied(false);
+    }
+  }, [open]);
+
+  async function go() {
+    if (!trackId || busy) return;
+    setBusy(true);
+    setErr("");
+    setTranslated("");
+    setCopied(false);
+    try {
+      const res = await fetch("/api/music/lyrics/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackId, targetLanguage: language }),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        setErr(j.error || "Couldn't translate lyrics");
+        return;
+      }
+      setTranslated(j.translated || "");
+    } catch (e) {
+      setErr(e?.message || "Network error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyOut() {
+    if (!translated) return;
+    try {
+      await navigator.clipboard.writeText(translated);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {}
+  }
+
+  if (!open) return null;
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={onClose}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.72)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
+        zIndex: 200,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "100%",
+          maxWidth: 560,
+          maxHeight: "90vh",
+          overflowY: "auto",
+          background: C.panel,
+          border: `1px solid ${C.borderHover}`,
+          borderRadius: 18,
+          padding: 22,
+          boxShadow: "0 28px 80px -20px rgba(0,0,0,0.85), 0 0 0 1px rgba(217,255,0,0.06) inset",
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+          <div>
+            <div
+              style={{
+                fontSize: 10.5,
+                fontWeight: 800,
+                color: C.accent,
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+              }}
+            >
+              🌐 Translate lyrics
+            </div>
+            <h3 style={{ fontSize: 20, fontWeight: 800, margin: "4px 0 0", letterSpacing: "-0.01em" }}>
+              Same song, new language
+            </h3>
+            <p style={{ fontSize: 12.5, color: C.muted, margin: "6px 0 0", lineHeight: 1.55 }}>
+              We preserve rhyme + syllable count so the translation is{" "}
+              <b style={{ color: C.text }}>singable to the same melody</b>. Output
+              uses the target language&rsquo;s native script.{" "}
+              <b style={{ color: C.text }}>Costs 1 credit per translation</b>{" "}
+              (refunded on failure).
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              background: C.panelSoft,
+              border: `1px solid ${C.border}`,
+              color: C.textSoft,
+              cursor: "pointer",
+              fontSize: 16,
+              fontFamily: "inherit",
+              flexShrink: 0,
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        <div style={{ marginTop: 18 }}>
+          <SectionEyebrow>Target language</SectionEyebrow>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(96px, 1fr))",
+              gap: 6,
+              marginTop: 6,
+            }}
+          >
+            {TRANSLATE_LANGUAGES.map((l) => {
+              const on = language === l;
+              return (
+                <button
+                  key={l}
+                  type="button"
+                  onClick={() => setLanguage(l)}
+                  disabled={busy}
+                  style={{
+                    padding: "8px 8px",
+                    borderRadius: 8,
+                    background: on ? C.accent : C.panelSoft,
+                    border: `1px solid ${on ? C.accent : C.border}`,
+                    color: on ? "#0a0a0a" : C.text,
+                    fontSize: 11.5,
+                    fontWeight: on ? 800 : 600,
+                    cursor: busy ? "default" : "pointer",
+                    fontFamily: "inherit",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  {l}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {err && (
+          <div
+            style={{
+              marginTop: 14,
+              padding: "10px 14px",
+              background: "rgba(239,68,68,0.10)",
+              border: `1px solid rgba(239,68,68,0.32)`,
+              borderRadius: 10,
+              fontSize: 12.5,
+              color: C.danger,
+            }}
+          >
+            {err}
+          </div>
+        )}
+
+        {translated && (
+          <div style={{ marginTop: 18 }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                marginBottom: 6,
+              }}
+            >
+              <SectionEyebrow>{language} translation</SectionEyebrow>
+              <button
+                type="button"
+                onClick={copyOut}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 8,
+                  background: copied ? C.accent : C.panelSoft,
+                  border: `1px solid ${copied ? C.accent : C.border}`,
+                  color: copied ? "#0a0a0a" : C.textSoft,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                {copied ? "✓ Copied" : "📋 Copy"}
+              </button>
+            </div>
+            <textarea
+              value={translated}
+              onChange={(e) => setTranslated(e.target.value)}
+              rows={12}
+              style={{
+                width: "100%",
+                background: C.panelSoft,
+                border: `1px solid ${C.borderHover}`,
+                borderRadius: 12,
+                padding: "12px 14px",
+                color: C.text,
+                fontSize: 13,
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                lineHeight: 1.55,
+                resize: "vertical",
+                outline: "none",
+              }}
+            />
+            <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
+              Copy this and paste it into the lyrics box of a new generation to
+              release the song in {language}. The translated lyrics aren&rsquo;t
+              saved to your library automatically.
+            </div>
+          </div>
+        )}
+
+        <div
+          style={{
+            marginTop: 20,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ fontSize: 11.5, color: C.muted }}>
+            {busy ? "Translating…" : "1 credit · refunded on failure"}
+          </span>
+          <div style={{ display: "flex", gap: 8 }}>
+            {translated && (
+              <button
+                type="button"
+                onClick={go}
+                disabled={busy}
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 10,
+                  background: C.panelSoft,
+                  border: `1px solid ${C.border}`,
+                  color: C.textSoft,
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: busy ? "default" : "pointer",
+                  fontFamily: "inherit",
+                  opacity: busy ? 0.5 : 1,
+                }}
+              >
+                ↻ Re-translate
+              </button>
+            )}
+            {!translated && (
+              <button
+                type="button"
+                onClick={go}
+                disabled={busy}
+                style={{
+                  padding: "10px 18px",
+                  borderRadius: 10,
+                  background: busy
+                    ? C.panelSoft
+                    : `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`,
+                  border: `1px solid ${busy ? C.border : C.accent}`,
+                  color: busy ? C.muted : "#0a0a0a",
+                  fontSize: 13,
+                  fontWeight: 800,
+                  cursor: busy ? "default" : "pointer",
+                  fontFamily: "inherit",
+                  letterSpacing: "0.02em",
+                }}
+              >
+                {busy ? "Translating…" : `🌐 Translate to ${language}`}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function LyricHelperModal({ open, onClose, onApply, genre, mood }) {
   const [idea, setIdea] = useState("");
