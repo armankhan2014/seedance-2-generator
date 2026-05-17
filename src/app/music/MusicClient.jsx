@@ -766,6 +766,73 @@ export default function MusicClient() {
               </div>
             ) : (
               <>
+                {/* Studio Pro entry point — only shown in studio-pro
+                    mode. Links to the dedicated DAW page where the
+                    multi-track editor lives. No auto-flipped form
+                    state (Arman flagged 2026-05-18 that adding
+                    side-effects to the tab itself was over-reach).
+                    Pro mode renders without this CTA. */}
+                {mode === "studio-pro" && (
+                  <div
+                    style={{
+                      marginTop: 18,
+                      padding: "14px 16px",
+                      background:
+                        "linear-gradient(135deg, rgba(217,255,0,0.10) 0%, rgba(236,72,153,0.10) 100%)",
+                      border: "1px solid rgba(217,255,0,0.30)",
+                      borderRadius: 12,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 12,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <span style={{ fontSize: 22, flexShrink: 0 }}>🎛️</span>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 800,
+                          color: C.text,
+                          letterSpacing: "-0.005em",
+                        }}
+                      >
+                        Open the Studio Editor
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11.5,
+                          color: C.muted,
+                          marginTop: 3,
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        Multi-track timeline with sync playback, waveforms,
+                        mute / solo / volume per track. Drop your library
+                        tracks onto lanes and arrange.{" "}
+                        <b style={{ color: C.accent }}>v0 BETA</b>
+                        {" "}— editing + stem separation coming.
+                      </div>
+                    </div>
+                    <a
+                      href="/music/studio"
+                      style={{
+                        padding: "10px 18px",
+                        borderRadius: 10,
+                        background: "linear-gradient(135deg, #D9FF00 0%, #ec4899 100%)",
+                        color: "#0a0a0a",
+                        fontSize: 13,
+                        fontWeight: 800,
+                        textDecoration: "none",
+                        letterSpacing: "0.02em",
+                        flexShrink: 0,
+                      }}
+                    >
+                      Open Studio →
+                    </a>
+                  </div>
+                )}
+
                 {/* 1 · DESCRIBE — the user's free-form direction.
                     Copy adapts based on reference mode so the
                     placeholder + helper text match what the prompt is
