@@ -3747,19 +3747,25 @@ function CardExtendButton({ trackId, onExtend }) {
 // Stem labels for the 12-stem Pro split popover. Order matches the
 // audio engineering convention (rhythm section → harmony → melody →
 // vocals → fx) so the chips read naturally in a DAW workflow.
+//
+// `stemKey` is the URL-path segment used by the same-origin
+// download proxy at /api/music/tracks/[id]/stem/[stemKey] — the
+// chip's href points there so the browser actually downloads the
+// file with a proper name instead of opening it inline (which is
+// what cross-origin <a download> falls back to).
 const PRO_STEM_LABELS = [
-  { key: "drumsUrl",          icon: "🥁", label: "Drums" },
-  { key: "bassUrl",           icon: "🎸", label: "Bass" },
-  { key: "percussionUrl",     icon: "🪘", label: "Percussion" },
-  { key: "guitarUrl",         icon: "🎸", label: "Guitar" },
-  { key: "keyboardUrl",       icon: "🎹", label: "Keyboard" },
-  { key: "stringsUrl",        icon: "🎻", label: "Strings" },
-  { key: "brassUrl",          icon: "🎺", label: "Brass" },
-  { key: "woodwindsUrl",      icon: "🎷", label: "Woodwinds" },
-  { key: "synthUrl",          icon: "🎛️", label: "Synth" },
-  { key: "fxUrl",             icon: "💫", label: "FX / Other" },
-  { key: "vocalUrl",          icon: "🎤", label: "Lead vocal" },
-  { key: "backingVocalsUrl",  icon: "🎤", label: "Backing vocals" },
+  { key: "drumsUrl",          stemKey: "drums",          icon: "🥁", label: "Drums" },
+  { key: "bassUrl",           stemKey: "bass",           icon: "🎸", label: "Bass" },
+  { key: "percussionUrl",     stemKey: "percussion",     icon: "🪘", label: "Percussion" },
+  { key: "guitarUrl",         stemKey: "guitar",         icon: "🎸", label: "Guitar" },
+  { key: "keyboardUrl",       stemKey: "keyboard",       icon: "🎹", label: "Keyboard" },
+  { key: "stringsUrl",        stemKey: "strings",        icon: "🎻", label: "Strings" },
+  { key: "brassUrl",          stemKey: "brass",          icon: "🎺", label: "Brass" },
+  { key: "woodwindsUrl",      stemKey: "woodwinds",      icon: "🎷", label: "Woodwinds" },
+  { key: "synthUrl",          stemKey: "synth",          icon: "🎛️", label: "Synth" },
+  { key: "fxUrl",             stemKey: "fx",             icon: "💫", label: "FX / Other" },
+  { key: "vocalUrl",          stemKey: "vocal",          icon: "🎤", label: "Lead vocal" },
+  { key: "backingVocalsUrl",  stemKey: "backing-vocals", icon: "🎤", label: "Backing vocals" },
 ];
 
 // Shared shell that renders ANY popover into document.body via a
@@ -3792,12 +3798,17 @@ function PortalPopover({ rect, onClose, children, minWidth = 220, maxHeight = 38
   useEffect(() => {
     if (!mounted) return;
     function onKey(e) { if (e.key === "Escape") onClose(); }
+    // Close on PAGE-level scroll only — scroll inside the popover
+    // itself shouldn't dismiss it. Bubble-phase listener (no `true`
+    // capture flag) means we don't get fired on child-element
+    // scrolls, which fixes the previous bug where scrolling to see
+    // the 12th stem chip would instantly close the popover.
     function onScroll() { onClose(); }
     window.addEventListener("keydown", onKey);
-    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("scroll", onScroll);
     return () => {
       window.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("scroll", onScroll);
     };
   }, [mounted, onClose]);
 
@@ -3815,13 +3826,25 @@ function PortalPopover({ rect, onClose, children, minWidth = 220, maxHeight = 38
   if (viewportW - right - popoverWidth < 8) {
     right = Math.max(8, viewportW - rect.left - popoverWidth);
   }
-  // Vertical: default below the trigger with a 6px gap. If that
-  // would overflow the viewport, flip above.
-  const below = rect.bottom + 6;
-  const wouldOverflow = below + maxHeight > viewportH - 8;
-  const top = wouldOverflow
-    ? Math.max(8, rect.top - 6 - maxHeight)
-    : below;
+  // Vertical: prefer below the trigger with a 6px gap. If there's
+  // more room above than below, flip up. The KEY fix here is
+  // computing the EFFECTIVE max-height from actual available space
+  // (not the static maxHeight prop) so on small viewports the
+  // popover never extends off-screen — it clamps to fit + the
+  // overflowY:auto handles scroll INSIDE it. Pre-fix: a 12-stem
+  // popover on a 500px phone viewport overshot the bottom edge
+  // and the user couldn't see (let alone scroll to) the last few
+  // stems.
+  const spaceBelow = viewportH - rect.bottom - 14; // 6 gap + 8 margin
+  const spaceAbove = rect.top - 14;
+  const placeAbove = spaceBelow < 220 && spaceAbove > spaceBelow;
+  const effectiveMax = Math.max(
+    160, // never collapse below ~3 chip rows
+    Math.min(maxHeight, placeAbove ? spaceAbove : spaceBelow)
+  );
+  const top = placeAbove
+    ? Math.max(8, rect.top - 6 - effectiveMax)
+    : rect.bottom + 6;
 
   return createPortal(
     <>
@@ -3843,8 +3866,10 @@ function PortalPopover({ rect, onClose, children, minWidth = 220, maxHeight = 38
           top,
           right,
           minWidth: popoverWidth,
-          maxHeight,
+          maxHeight: effectiveMax,
           overflowY: "auto",
+          WebkitOverflowScrolling: "touch", // momentum scroll on iOS
+          overscrollBehavior: "contain",     // don't bubble scroll to page
           background: C.panel,
           border: `1px solid ${C.borderHover}`,
           borderRadius: 10,
@@ -3911,13 +3936,22 @@ function CardStemControl({ trackId, stemStatus, stemMode, vocalUrl, instrumental
   // ── Completed: download chips popover ──────────────────────────
   if (stemStatus === "completed" && vocalUrl) {
     const proMode = stemMode === "split";
+    // Each chip's `href` points at the same-origin download proxy
+    // (/api/music/tracks/[id]/stem/[stemKey]) instead of the raw R2
+    // URL. That way the <a download> attribute + the proxy's
+    // Content-Disposition header force a real file save with a
+    // useful filename (track-title-stem-bpm.mp3) instead of the
+    // browser opening the audio inline in a new tab. We still
+    // filter chips by presence of the underlying R2 url so empty
+    // stems (e.g. brass=null on a synthwave track) don't appear.
+    const proxyUrl = (stemKey) => `/api/music/tracks/${trackId}/stem/${stemKey}`;
     const chips = proMode
       ? PRO_STEM_LABELS
-          .map((s) => ({ ...s, url: allStems?.[s.key] }))
-          .filter((s) => !!s.url)
+          .filter((s) => !!allStems?.[s.key])
+          .map((s) => ({ ...s, href: proxyUrl(s.stemKey) }))
       : [
-          { key: "vocalUrl",        icon: "🎤", label: "Vocal",        url: vocalUrl },
-          { key: "instrumentalUrl", icon: "🎵", label: "Instrumental", url: instrumentalUrl },
+          { key: "vocalUrl",        icon: "🎤", label: "Vocal",        href: proxyUrl("vocal") },
+          { key: "instrumentalUrl", icon: "🎵", label: "Instrumental", href: proxyUrl("instrumental") },
         ];
     return (
       <>
@@ -3978,10 +4012,8 @@ function CardStemControl({ trackId, stemStatus, stemMode, vocalUrl, instrumental
             {chips.map((s) => (
               <a
                 key={s.key}
-                href={s.url}
+                href={s.href}
                 download
-                target="_blank"
-                rel="noopener noreferrer"
                 style={{
                   padding: "7px 10px",
                   borderRadius: 8,
