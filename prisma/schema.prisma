@@ -327,6 +327,13 @@ model MusicTrack {
   vocalUrl        String?
   instrumentalUrl String?
   stemError       String?  @db.Text
+  // Phase 4 feature 3 — A/B variations. The music engine returns 2
+  // variants per generation call; we used to discard the 2nd. Now we
+  // persist it as a sibling MusicTrack row and link it back to the
+  // original via parentTrackId so the library can group them.
+  // Null on originals + on standalone (single-variant) tracks. Non-null
+  // means "this row is the alt take of parentTrackId".
+  parentTrackId   String?
   deletedAt      DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -339,6 +346,7 @@ model MusicTrack {
   @@index([deletedAt])
   @@index([public, createdAt(sort: Desc)])
   @@index([stemTaskId])
+  @@index([parentTrackId])
 }
 
 // Web Push subscription for browser notifications. Mirrors the model

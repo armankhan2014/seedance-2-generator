@@ -18,6 +18,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { scrubVendor } from "@/lib/suno";
+import { uploadAudioBuffer, isR2Configured } from "@/lib/storage";
 import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -68,10 +69,13 @@ export async function POST(req) {
     return failAndRefund(track, reportedMsg || `Music engine error ${reportedCode}`);
   }
 
-  // Pull the first audio variant. music engine can return multiple; we keep
-  // the first one (the only one we charged for at our pricing tier).
+  // Pull both audio variants. The music engine returns up to 2 per
+  // generation call — we used to discard the second. Now we keep it
+  // and persist it as a sibling "alt" row so users get A/B compare
+  // for free on every generation (Phase 4 feature 3).
   const items = Array.isArray(data.data) ? data.data : Array.isArray(payload.data) ? payload.data : [];
   const item = items[0] || data || {};
+  const altItem = items[1] || null;
   const audioId = item.audio_id || item.id;
   const audioUrl = item.audio_url || item.audioUrl;
   const streamUrl = item.stream_audio_url || item.streamAudioUrl || item.streamUrl;
@@ -114,6 +118,91 @@ export async function POST(req) {
         status: "completed",
       },
     });
+
+    // ── Persist the 2nd variant as an "alt" sibling row ─────────────
+    // The music engine returns 2 takes per generation; we used to
+    // discard the second. Now we save it as its own MusicTrack row
+    // linked back to the original via parentTrackId. Same metadata
+    // (genre/mood/lyrics/etc) so the library card style stays
+    // consistent. Title gets " (alt)" suffix so it's visually
+    // distinct in the library. Best-effort R2 mirror — fall back to
+    // the music-engine URL if the mirror fails.
+    //
+    // Only fire on extensions / generations / covers — NOT on
+    // already-extended tracks (parentTrackId already set on those)
+    // and NOT when the variant has no audio (incomplete second take).
+    if (altItem && !track.parentTrackId) {
+      const altAudioUrl = altItem.audio_url || altItem.audioUrl;
+      const altStreamUrl = altItem.stream_audio_url || altItem.streamAudioUrl || altItem.streamUrl;
+      if (altAudioUrl) {
+        try {
+          // Reload the original track to copy all metadata into the
+          // alt row — the partial `track` we have above only has the
+          // columns we queried earlier.
+          const original = await prisma.musicTrack.findUnique({
+            where: { id: track.id },
+            select: {
+              userId: true,
+              title: true,
+              prompt: true,
+              genre: true,
+              mood: true,
+              durationReq: true,
+              isVocal: true,
+              lyrics: true,
+              tempo: true,
+              model: true,
+            },
+          });
+          if (original) {
+            let altR2Url = null;
+            try {
+              altR2Url = await mirrorAltToR2(track.id, altAudioUrl);
+            } catch (err) {
+              console.warn("[MUSIC_CALLBACK] alt R2 mirror failed:", err?.message);
+            }
+            const altTitle = original.title?.endsWith("(alt)")
+              ? original.title
+              : `${original.title || "Track"} (alt)`;
+            await prisma.musicTrack.create({
+              data: {
+                userId: original.userId,
+                // Suno gives both variants the same taskId; we
+                // synthesise a unique-per-variant id so the @unique
+                // constraint holds without clashing with future
+                // callback lookups (we look up by taskId === <original>,
+                // never the "-v2" suffix).
+                taskId: `${taskId}-v2`,
+                audioId: altItem.audio_id || altItem.id || null,
+                title: altTitle,
+                prompt: original.prompt,
+                genre: original.genre,
+                mood: original.mood,
+                durationReq: original.durationReq,
+                isVocal: original.isVocal,
+                lyrics: original.lyrics,
+                tempo: original.tempo,
+                model: original.model,
+                streamUrl: altStreamUrl || null,
+                audioUrl: altAudioUrl,
+                imageUrl: item.image_url || altItem.image_url || null,
+                actualDuration: Number(altItem.duration) || actualDuration,
+                r2Url: altR2Url,
+                status: "completed",
+                credits: 0, // already paid via the original; no
+                            // double-charge for the free 2nd take
+                parentTrackId: track.id,
+              },
+            });
+          }
+        } catch (altErr) {
+          // Non-fatal — main track is already done, we just lose the
+          // alt take. Log + move on so we don't block the webhook ack.
+          console.warn("[MUSIC_CALLBACK] alt row create failed:", altErr?.message);
+        }
+      }
+    }
+
     return NextResponse.json({ ok: true, phase: "complete", r2: !!r2Url });
   }
 
@@ -148,41 +237,38 @@ async function failAndRefund(track, errMsg) {
   return NextResponse.json({ ok: true, phase: "failed" });
 }
 
-// Best-effort: download the final mp3 from music engine and upload to our R2
-// bucket so the track survives music engine's 15-day retention. Returns the
-// public R2 URL, or null if anything fails — failure is non-fatal,
-// the user can still stream from music engine's URL for 15 days.
+// Mirror the alt variant to R2 using the modern storage.js helpers
+// (the legacy mirrorToR2 below uses outdated env var names — R2_BUCKET
+// instead of R2_BUCKET_NAME, etc. — so it silently no-ops on the
+// current Vercel env). New code paths should go through this helper.
+async function mirrorAltToR2(originalTrackId, sourceUrl) {
+  if (!isR2Configured()) return null;
+  const res = await fetch(sourceUrl, { signal: AbortSignal.timeout(45_000) });
+  if (!res.ok) throw new Error(`source fetch ${res.status}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  const key = `music/${originalTrackId}-alt.mp3`;
+  return await uploadAudioBuffer(buf, key, "audio/mpeg");
+}
+
+// Best-effort: download the final mp3 from music engine and upload
+// to our R2 bucket so the track survives music engine's 15-day
+// retention. Returns the public R2 URL, or null if anything fails —
+// failure is non-fatal, the user can still stream from music engine's
+// URL for 15 days.
+//
+// Migrated 2026-05-17 to use the storage.js helper instead of an
+// inline S3Client. The old implementation referenced R2_BUCKET +
+// R2_ENDPOINT + R2_PUBLIC_HOST env vars that don't exist in
+// production (we use R2_BUCKET_NAME / R2_PUBLIC_URL / R2_ACCOUNT_ID),
+// so it was silently no-op'ing on every track — meaning no track
+// had ever been mirrored to R2 and every track went stale after 15
+// days. Switching to uploadAudioBuffer() picks up the right vars.
 async function mirrorToR2(trackId, sourceUrl) {
   if (!sourceUrl) return null;
-  const region = process.env.R2_REGION || "auto";
-  const endpoint = process.env.R2_ENDPOINT;
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-  const bucket = process.env.R2_BUCKET;
-  const publicHost = process.env.R2_PUBLIC_HOST;
-  if (!endpoint || !accessKeyId || !secretAccessKey || !bucket || !publicHost) {
-    return null;
-  }
-
+  if (!isR2Configured()) return null;
   const audio = await fetch(sourceUrl);
   if (!audio.ok) throw new Error(`source fetch failed ${audio.status}`);
   const buf = Buffer.from(await audio.arrayBuffer());
-
-  const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
-  const client = new S3Client({
-    region,
-    endpoint,
-    credentials: { accessKeyId, secretAccessKey },
-  });
   const key = `music/${trackId}.mp3`;
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: buf,
-      ContentType: "audio/mpeg",
-      CacheControl: "public, max-age=31536000, immutable",
-    })
-  );
-  return `${publicHost.replace(/\/$/, "")}/${key}`;
+  return await uploadAudioBuffer(buf, key, "audio/mpeg");
 }

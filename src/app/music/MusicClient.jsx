@@ -3229,9 +3229,32 @@ function GallerySection({ tracks, onPickStarter, onSplitStems, onExtend }) {
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
-          {tracks.map((t) => (
-            <GalleryCard key={t.id} track={t} onSplitStems={onSplitStems} onExtend={onExtend} />
-          ))}
+          {/* A/B grouping: hide rows that are an "alt" of another row
+              in the same list (parentTrackId is set). We attach them
+              to the parent card via the `alt` prop so the user sees
+              ONE card with an A/B toggle, not two near-duplicate
+              cards. Alt rows whose parent is missing from the list
+              (e.g. parent was deleted) still render solo. */}
+          {(() => {
+            const byId = new Map(tracks.map((t) => [t.id, t]));
+            const altByParent = new Map();
+            for (const t of tracks) {
+              if (t.parentTrackId && byId.has(t.parentTrackId)) {
+                altByParent.set(t.parentTrackId, t);
+              }
+            }
+            return tracks
+              .filter((t) => !(t.parentTrackId && byId.has(t.parentTrackId)))
+              .map((t) => (
+                <GalleryCard
+                  key={t.id}
+                  track={t}
+                  alt={altByParent.get(t.id) || null}
+                  onSplitStems={onSplitStems}
+                  onExtend={onExtend}
+                />
+              ));
+          })()}
         </div>
       )}
     </section>
@@ -3337,11 +3360,17 @@ function StarterCard({ starter, onPick }) {
   );
 }
 
-function GalleryCard({ track, onSplitStems, onExtend }) {
+function GalleryCard({ track, alt, onSplitStems, onExtend }) {
   const [hover, setHover] = useState(false);
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
-  const src = track.r2Url || track.audioUrl || track.streamUrl || "";
+  // A/B variations — when an alt sibling exists, the card lets the
+  // user switch which take is the "current" one. Default to A
+  // (original). Selected take is what plays + what stem/extend
+  // operations target.
+  const [variant, setVariant] = useState("A"); // "A" (track) | "B" (alt)
+  const current = variant === "B" && alt ? alt : track;
+  const src = current.r2Url || current.audioUrl || current.streamUrl || "";
   function toggle() {
     if (!src) return;
     if (!audioRef.current) audioRef.current = new Audio(src);
@@ -3354,13 +3383,23 @@ function GalleryCard({ track, onSplitStems, onExtend }) {
       setPlaying(false);
     }
   }
+  // Pause + drop the audio element when the user switches A↔B so a
+  // fresh <audio> is built against the new src. Without this the
+  // previous take keeps playing after the user clicks "B".
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+      setPlaying(false);
+    }
+  }, [variant]);
   // Pause when the row unmounts to avoid orphaned audio.
   useEffect(() => () => {
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
   }, []);
-  const isReady = track.status === "completed" && !!src;
-  const isProcessing = track.status === "processing";
-  const isFailed = track.status === "failed";
+  const isReady = current.status === "completed" && !!src;
+  const isProcessing = current.status === "processing";
+  const isFailed = current.status === "failed";
 
   return (
     <div
@@ -3383,32 +3422,71 @@ function GalleryCard({ track, onSplitStems, onExtend }) {
           <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {track.title}
           </div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
-            {track.genre || "—"}{track.mood ? ` · ${track.mood}` : ""}
-            {isReady && ` · ${formatTime(track.actualDuration || track.durationReq)}`}
-            {isProcessing && " · generating…"}
-            {isFailed && " · failed"}
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <span>
+              {current.genre || track.genre || "—"}{(current.mood || track.mood) ? ` · ${current.mood || track.mood}` : ""}
+              {isReady && ` · ${formatTime(current.actualDuration || current.durationReq)}`}
+              {isProcessing && " · generating…"}
+              {isFailed && " · failed"}
+            </span>
+            {alt && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  background: C.panelSoft,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 999,
+                  padding: 2,
+                  gap: 2,
+                }}
+                title="Two takes were generated — toggle to compare A vs B"
+              >
+                {["A", "B"].map((v) => {
+                  const on = variant === v;
+                  return (
+                    <button
+                      key={v}
+                      onClick={(e) => { e.stopPropagation(); setVariant(v); }}
+                      style={{
+                        padding: "2px 9px",
+                        borderRadius: 999,
+                        border: "none",
+                        background: on ? C.accent : "transparent",
+                        color: on ? "#0a0a0a" : C.muted,
+                        fontSize: 10.5,
+                        fontWeight: 800,
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                        letterSpacing: "0.04em",
+                      }}
+                    >
+                      {v}
+                    </button>
+                  );
+                })}
+              </span>
+            )}
           </div>
         </div>
         <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
           {isReady && onSplitStems && (
             <CardStemControl
-              trackId={track.id}
-              stemStatus={track.stemStatus}
-              vocalUrl={track.vocalUrl}
-              instrumentalUrl={track.instrumentalUrl}
-              stemError={track.stemError}
+              trackId={current.id}
+              stemStatus={current.stemStatus}
+              vocalUrl={current.vocalUrl}
+              instrumentalUrl={current.instrumentalUrl}
+              stemError={current.stemError}
               onSplit={onSplitStems}
             />
           )}
           {isReady && onExtend && (
-            <CardExtendButton trackId={track.id} onExtend={onExtend} />
+            <CardExtendButton trackId={current.id} onExtend={onExtend} />
           )}
           {isReady && (
-            <CardPublishButton trackId={track.id} initialPublic={!!track.public} />
+            <CardPublishButton trackId={current.id} initialPublic={!!current.public} />
           )}
           {isReady && (
-            <CardShareButton trackId={track.id} title={track.title} />
+            <CardShareButton trackId={current.id} title={current.title || track.title} />
           )}
           {isReady ? (
             <button

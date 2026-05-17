@@ -48,6 +48,9 @@ export async function GET() {
         vocalUrl: true,
         instrumentalUrl: true,
         stemError: true,
+        // A/B variations: non-null on the 2nd-take row pointing back
+        // at the original. UI groups paired rows under one card.
+        parentTrackId: true,
         createdAt: true,
       },
     });

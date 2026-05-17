@@ -44,6 +44,7 @@ export async function GET(_req, { params }) {
       vocalUrl: true,
       instrumentalUrl: true,
       stemError: true,
+      parentTrackId: true,
       createdAt: true,
     },
   });
