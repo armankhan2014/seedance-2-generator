@@ -83,3 +83,29 @@ export function isR2Configured() {
     process.env.R2_PUBLIC_URL
   );
 }
+
+/**
+ * Upload a raw audio buffer to R2 and return the public CDN URL.
+ *
+ * Used by the music-reference flow (Phase A): users upload a vocal
+ * recording or a reference track that the music engine then takes as
+ * input. Suno's API requires a publicly accessible URL — we mirror the
+ * upload to our own R2 first so Suno can fetch it without us having to
+ * expose the user's raw multipart blob to anyone else.
+ *
+ * Cache-Control is short (5 min) because reference audio is transient
+ * — once Suno has consumed it the file is no longer needed. A
+ * subsequent R2 lifecycle policy can sweep `references/` after 24h.
+ */
+export async function uploadAudioBuffer(buffer, key, contentType = "audio/mpeg") {
+  const client = getClient();
+  await client.send(new PutObjectCommand({
+    Bucket: process.env.R2_BUCKET_NAME,
+    Key: key,
+    Body: buffer,
+    ContentType: contentType,
+    CacheControl: "public, max-age=300",
+  }));
+  const baseUrl = process.env.R2_PUBLIC_URL?.replace(/\/$/, "");
+  return `${baseUrl}/${key}`;
+}

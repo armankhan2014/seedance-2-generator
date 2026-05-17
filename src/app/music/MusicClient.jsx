@@ -162,6 +162,23 @@ export default function MusicClient() {
   // successful generation it auto-fills the textarea, flips to Pro +
   // vocal=on + lyricsMode=custom so the lyrics actually get used.
   const [lyricHelperOpen, setLyricHelperOpen] = useState(false);
+  // 🎤 Reference-audio mode (Phase A) — user uploads a song or their
+  // own vocal recording. Two flavours:
+  //   • "cover"            — engine keeps the melody/raag, generates
+  //                          new vocals + instruments around it
+  //   • "add-instrumental" — engine PRESERVES the user's vocals and
+  //                          layers instruments around them (per
+  //                          Arman's original ask: "I record my vocals
+  //                          on my laptop, the AI adds violin / flute
+  //                          / tabla in the same raag")
+  // referenceMode "none" → vanilla text-to-music (no upload required).
+  const [referenceMode, setReferenceMode] = useState("none");
+  // After a successful upload to R2 via /api/music/reference/{upload,url}
+  // we stash the returned URL + display name so we can render the
+  // attached-file chip and send the URL to /api/music/generate.
+  const [referenceFile, setReferenceFile] = useState(null);
+  const [referenceUploading, setReferenceUploading] = useState(false);
+  const [referenceError, setReferenceError] = useState("");
   // Free-text Style field — the music engine calls this the "Style" prompt. When
   // populated, it OVERRIDES the genre preset's built-in style string.
   // Empty = genre preset wins. Lets power users go beyond the 8
@@ -209,6 +226,68 @@ export default function MusicClient() {
     setLyrics(text);
     setLyricHelperOpen(false);
     flashToast("✨ Lyrics drafted — review and edit before generating");
+  }
+
+  // ── Reference upload handlers ─────────────────────────────────────
+  // Switch reference mode + clear any previously attached file so the
+  // user starts each mode with a clean slate. Pro mode also flips to
+  // sensible defaults: add-instrumental implies the OUTPUT is vocal
+  // (the user's vocals are preserved), so we flip vocalMode to "auto"
+  // — they don't need to pick male/female or write lyrics.
+  function changeReferenceMode(m) {
+    setReferenceMode(m);
+    setReferenceFile(null);
+    setReferenceError("");
+    if (m === "add-instrumental") {
+      changeMode("pro");
+      setVocalMode("auto");
+      setLyricsMode("auto"); // user's voice IS the lyrics
+    } else if (m === "cover") {
+      changeMode("pro");
+    }
+  }
+  async function uploadReferenceFile(file) {
+    if (!file) return;
+    setReferenceError("");
+    setReferenceUploading(true);
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      const res = await fetch("/api/music/reference/upload", {
+        method: "POST",
+        body: form,
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "Upload failed");
+      setReferenceFile({ url: j.url, name: j.name, size: j.size });
+    } catch (e) {
+      setReferenceError(e.message || "Upload failed");
+    } finally {
+      setReferenceUploading(false);
+    }
+  }
+  async function uploadReferenceUrl(url) {
+    if (!url) return;
+    setReferenceError("");
+    setReferenceUploading(true);
+    try {
+      const res = await fetch("/api/music/reference/url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "Fetch failed");
+      setReferenceFile({ url: j.url, name: j.name, size: j.size });
+    } catch (e) {
+      setReferenceError(e.message || "Fetch failed");
+    } finally {
+      setReferenceUploading(false);
+    }
+  }
+  function clearReference() {
+    setReferenceFile(null);
+    setReferenceError("");
   }
 
   // ── Helpers — Surprise me + Starter prompts ────────────────────
@@ -285,6 +364,12 @@ export default function MusicClient() {
       if (typeof s.customStyle === "string") setCustomStyle(s.customStyle);
       if (typeof s.model === "string") setModel(s.model);
       if (typeof s.negativeTags === "string") setNegativeTags(s.negativeTags);
+      if (typeof s.referenceMode === "string" && ["none", "cover", "add-instrumental"].includes(s.referenceMode)) {
+        setReferenceMode(s.referenceMode);
+      }
+      if (s.referenceFile && typeof s.referenceFile.url === "string") {
+        setReferenceFile(s.referenceFile);
+      }
     } catch {}
   }, []);
 
@@ -296,6 +381,17 @@ export default function MusicClient() {
   // ── Generate ────────────────────────────────────────────────────
   async function onGenerate() {
     if (stage === "submitting" || stage === "generating") return;
+    // Guard: reference mode picked but no file uploaded yet → block
+    // with a friendly toast rather than waste the user a Generate
+    // round-trip.
+    if (referenceMode !== "none" && !referenceFile?.url) {
+      flashToast("Upload an audio file for this mode first");
+      return;
+    }
+    if (referenceUploading) {
+      flashToast("Wait for the reference upload to finish");
+      return;
+    }
     if (sessionStatus !== "authenticated") {
       // BUG FIX (2026-05-17): previously pushed to /?signin=1 which
       // dumped users on the Studio homepage — they'd sign in there,
@@ -314,6 +410,10 @@ export default function MusicClient() {
         sessionStorage.setItem("sd-music-pending", JSON.stringify({
           mode, prompt, genre, mood, duration, tempo, vocalMode,
           lyricsMode, lyrics, customStyle, model, negativeTags,
+          // Reference state — the URL is already on our R2, so it
+          // survives the sign-in redirect just fine.
+          referenceMode,
+          referenceFile,
           savedAt: Date.now(),
         }));
       } catch {}
@@ -343,6 +443,10 @@ export default function MusicClient() {
           vocalGender: vocalGender === "auto" ? undefined : vocalGender,
           model,
           negativeTags: negativeTags?.trim() || undefined,
+          // Reference-audio fields (Phase A). Only sent when the user
+          // picked one of the upload modes AND completed the upload.
+          referenceMode: referenceMode !== "none" ? referenceMode : undefined,
+          referenceUrl: referenceMode !== "none" ? referenceFile?.url : undefined,
         }),
       });
       const j = await res.json();
@@ -515,10 +619,19 @@ export default function MusicClient() {
               </div>
             ) : (
               <>
-                {/* 1 · DESCRIBE — the user's free-form direction */}
+                {/* 1 · DESCRIBE — the user's free-form direction.
+                    Copy adapts based on reference mode so the
+                    placeholder + helper text match what the prompt is
+                    actually doing in that flow. */}
                 <div style={{ marginTop: 22 }}>
-                  <SectionEyebrow tooltip="Style descriptors work best as 15–30 comma-separated words (genre + mood + key instruments). Picking a preset below auto-builds one for you.">
-                    1 · Describe what you want
+                  <SectionEyebrow tooltip={
+                    referenceMode === "add-instrumental"
+                      ? "Describe the instruments + style you want around your vocals. Comma-separated, e.g. 'tabla, sitar, harmonium, traditional Indian classical'."
+                      : referenceMode === "cover"
+                        ? "Describe what you want generated FROM the reference. The melody is preserved; everything else (instruments, style, vocal feel) follows your prompt."
+                        : "Style descriptors work best as 15–30 comma-separated words (genre + mood + key instruments). Picking a preset below auto-builds one for you."
+                  }>
+                    1 · {referenceMode === "add-instrumental" ? "Describe the instruments" : "Describe what you want"}
                   </SectionEyebrow>
                   <PromptInput value={prompt} onChange={setPrompt} />
                   <PromptStrength value={prompt} />
@@ -527,18 +640,50 @@ export default function MusicClient() {
 
                 <Divider />
 
-                {/* 2 · VOCALS — single visible row of four options.
-                    Was previously buried inside a 3-col + Advanced
-                    disclosure. Now front-and-centre with parity
-                    Instrumental / Auto / Female / Male radio. */}
-                <SectionEyebrow tooltip="Instrumental = no vocals at all. Auto = the model picks the singer. Female / Male = lock the vocal gender.">
-                  2 · Vocals
+                {/* 1.5 · REFERENCE AUDIO — optional upload that turns
+                    plain text-to-music into either a cover (same
+                    melody, new everything) or vocal-preserving
+                    accompaniment (user's vocals kept, AI adds
+                    instruments). Pro-mode-only — keeps Easy mode
+                    obvious. */}
+                <SectionEyebrow tooltip="Optional. Upload an audio file to either inspire the new song (cover mode) or back your own vocals with AI-generated instruments.">
+                  🎤 Inspire from audio (optional)
                 </SectionEyebrow>
-                <VocalModeRow value={vocalMode} onChange={setVocalMode} />
+                <ReferenceModeRow
+                  value={referenceMode}
+                  onChange={changeReferenceMode}
+                />
+                {referenceMode !== "none" && (
+                  <ReferenceUploadBox
+                    mode={referenceMode}
+                    file={referenceFile}
+                    uploading={referenceUploading}
+                    error={referenceError}
+                    onFile={uploadReferenceFile}
+                    onUrl={uploadReferenceUrl}
+                    onClear={clearReference}
+                  />
+                )}
 
-                {/* 3 · LYRICS — only when vocals are on. the music engine-style
-                    Auto-generate ↔ Write yours sub-tabs. */}
-                {isVocal && (
+                <Divider />
+
+                {/* 2 · VOCALS — single visible row of four options.
+                    Hidden in add-instrumental mode because the user's
+                    uploaded vocals ARE the vocals — toggling
+                    instrumental/female/male doesn't apply. */}
+                {referenceMode !== "add-instrumental" && (
+                  <>
+                    <SectionEyebrow tooltip="Instrumental = no vocals at all. Auto = the model picks the singer. Female / Male = lock the vocal gender.">
+                      2 · Vocals
+                    </SectionEyebrow>
+                    <VocalModeRow value={vocalMode} onChange={setVocalMode} />
+                  </>
+                )}
+
+                {/* 3 · LYRICS — only when vocals are on AND we're not
+                    in add-instrumental mode (the upload is the
+                    lyrics). */}
+                {isVocal && referenceMode !== "add-instrumental" && (
                   <>
                     <Divider />
                     <SectionEyebrow tooltip="Auto-generate = the model writes lyrics for you (faster but generic). Write yours = full control; use [Verse] [Chorus] [Bridge] tags for structure.">
@@ -1457,6 +1602,268 @@ function VocalModeRow({ value, onChange }) {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Reference-audio mode selector + uploader (Phase A).
+// Three-state radio that maps to the `referenceMode` state above:
+//   • none              → vanilla text-to-music
+//   • cover             → reference song, AI generates new everything
+//                          in the same raag/melody
+//   • add-instrumental  → user's vocal recording, AI preserves the
+//                          vocals + adds instruments
+// ────────────────────────────────────────────────────────────────────
+function ReferenceModeRow({ value, onChange }) {
+  const opts = [
+    {
+      id: "none",
+      icon: "🎵",
+      label: "No reference",
+      sub: "Generate from a text prompt",
+    },
+    {
+      id: "cover",
+      icon: "📀",
+      label: "Inspire from a song",
+      sub: "Same raag, new everything",
+    },
+    {
+      id: "add-instrumental",
+      icon: "🎤",
+      label: "Back my vocals",
+      sub: "Your voice + AI instruments",
+    },
+  ];
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+        gap: 8,
+        marginTop: 10,
+      }}
+    >
+      {opts.map((o) => {
+        const on = o.id === value;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            onClick={() => onChange(o.id)}
+            style={{
+              padding: "12px 14px",
+              borderRadius: 12,
+              background: on ? C.accentSoft : C.panelSoft,
+              border: `1px solid ${on ? C.accent : C.border}`,
+              color: on ? C.accent : C.textSoft,
+              fontSize: 12.5,
+              fontWeight: on ? 800 : 600,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              textAlign: "left",
+              transition: "all 0.15s",
+              display: "flex",
+              flexDirection: "column",
+              gap: 2,
+            }}
+          >
+            <span style={{ fontSize: 18 }}>{o.icon}</span>
+            <span style={{ fontSize: 12.5, fontWeight: 800, color: on ? C.accent : C.text }}>{o.label}</span>
+            <span style={{ fontSize: 10.5, fontWeight: 500, color: C.muted, lineHeight: 1.3 }}>{o.sub}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Combined file-picker + URL-paster used by both reference modes.
+// Single component because the upload pipeline is the same — only the
+// helper copy below changes per mode.
+function ReferenceUploadBox({ mode, file, uploading, error, onFile, onUrl, onClear }) {
+  const [urlInput, setUrlInput] = useState("");
+  const fileInputRef = useRef(null);
+  const explainer =
+    mode === "cover"
+      ? "Upload a song you love. The AI keeps the melody/raag intact and generates new vocals + instruments around it."
+      : "Upload your vocal recording (no background music — just your voice). The AI preserves your vocals and adds instruments around them.";
+  const accept = "audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac";
+  return (
+    <div
+      style={{
+        marginTop: 12,
+        padding: 16,
+        background: C.panelSoft,
+        border: `1px dashed ${C.border}`,
+        borderRadius: 12,
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+      }}
+    >
+      <div style={{ fontSize: 12, color: C.textSoft, lineHeight: 1.55 }}>
+        {explainer}
+      </div>
+      {file ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "10px 14px",
+            background: C.panel,
+            border: `1px solid ${C.borderHover}`,
+            borderRadius: 10,
+          }}
+        >
+          <span style={{ fontSize: 18 }}>🎧</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: C.text,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {file.name}
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+              {(file.size / 1024 / 1024).toFixed(1)} MB · uploaded ✓
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClear}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 8,
+              background: "transparent",
+              border: `1px solid ${C.border}`,
+              color: C.muted,
+              fontSize: 11.5,
+              fontWeight: 700,
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            Remove
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* File picker */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={accept}
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) onFile(f);
+                e.target.value = ""; // allow re-pick of same file
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              style={{
+                flex: "1 1 200px",
+                padding: "12px 16px",
+                borderRadius: 10,
+                background: uploading ? C.panelSoft : C.panel,
+                border: `1px solid ${C.borderHover}`,
+                color: uploading ? C.muted : C.accent,
+                fontSize: 13,
+                fontWeight: 800,
+                cursor: uploading ? "default" : "pointer",
+                fontFamily: "inherit",
+                transition: "all 0.15s",
+              }}
+            >
+              {uploading ? "Uploading…" : "📁 Choose audio file"}
+            </button>
+          </div>
+          {/* URL input */}
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            <input
+              type="url"
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              placeholder="Or paste a direct MP3/WAV URL"
+              disabled={uploading}
+              style={{
+                flex: "1 1 200px",
+                padding: "10px 14px",
+                background: C.panel,
+                border: `1px solid ${C.border}`,
+                borderRadius: 10,
+                color: C.text,
+                fontSize: 12.5,
+                fontFamily: "inherit",
+                outline: "none",
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const u = urlInput.trim();
+                if (u) {
+                  onUrl(u);
+                  setUrlInput("");
+                }
+              }}
+              disabled={uploading || !urlInput.trim()}
+              style={{
+                padding: "10px 16px",
+                borderRadius: 10,
+                background: urlInput.trim() && !uploading ? C.accent : C.panelSoft,
+                border: `1px solid ${urlInput.trim() && !uploading ? C.accent : C.border}`,
+                color: urlInput.trim() && !uploading ? "#0a0a0a" : C.muted,
+                fontSize: 12.5,
+                fontWeight: 800,
+                cursor: urlInput.trim() && !uploading ? "pointer" : "default",
+                fontFamily: "inherit",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Fetch URL
+            </button>
+          </div>
+        </>
+      )}
+      {error && (
+        <div
+          style={{
+            padding: "8px 12px",
+            background: "rgba(239,68,68,0.10)",
+            border: `1px solid rgba(239,68,68,0.32)`,
+            borderRadius: 8,
+            fontSize: 12,
+            color: C.danger,
+          }}
+        >
+          {error}
+        </div>
+      )}
+      <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.5 }}>
+        MP3, WAV, M4A, FLAC, OGG · up to 25 MB · stays private to your account.
+        YouTube / SoundCloud links aren&rsquo;t supported — convert to MP3 first
+        (e.g. cobalt.tools) then paste the direct URL.
+      </div>
     </div>
   );
 }

@@ -19,7 +19,14 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { generateMusic, buildStyleString, creditsForTrack, scrubVendor } from "@/lib/suno";
+import {
+  generateMusic,
+  generateCover,
+  addInstrumentalToVocal,
+  buildStyleString,
+  creditsForTrack,
+  scrubVendor,
+} from "@/lib/suno";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -28,6 +35,7 @@ const ALLOWED_DURATIONS = new Set([30, 60, 120, 180]);
 const ALLOWED_MODELS = new Set(["V4", "V4_5", "V4_5PLUS", "V4_5ALL", "V5", "V5_5"]);
 const MAX_PROMPT = 5000;
 const MAX_LYRICS = 5000;
+const ALLOWED_REFERENCE_MODES = new Set(["cover", "add-instrumental"]);
 
 export async function POST(req) {
   const session = await getServerSession(authOptions);
@@ -46,7 +54,10 @@ export async function POST(req) {
   if (!ALLOWED_DURATIONS.has(duration)) {
     return NextResponse.json({ error: "Invalid duration" }, { status: 400 });
   }
-  const isVocal = !!body.isVocal;
+  // Note: isVocal may be forced true below when referenceMode is
+  // "add-instrumental" — the user's uploaded vocals are always
+  // preserved in that flow, so the output is by definition vocal.
+  let isVocal = !!body.isVocal;
   const genre = typeof body.genre === "string" ? body.genre.slice(0, 32) : null;
   const mood = typeof body.mood === "string" ? body.mood.slice(0, 32) : null;
   const tempo = Number.isFinite(body.tempo) ? Math.max(60, Math.min(180, body.tempo)) : null;
@@ -74,6 +85,34 @@ export async function POST(req) {
   const negativeTags = typeof body.negativeTags === "string"
     ? body.negativeTags.trim().slice(0, 300)
     : "";
+  // Reference mode (Phase A): the user uploaded a song to inspire
+  // generation (cover) or their own vocals to be backed by instruments
+  // (add-instrumental). referenceUrl is the R2 URL that the
+  // /api/music/reference/{upload,url} routes returned. We validate
+  // it points at our own R2 bucket so a malicious caller can't
+  // redirect the engine at an arbitrary URL.
+  const referenceMode = ALLOWED_REFERENCE_MODES.has(body.referenceMode)
+    ? body.referenceMode
+    : null;
+  const rawRefUrl = typeof body.referenceUrl === "string" ? body.referenceUrl.trim() : "";
+  const r2Base = (process.env.R2_PUBLIC_URL || "").replace(/\/$/, "");
+  const referenceUrl =
+    referenceMode && rawRefUrl && r2Base && rawRefUrl.startsWith(r2Base + "/references/")
+      ? rawRefUrl
+      : null;
+  if (referenceMode && !referenceUrl) {
+    return NextResponse.json(
+      { error: "Upload a reference audio file before choosing this mode." },
+      { status: 400 }
+    );
+  }
+  // The user's vocals get preserved in add-instrumental mode — the
+  // output is always a vocal track regardless of what the form sent.
+  // Force the flag so the credit calc (creditsForTrack uses isVocal)
+  // matches reality + the title fallback below is consistent.
+  if (referenceMode === "add-instrumental") {
+    isVocal = true;
+  }
 
   // ── Cost + credit debit (atomic CAS) ────────────────────────────────
   const cost = creditsForTrack({ duration, isVocal });
@@ -114,19 +153,70 @@ export async function POST(req) {
   const title = (promptRaw.slice(0, 60) || fallbackTitle).trim();
 
   // ── Fire music engine gen ───────────────────────────────────────────────────
+  // Three flows, picked by referenceMode:
+  //   • null              → plain text-to-music (the original flow)
+  //   • "cover"           → reference song → new music in same raag,
+  //                          AI generates new vocals + instruments
+  //   • "add-instrumental"→ user's vocal recording → AI adds instruments
+  //                          around the preserved vocals
   let taskId;
   try {
-    const result = await generateMusic({
-      prompt: promptRaw || style,
-      style,
-      title,
-      instrumental: !isVocal,
-      lyrics: isVocal ? (lyricsRaw || undefined) : undefined,
-      model,
-      vocalGender,
-      callBackUrl,
-      negativeTags: negativeTags || undefined,
-    });
+    let result;
+    if (referenceMode === "cover") {
+      // For cover: user can still pick instrumental vs vocal output,
+      // pick lyrics, etc. The reference contributes the melody/raag
+      // skeleton; everything else is generated from the user's
+      // prompt + style + lyrics just like a normal generation.
+      result = await generateCover({
+        uploadUrl: referenceUrl,
+        prompt: promptRaw || style,
+        style,
+        title,
+        instrumental: !isVocal,
+        lyrics: isVocal ? (lyricsRaw || undefined) : undefined,
+        model,
+        vocalGender,
+        // audioWeight tuned to "lean into the reference" but leave
+        // room for new style. Higher = more like the reference.
+        audioWeight: 0.65,
+        styleWeight: 0.65,
+        callBackUrl,
+        negativeTags: negativeTags || undefined,
+      });
+    } else if (referenceMode === "add-instrumental") {
+      // For add-instrumental: the user's vocals ARE the lyrics +
+      // melody. We just hand the engine an instrumentation
+      // descriptor. `tags` combines the genre-derived style with any
+      // free-text style override + the prompt (which the user
+      // typically uses to describe desired instruments like
+      // "violin, flute, traditional Indian classical").
+      const tags = [style, promptRaw].filter(Boolean).join(", ").slice(0, 800);
+      result = await addInstrumentalToVocal({
+        uploadUrl: referenceUrl,
+        title,
+        tags,
+        negativeTags: negativeTags || undefined,
+        vocalGender,
+        // audioWeight=1.0 = preserve original vocals as strongly as
+        // the engine allows. The point of this flow is the user
+        // KEEPS their voice.
+        audioWeight: 1.0,
+        model,
+        callBackUrl,
+      });
+    } else {
+      result = await generateMusic({
+        prompt: promptRaw || style,
+        style,
+        title,
+        instrumental: !isVocal,
+        lyrics: isVocal ? (lyricsRaw || undefined) : undefined,
+        model,
+        vocalGender,
+        callBackUrl,
+        negativeTags: negativeTags || undefined,
+      });
+    }
     taskId = result.taskId;
     if (!taskId) throw new Error("Music service returned no task id");
   } catch (err) {
@@ -154,7 +244,7 @@ export async function POST(req) {
         mood,
         durationReq: duration,
         isVocal,
-        lyrics: isVocal ? (lyricsRaw || null) : null,
+        lyrics: isVocal && referenceMode !== "add-instrumental" ? (lyricsRaw || null) : null,
         tempo,
         model,
         status: "processing",

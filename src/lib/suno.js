@@ -102,6 +102,150 @@ export async function generateMusic({
   return { taskId: json.data?.taskId, raw: json };
 }
 
+// ── Reference-audio generation (Phase A) ─────────────────────────────
+//
+// Two endpoints, two different products:
+//
+//   • generateCover()        — POST /api/v1/generate/upload-cover
+//       Takes a reference audio URL + a text prompt. The engine
+//       preserves the MELODY of the reference but generates new
+//       instrumentation AND new vocals. Use case: "make me a new
+//       song in the same raag as this one".
+//
+//   • addInstrumentalToVocal() — POST /api/v1/generate/add-instrumental
+//       Takes an uploaded vocal recording + a tags string describing
+//       desired instrumentation. The engine PRESERVES the original
+//       vocals (audioWeight controls how strongly) and adds instruments
+//       around them. Use case: "I sang this on my laptop — give me a
+//       full band around it." Output keeps your voice intact.
+//
+// Both endpoints are async and use the same callback flow as the
+// regular /generate endpoint: we POST and get back a taskId, the
+// engine then POSTs to our callBackUrl with `first` (stream URL
+// ready) and `complete` (final mix ready) stages.
+
+// Cover mode — reference song → new music in the same raag/melody
+// with fresh vocals. Mirrors the regular generateMusic() signature so
+// the calling route can hand off the same params + add uploadUrl.
+export async function generateCover({
+  uploadUrl,
+  prompt,
+  style,
+  title,
+  instrumental,
+  lyrics,
+  model = "V5",
+  vocalGender,
+  audioWeight,
+  styleWeight,
+  negativeTags,
+  callBackUrl,
+}) {
+  const apiKey = ensureKey();
+  if (!uploadUrl) throw new Error("uploadUrl is required for cover mode");
+  if (!callBackUrl) throw new Error("callBackUrl is required");
+
+  // upload-cover ALWAYS uses customMode (per docs: customMode is a
+  // required boolean; non-custom mode is only useful when you want
+  // the engine to auto-pick everything from a prompt — which doesn't
+  // help here since we already have rich style + title state).
+  const body = {
+    uploadUrl,
+    customMode: true,
+    instrumental: !!instrumental,
+    model,
+    callBackUrl,
+    // Required-when-custom fields:
+    style: style || "",
+    title: title || "Cover",
+  };
+  // In custom + instrumental mode, prompt is optional. In custom +
+  // vocal mode, prompt carries the lyrics (per the same convention as
+  // generateMusic above).
+  if (instrumental) {
+    if (prompt) body.prompt = prompt;
+  } else {
+    body.prompt = lyrics || prompt || "";
+  }
+  if (vocalGender) body.vocalGender = vocalGender;
+  if (negativeTags) body.negativeTags = negativeTags;
+  if (typeof audioWeight === "number") body.audioWeight = audioWeight;
+  if (typeof styleWeight === "number") body.styleWeight = styleWeight;
+
+  const res = await fetch(`${SUNO_BASE}/api/v1/generate/upload-cover`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json.code !== 200) {
+    const err = new Error(json.msg || `Music service error ${res.status}`);
+    err.status = res.status;
+    err.code = json.code;
+    err.body = json;
+    throw err;
+  }
+  return { taskId: json.data?.taskId, raw: json };
+}
+
+// Add-instrumental mode — user uploads their own vocal recording, the
+// engine layers instruments around it while preserving the vocals
+// (`audioWeight` controls preservation strength, default 1.0).
+//
+// Signature differs from generateMusic / generateCover because the
+// engine's add-instrumental endpoint has a more focused param set:
+// tags (instrument descriptors) + uploadUrl + title. No `prompt`,
+// no `lyrics` — your vocals already contain those.
+export async function addInstrumentalToVocal({
+  uploadUrl,
+  title,
+  tags,
+  negativeTags,
+  vocalGender,
+  audioWeight = 1.0,
+  styleWeight,
+  model = "V5",
+  callBackUrl,
+}) {
+  const apiKey = ensureKey();
+  if (!uploadUrl) throw new Error("uploadUrl is required for add-instrumental");
+  if (!callBackUrl) throw new Error("callBackUrl is required");
+  if (!tags) throw new Error("tags is required for add-instrumental");
+
+  const body = {
+    uploadUrl,
+    title: title || "Vocal accompaniment",
+    tags,
+    negativeTags: negativeTags || "",
+    callBackUrl,
+    model,
+  };
+  if (vocalGender) body.vocalGender = vocalGender;
+  if (typeof audioWeight === "number") body.audioWeight = audioWeight;
+  if (typeof styleWeight === "number") body.styleWeight = styleWeight;
+
+  const res = await fetch(`${SUNO_BASE}/api/v1/generate/add-instrumental`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || json.code !== 200) {
+    const err = new Error(json.msg || `Music service error ${res.status}`);
+    err.status = res.status;
+    err.code = json.code;
+    err.body = json;
+    throw err;
+  }
+  return { taskId: json.data?.taskId, raw: json };
+}
+
 // Polling fallback — used by a cron sweep that picks up tracks stuck
 // in "processing" for > 5 minutes (callback may have missed us if we
 // were deploying at that exact second).
