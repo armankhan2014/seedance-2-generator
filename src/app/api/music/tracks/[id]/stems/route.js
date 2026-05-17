@@ -65,6 +65,11 @@ export async function POST(req, { params }) {
       status: true,
       stemStatus: true,
       stemMode: true,
+      // A/B variants — when this row IS an alt (parentTrackId set),
+      // its taskId is synthetic ("<original>-v2") and is NOT a valid
+      // upstream identifier. We need to look up the parent to get the
+      // real taskId for the upstream vocal-removal call.
+      parentTrackId: true,
       vocalUrl: true,
       instrumentalUrl: true,
       drumsUrl: true,
@@ -160,11 +165,29 @@ export async function POST(req, { params }) {
   }
   const callBackUrl = `${origin}/api/music/stems/callback?secret=${encodeURIComponent(callbackSecret)}`;
 
+  // ── Resolve the upstream taskId ───────────────────────────────────
+  // For A/B alt rows (parentTrackId != null), our DB taskId is
+  // synthetic (`<original>-v2`) and would 404 upstream as
+  // "record does not exist". Walk up to the parent row to get the
+  // real engine-issued taskId. The audioId on the alt row is real
+  // (items[1].audio_id from the original generation's callback) so
+  // we keep that.
+  let upstreamTaskId = track.taskId;
+  if (track.parentTrackId) {
+    const parent = await prisma.musicTrack.findFirst({
+      where: { id: track.parentTrackId, userId },
+      select: { taskId: true },
+    });
+    if (parent?.taskId) {
+      upstreamTaskId = parent.taskId;
+    }
+  }
+
   // ── Fire upstream call ────────────────────────────────────────────
   let stemTaskId;
   try {
     const result = await separateVocals({
-      taskId: track.taskId,
+      taskId: upstreamTaskId,
       audioId: track.audioId,
       callBackUrl,
       type: upstreamType,
@@ -176,10 +199,33 @@ export async function POST(req, { params }) {
       where: { id: userId },
       data: { credits: { increment: cost } },
     });
-    console.error("[STEMS] Upstream failed:", err?.message);
+    // Log a rich error envelope so future "record does not exist"
+    // reports have enough signal to root-cause without re-deploying
+    // with logging tweaks.
+    console.error("[STEMS] Upstream failed:", {
+      trackId: track.id,
+      isAlt: !!track.parentTrackId,
+      upstreamTaskId,
+      audioId: track.audioId,
+      mode,
+      upstreamMsg: err?.message,
+      upstreamCode: err?.code,
+      upstreamBody: err?.body,
+    });
+    const rawMsg = err?.message || "";
+    // Friendlier mapping of common upstream errors so the user sees
+    // an actionable message instead of raw engine vocabulary.
+    let userMsg;
+    if (/record does not exist|not found|invalid task/i.test(rawMsg)) {
+      userMsg = mode === "split"
+        ? "Pro split couldn't find this track upstream — it may be too old (engine retains source audio for ~14 days). Try regenerating the track, then split again."
+        : "Couldn't find this track upstream — it may be too old (engine retains source audio for ~14 days). Try regenerating the track, then split again.";
+    } else {
+      userMsg = scrubVendor(rawMsg) || "Stem service unavailable";
+    }
     const status = err.status >= 400 && err.status < 600 ? err.status : 502;
     return NextResponse.json(
-      { error: scrubVendor(err?.message) || "Stem service unavailable", refunded: true },
+      { error: userMsg, refunded: true },
       { status }
     );
   }
