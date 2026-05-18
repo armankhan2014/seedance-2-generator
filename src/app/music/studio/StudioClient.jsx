@@ -2422,26 +2422,97 @@ function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth, onSeek, lo
         }}
       >
         {/* Loop region highlight — rendered BEFORE labels so the
-            ticks stay readable above the yellow band. */}
+            ticks stay readable above the yellow band. The left + right
+            edges are tiny invisible drag-handles that let users
+            fine-tune the in/out points without re-dragging the whole
+            region. */}
         {loopRegion && loopRegion.end > loopRegion.start && (
-          <div
-            aria-hidden="true"
-            style={{
-              position: "absolute",
-              top: 0,
-              bottom: 0,
-              left: loopRegion.start * pixelsPerSecond,
-              width: (loopRegion.end - loopRegion.start) * pixelsPerSecond,
-              background: "rgba(217,255,0,0.18)",
-              borderLeft: `2px solid ${C.accent}`,
-              borderRight: `2px solid ${C.accent}`,
-              pointerEvents: "none",
-            }}
-          />
+          <>
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                top: 0,
+                bottom: 0,
+                left: loopRegion.start * pixelsPerSecond,
+                width: (loopRegion.end - loopRegion.start) * pixelsPerSecond,
+                background: "rgba(217,255,0,0.18)",
+                borderLeft: `2px solid ${C.accent}`,
+                borderRight: `2px solid ${C.accent}`,
+                pointerEvents: "none",
+              }}
+            />
+            <LoopEdgeHandle
+              edge="start"
+              x={loopRegion.start * pixelsPerSecond}
+              pixelsPerSecond={pixelsPerSecond}
+              loopRegion={loopRegion}
+              timelineSeconds={timelineSeconds}
+              onUpdate={onSetLoopRegion}
+            />
+            <LoopEdgeHandle
+              edge="end"
+              x={loopRegion.end * pixelsPerSecond}
+              pixelsPerSecond={pixelsPerSecond}
+              loopRegion={loopRegion}
+              timelineSeconds={timelineSeconds}
+              onUpdate={onSetLoopRegion}
+            />
+          </>
         )}
         {labels}
       </div>
     </div>
+  );
+}
+
+// Invisible-by-default drag handle on the left/right edge of a
+// loop region. Lets the user fine-tune in/out points without
+// re-creating the whole region. 8px wide hit target on each edge
+// — feels like the cursor "catches" the boundary. Cursor: ew-resize
+// signals what's about to happen. Stops propagation so the underlying
+// ruler doesn't fire its own click-to-seek when the user drags an edge.
+function LoopEdgeHandle({ edge, x, pixelsPerSecond, loopRegion, timelineSeconds, onUpdate }) {
+  function handleMouseDown(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const ruler = e.currentTarget.parentElement;
+    const rect = ruler.getBoundingClientRect();
+    function onMove(ev) {
+      const curT = (ev.clientX - rect.left) / pixelsPerSecond;
+      if (edge === "start") {
+        // Clamp: can't go below 0, can't cross over end.
+        const newStart = Math.max(0, Math.min(curT, loopRegion.end - 0.1));
+        onUpdate({ start: newStart, end: loopRegion.end });
+      } else {
+        const newEnd = Math.min(timelineSeconds, Math.max(curT, loopRegion.start + 0.1));
+        onUpdate({ start: loopRegion.start, end: newEnd });
+      }
+    }
+    function onUp() {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+  return (
+    <div
+      onMouseDown={handleMouseDown}
+      title={edge === "start" ? "Drag to move loop start" : "Drag to move loop end"}
+      style={{
+        position: "absolute",
+        top: 0,
+        bottom: 0,
+        left: x - 4, // center the 8px-wide hit target on the edge
+        width: 8,
+        cursor: "ew-resize",
+        // Subtle visual cue on hover via inline ::before isn't
+        // possible in inline styles, but the cursor change + the
+        // bright lime border behind it gives plenty of affordance.
+        zIndex: 3,
+      }}
+    />
   );
 }
 
