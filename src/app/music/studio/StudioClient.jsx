@@ -436,7 +436,7 @@ export default function StudioClient() {
       // Already done — load stems directly.
       if (j.alreadyDone && j.studioStems) {
         setStemJob({ trackId: track.id, status: "completed" });
-        applyStemsToLanes(j.studioStems);
+        applyStemsToLanes(j.studioStems, track.id);
         return;
       }
       setStemJob({
@@ -474,7 +474,7 @@ export default function StudioClient() {
           }
           if (j.studioStemStatus === "completed" && j.studioStems) {
             setStemJob({ trackId: stemJob.trackId, status: "completed" });
-            applyStemsToLanes(j.studioStems);
+            applyStemsToLanes(j.studioStems, stemJob.trackId);
             return;
           }
           if (j.studioStemStatus === "failed") {
@@ -495,10 +495,16 @@ export default function StudioClient() {
     return () => { stopped = true; };
   }, [stemJob?.taskId, stemJob?.trackId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Apply a completed stem map onto the first N lanes. Strip the
-  // metadata keys (_sourceId / _stems / _startedAt) the start route
-  // stashed during processing.
-  async function applyStemsToLanes(studioStems) {
+  // Apply a completed stem map onto the first N lanes. We DO NOT
+  // use the raw R2 URLs from studioStems[label] directly — those
+  // are cross-origin and trip CORS in Web Audio's decodeAudioData()
+  // ("Failed to fetch" — Arman flagged 2026-05-18). Instead, we
+  // route each stem through the same-origin audio proxy at
+  // /api/music/tracks/<trackId>/audio?source=stem-<label>, which
+  // streams the R2 audio body back through our function so the
+  // browser sees it as same-origin. That's the SAME fix we used
+  // for the main track audio when the same bug hit there.
+  async function applyStemsToLanes(studioStems, parentTrackId) {
     if (!studioStems || typeof studioStems !== "object") return;
     // Filter out our internal metadata keys.
     const cleaned = Object.fromEntries(
@@ -510,21 +516,19 @@ export default function StudioClient() {
     // Load each stem onto its predetermined lane in STEM_LANE_ORDER.
     for (let i = 0; i < STEM_LANE_ORDER.length && i < LANE_COUNT; i++) {
       const label = STEM_LANE_ORDER[i];
-      const url = cleaned[label];
-      if (!url) continue;
-      // Lane name + colour come from the existing lane defaults;
-      // we override .name to the stem label so users can see what
-      // each lane is. The src points directly at the R2-mirrored
-      // stem URL (same-origin path on our R2 host).
+      const rawUrl = cleaned[label];
+      if (!rawUrl) continue;
+      // Same-origin proxy URL — see comment above for why.
+      const proxySrc = `/api/music/tracks/${parentTrackId}/audio?source=stem-${encodeURIComponent(label)}`;
       setLanes((prev) =>
         prev.map((l, idx) =>
           idx === i
-            ? { ...l, trackId: `stem:${label}`, src: url, name: `Stem: ${label}`, loading: true, error: null }
+            ? { ...l, trackId: `stem:${label}`, src: proxySrc, name: `Stem: ${label}`, loading: true, error: null }
             : l
         )
       );
       try {
-        const { audioBuffer, peaks, duration } = await decodeTrack(url);
+        const { audioBuffer, peaks, duration } = await decodeTrack(proxySrc);
         // eslint-disable-next-line no-loop-func
         setLanes((prev) =>
           prev.map((l, idx) =>
@@ -577,7 +581,7 @@ export default function StudioClient() {
       }
       if (j.alreadyDone && j.voiceCleanUrl) {
         setVoiceCleanJob({ trackId: track.id, status: "completed" });
-        loadCleanedVoiceOntoLane(j.voiceCleanUrl, track.title);
+        loadCleanedVoiceOntoLane(track.id, track.title);
         return;
       }
       setVoiceCleanJob({
@@ -615,7 +619,7 @@ export default function StudioClient() {
           }
           if (j.voiceCleanStatus === "completed" && j.voiceCleanUrl) {
             setVoiceCleanJob({ trackId: voiceCleanJob.trackId, status: "completed" });
-            loadCleanedVoiceOntoLane(j.voiceCleanUrl, voiceCleanJob.sourceName);
+            loadCleanedVoiceOntoLane(voiceCleanJob.trackId, voiceCleanJob.sourceName);
             return;
           }
           if (j.voiceCleanStatus === "failed") {
@@ -637,21 +641,27 @@ export default function StudioClient() {
   // all are full). Different from stem-split's applyStemsToLanes,
   // which always targets lanes 0-3 — for a single cleaned voice we
   // don't want to clobber existing arrangements.
-  async function loadCleanedVoiceOntoLane(url, sourceName) {
-    if (!url) return;
+  //
+  // Same CORS-avoiding pattern as applyStemsToLanes: routes the
+  // audio through the same-origin proxy
+  // /api/music/tracks/<id>/audio?source=voice-clean instead of the
+  // raw R2 URL.
+  async function loadCleanedVoiceOntoLane(parentTrackId, sourceName) {
+    if (!parentTrackId) return;
     if (isPlaying) stopAll();
     const targetIdx = lanes.findIndex((l) => !l.trackId);
     const laneIndex = targetIdx === -1 ? 0 : targetIdx;
     const niceName = `🧹 Clean: ${sourceName || "voice"}`;
+    const proxySrc = `/api/music/tracks/${parentTrackId}/audio?source=voice-clean`;
     setLanes((prev) =>
       prev.map((l, i) =>
         i === laneIndex
-          ? { ...l, trackId: `voice-clean:${Date.now()}`, src: url, name: niceName, loading: true, error: null }
+          ? { ...l, trackId: `voice-clean:${Date.now()}`, src: proxySrc, name: niceName, loading: true, error: null }
           : l
       )
     );
     try {
-      const { audioBuffer, peaks, duration } = await decodeTrack(url);
+      const { audioBuffer, peaks, duration } = await decodeTrack(proxySrc);
       setLanes((prev) =>
         prev.map((l, i) =>
           i === laneIndex
