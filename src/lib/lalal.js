@@ -173,6 +173,58 @@ export async function startVoiceClean({ sourceId, noiseLevel = 1 }) {
 // 20-credit multistem split.
 export const VOICE_CLEAN_COST = 6;
 
+// Start a lead-vs-backing vocals split using LALAL's stem_separator
+// endpoint with multivocal="lead_back". Returns 4 stems in the
+// /check/ response:
+//   • vocals@0     (type:"stem")  — lead vocal isolated
+//   • vocals@1     (type:"stem")  — backing vocals isolated (optional;
+//                                   omitted when the engine can't
+//                                   detect any backing harmonies)
+//   • no_vocals    (type:"back")  — instrumental (no lead, no backing)
+//   • mix_no_lead  (type:"back")  — instrumental + backing vocals
+//                                   (everything except the lead)
+//
+// Use case: producers + mix engineers who want to A/B between
+// "with backing harmonies" and "lead-only" mixes, OR isolate the
+// backing vocals to layer them with a different lead.
+//
+// Returns: { task_id }
+export async function startVocalsSplit({ sourceId }) {
+  const apiKey = ensureKey();
+  const res = await fetch(`${LALAL_BASE}/split/stem_separator/`, {
+    method: "POST",
+    headers: {
+      "X-License-Key": apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      source_id: sourceId,
+      presets: {
+        stem: "vocals",
+        multivocal: "lead_back",
+        // deep_extraction preserves the most nuance — important for
+        // backing harmonies which are subtle by nature.
+        extraction_level: "deep_extraction",
+      },
+    }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(json?.detail || `LALAL vocals-split error ${res.status}`);
+    err.status = res.status;
+    err.body = json;
+    throw err;
+  }
+  return json;
+}
+
+// Flat credit cost for the lead+backing vocals split. Cheaper than
+// the 6-stem multistem because we're only extracting the vocal
+// family (1 stem-minute charge upstream, but the engine returns 4
+// resulting tracks). 10 credits gives healthy margin while keeping
+// the option visibly cheaper than full multistem.
+export const VOCALS_SPLIT_COST = 10;
+
 // Best-effort delete of a source file from LALAL storage. Doesn't
 // invalidate already-completed task download URLs immediately (CDN
 // caches them for 1h), but stops the source from counting against
@@ -191,13 +243,26 @@ export async function deleteSource(sourceId) {
 
 // Flat credit cost for a Studio multistem split. Wholesale cost
 // scales by duration × number_of_stems (LALAL bills per
-// stem-minute). For v0 we ship a fixed 4-stem split (vocals / drum
-// / bass / piano) — that's 4× the source duration in LALAL minutes,
-// so a 3-min track consumes 12 minutes. We charge 20 credits which
-// gives ~3× margin at LALAL's standard tier.
-export const STUDIO_STEM_COST = 20;
+// stem-minute). Bumped 2026-05-18 from 20 → 30 credits when we
+// expanded the stem set from 4 → 6 (added electric_guitar +
+// acoustic_guitar). 6 stems × 3-min track = 18 LALAL minutes;
+// 30 credits gives ~2.5× margin at LALAL's standard tier — still
+// notably cheaper than going to a third-party stem service.
+//
+// Note: the LALAL multistem endpoint maxes at 6 stems per call.
+// Adding synthesizer / strings / wind would require 3 additional
+// /split/stem_separator/ calls (different endpoint, phoenix
+// splitter). Deferred to a future "Pro 9-stem" tier.
+export const STUDIO_STEM_COST = 30;
 
-// The default multistem set for Studio v2 first ship. Order matters
-// — controls which lane each stem lands on after split. Keep this
-// in sync with the LALAL_STEMS constant in StudioClient.jsx.
-export const STUDIO_DEFAULT_STEMS = ["vocals", "drum", "bass", "piano"];
+// The default multistem set. Order matters — controls which lane
+// each stem lands on after split. Keep this in sync with
+// STEM_LANE_ORDER in StudioClient.jsx (same 6 entries, same order).
+export const STUDIO_DEFAULT_STEMS = [
+  "vocals",
+  "drum",
+  "bass",
+  "piano",
+  "electric_guitar",
+  "acoustic_guitar",
+];

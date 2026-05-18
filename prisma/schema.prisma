@@ -376,6 +376,16 @@ model MusicTrack {
   voiceCleanStatus String?   // null | "processing" | "completed" | "failed"
   voiceCleanUrl    String?   // R2-mirrored cleaned voice mp3
   voiceCleanError  String?   @db.Text
+  // Studio Pro lead-vs-backing vocals split (LALAL stem_separator
+  // with multivocal=lead_back). Returns up to 4 stems:
+  //   { lead, backing, no_vocals, mix_no_lead }
+  // Stored as a single JSON column for clean schema. Distinct from
+  // studioStems (multistem) + voiceCleanUrl (single voice) so users
+  // can run all three operations on the same track without colliding.
+  vocalsSplitTaskId String?
+  vocalsSplitStatus String?
+  vocalsSplit       Json?
+  vocalsSplitError  String?  @db.Text
   deletedAt      DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -391,6 +401,7 @@ model MusicTrack {
   @@index([parentTrackId])
   @@index([studioStemTaskId])
   @@index([voiceCleanTaskId])
+  @@index([vocalsSplitTaskId])
 }
 
 // Web Push subscription for browser notifications. Mirrors the model

@@ -75,6 +75,13 @@ export default function StudioClient() {
   // polling pattern as stem split.
   const [voiceCleanJob, setVoiceCleanJob] = useState(null);
 
+  // ── Lead+backing vocals split state (LALAL stem_separator
+  // with multivocal=lead_back). Returns up to 4 stems: lead /
+  // backing / no_vocals / mix_no_lead. On completion we auto-load
+  // lead + backing onto the next two empty lanes (vs the multistem
+  // split which always targets lanes 0-5).
+  const [vocalsSplitJob, setVocalsSplitJob] = useState(null);
+
   // ── Library state ─────────────────────────────────────────────
   const [library, setLibrary] = useState([]);
   const [libraryLoading, setLibraryLoading] = useState(true);
@@ -408,13 +415,17 @@ export default function StudioClient() {
   }
 
   // ── Stem separation (LALAL.AI) ───────────────────────────────
-  // Kick off a 4-stem split (vocals / drum / bass / piano) on a
-  // library track. Costs 20 credits per the server route. While
-  // running we poll /check every 6s; when complete we auto-load the
-  // 4 returned stems onto lanes 0-3 (replacing whatever was there).
-  // Order matters — we lock the stem→lane mapping here so users
-  // know which lane to expect each stem on.
-  const STEM_LANE_ORDER = ["vocals", "drum", "bass", "piano"];
+  // Kick off a 6-stem split (vocals / drum / bass / piano /
+  // electric_guitar / acoustic_guitar) on a library track. Costs 30
+  // credits per the server route. While running we poll /check
+  // every 6s; when complete we auto-load the 6 returned stems onto
+  // lanes 0-5 (replacing whatever was there). Order matters — we
+  // lock the stem→lane mapping here so users know which lane to
+  // expect each stem on. Bumped from 4 → 6 stems 2026-05-18; the
+  // LALAL multistem endpoint maxes at 6 per call, so this is the
+  // most we can extract in one shot. Synth/strings/wind would need
+  // /split/stem_separator/ (different endpoint) — deferred.
+  const STEM_LANE_ORDER = ["vocals", "drum", "bass", "piano", "electric_guitar", "acoustic_guitar"];
   async function splitStems(track) {
     if (!track?.id) return;
     if (stemJob && stemJob.status === "processing") {
@@ -541,6 +552,131 @@ export default function StudioClient() {
         setLanes((prev) =>
           prev.map((l, idx) =>
             idx === i ? { ...l, loading: false, error: e?.message || "Stem load failed" } : l
+          )
+        );
+      }
+    }
+  }
+
+  // ── Lead + backing vocals split (LALAL stem_separator) ─────
+  // Same flow as voice clean / stem split: kick off, poll, mirror
+  // result to R2 (server-side), auto-load stems onto lanes.
+  // Loads lead onto the next empty lane + backing (if present)
+  // onto the lane after that. Doesn't clobber existing arrangement.
+  async function splitVocals(track) {
+    if (!track?.id) return;
+    if (vocalsSplitJob && vocalsSplitJob.status === "processing") {
+      flashStemMsg("Already splitting vocals — wait for it to finish");
+      return;
+    }
+    setVocalsSplitJob({ trackId: track.id, status: "starting", progress: 0, sourceName: track.title });
+    try {
+      const res = await fetch("/api/music/studio/vocals-split/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackId: track.id }),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        setVocalsSplitJob({ trackId: track.id, status: "failed", error: j.error || "Couldn't start vocals split" });
+        return;
+      }
+      if (j.alreadyDone && j.vocalsSplit) {
+        setVocalsSplitJob({ trackId: track.id, status: "completed" });
+        applyVocalsSplitToLanes(track.id, track.title, j.vocalsSplit);
+        return;
+      }
+      setVocalsSplitJob({
+        trackId: track.id,
+        taskId: j.taskId,
+        status: "processing",
+        progress: 0,
+        sourceName: track.title,
+      });
+    } catch (e) {
+      setVocalsSplitJob({ trackId: track.id, status: "failed", error: e?.message || "Network error" });
+    }
+  }
+
+  // Poll loop for vocals-split — same cadence as stem split.
+  useEffect(() => {
+    if (!vocalsSplitJob || vocalsSplitJob.status !== "processing" || !vocalsSplitJob.taskId || !vocalsSplitJob.trackId) return;
+    let stopped = false;
+    let tries = 0;
+    const MAX = 50;
+    async function tick() {
+      while (!stopped && tries < MAX) {
+        await new Promise((r) => setTimeout(r, 6000));
+        if (stopped) return;
+        tries++;
+        try {
+          const res = await fetch(
+            `/api/music/studio/vocals-split/${vocalsSplitJob.taskId}?trackId=${encodeURIComponent(vocalsSplitJob.trackId)}`
+          );
+          const j = await res.json();
+          if (!res.ok) {
+            setVocalsSplitJob((prev) => ({ ...prev, status: "failed", error: j.error }));
+            return;
+          }
+          if (j.vocalsSplitStatus === "completed" && j.vocalsSplit) {
+            setVocalsSplitJob({ trackId: vocalsSplitJob.trackId, status: "completed" });
+            applyVocalsSplitToLanes(vocalsSplitJob.trackId, vocalsSplitJob.sourceName, j.vocalsSplit);
+            return;
+          }
+          if (j.vocalsSplitStatus === "failed") {
+            setVocalsSplitJob((prev) => ({ ...prev, status: "failed", error: j.error }));
+            return;
+          }
+          setVocalsSplitJob((prev) => ({ ...prev, progress: j.progress || 0 }));
+        } catch (e) {}
+      }
+      if (!stopped && tries >= MAX) {
+        setVocalsSplitJob((prev) => ({ ...prev, status: "failed", error: "Vocals split timed out (5 min)." }));
+      }
+    }
+    tick();
+    return () => { stopped = true; };
+  }, [vocalsSplitJob?.taskId, vocalsSplitJob?.trackId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load lead + backing onto two next-empty lanes. Same CORS-safe
+  // proxy URL pattern as the multistem load. Routes through
+  // /api/music/tracks/<id>/audio?source=vocals-<label>.
+  async function applyVocalsSplitToLanes(parentTrackId, sourceName, vocalsSplit) {
+    if (!vocalsSplit || typeof vocalsSplit !== "object") return;
+    if (isPlaying) stopAll();
+    const candidates = [];
+    if (vocalsSplit.lead) candidates.push({ label: "lead", display: `🎤 Lead: ${sourceName || ""}` });
+    if (vocalsSplit.backing) candidates.push({ label: "backing", display: `🎶 Backing: ${sourceName || ""}` });
+    // Find empty lanes to drop into. Use ALL lanes (even non-empty)
+    // if we run out of empty ones, starting from index 0.
+    const emptyIndices = lanes
+      .map((l, i) => (!l.trackId ? i : null))
+      .filter((i) => i !== null);
+    for (let n = 0; n < candidates.length; n++) {
+      const laneIndex = emptyIndices[n] ?? n; // fall back to first lanes
+      const c = candidates[n];
+      const proxySrc = `/api/music/tracks/${parentTrackId}/audio?source=vocals-${encodeURIComponent(c.label)}`;
+      setLanes((prev) =>
+        prev.map((l, i) =>
+          i === laneIndex
+            ? { ...l, trackId: `vocals-${c.label}:${parentTrackId}`, src: proxySrc, name: c.display, loading: true, error: null }
+            : l
+        )
+      );
+      try {
+        const { audioBuffer, peaks, duration } = await decodeTrack(proxySrc);
+        // eslint-disable-next-line no-loop-func
+        setLanes((prev) =>
+          prev.map((l, i) =>
+            i === laneIndex
+              ? { ...l, audioBuffer, peaks, duration, loading: false }
+              : l
+          )
+        );
+      } catch (e) {
+        setLanes((prev) =>
+          prev.map((l, i) =>
+            i === laneIndex ? { ...l, loading: false, error: e?.message || "Vocal stem load failed" } : l
           )
         );
       }
@@ -927,6 +1063,7 @@ export default function StudioClient() {
       <TopBar />
       <StemJobBanner job={stemJob} flash={stemMsg} onDismiss={() => setStemJob(null)} />
       <VoiceCleanBanner job={voiceCleanJob} onDismiss={() => setVoiceCleanJob(null)} />
+      <VocalsSplitBanner job={vocalsSplitJob} onDismiss={() => setVocalsSplitJob(null)} />
       <TransportBar
         isPlaying={isPlaying}
         playhead={playhead}
@@ -948,8 +1085,10 @@ export default function StudioClient() {
           onTap={loadIntoNextEmptyLane}
           onSplitStems={splitStems}
           onCleanVoice={cleanVoice}
+          onSplitVocals={splitVocals}
           stemJob={stemJob}
           voiceCleanJob={voiceCleanJob}
+          vocalsSplitJob={vocalsSplitJob}
         />
         <TimelineArea
           lanes={lanes}
@@ -1274,6 +1413,127 @@ function VoiceCleanBanner({ job, onDismiss }) {
   );
 }
 
+// Banner above the transport bar while a lead+backing vocals
+// split is running. Purple accent so users can distinguish at a
+// glance from the lime (stem split) + blue (voice clean) banners.
+function VocalsSplitBanner({ job, onDismiss }) {
+  if (!job) return null;
+  if (job.status === "completed") {
+    return (
+      <div
+        style={{
+          padding: "10px 16px",
+          background: "rgba(196,181,253,0.10)",
+          borderBottom: `1px solid rgba(196,181,253,0.40)`,
+          fontSize: 12.5,
+          color: "#c4b5fd",
+          fontWeight: 700,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+        }}
+      >
+        <span>✓ Lead + backing vocals loaded onto next empty lanes.</span>
+        <button
+          onClick={onDismiss}
+          style={{
+            marginLeft: "auto",
+            padding: "3px 8px",
+            background: "transparent",
+            border: "1px solid rgba(196,181,253,0.50)",
+            borderRadius: 6,
+            color: "#c4b5fd",
+            fontSize: 10.5,
+            fontWeight: 700,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          Dismiss
+        </button>
+      </div>
+    );
+  }
+  if (job.status === "failed") {
+    return (
+      <div
+        style={{
+          padding: "10px 16px",
+          background: "rgba(239,68,68,0.10)",
+          borderBottom: `1px solid rgba(239,68,68,0.32)`,
+          fontSize: 12.5,
+          color: "#fca5a5",
+          fontWeight: 600,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+        }}
+      >
+        <span>✕ Vocals split failed: {job.error || "Unknown error"}. Credits refunded.</span>
+        <button
+          onClick={onDismiss}
+          style={{
+            marginLeft: "auto",
+            padding: "3px 8px",
+            background: "transparent",
+            border: `1px solid rgba(239,68,68,0.5)`,
+            borderRadius: 6,
+            color: "#fca5a5",
+            fontSize: 10.5,
+            fontWeight: 700,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          Dismiss
+        </button>
+      </div>
+    );
+  }
+  const pct = Math.max(2, Math.min(100, job.progress || 0));
+  return (
+    <div
+      style={{
+        padding: "10px 16px",
+        background: C.panelSoft,
+        borderBottom: `1px solid ${C.border}`,
+        fontSize: 12.5,
+        color: C.textSoft,
+        fontWeight: 600,
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+      }}
+    >
+      <span style={{ flexShrink: 0 }}>
+        🎤 Splitting lead + backing vocals on <b style={{ color: C.text }}>{job.sourceName || "track"}</b>…
+      </span>
+      <div
+        style={{
+          flex: 1,
+          maxWidth: 260,
+          height: 6,
+          background: "rgba(255,255,255,0.06)",
+          borderRadius: 999,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            height: "100%",
+            width: `${pct}%`,
+            background: "linear-gradient(90deg, #c4b5fd, #8b5cf6)",
+            transition: "width 0.4s",
+          }}
+        />
+      </div>
+      <span style={{ fontVariantNumeric: "tabular-nums", color: C.muted, fontSize: 11 }}>
+        {pct}%
+      </span>
+    </div>
+  );
+}
+
 // ── Transport bar ────────────────────────────────────────────────
 function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onStop, onMasterVolume, onSeek, onExport, exporting, hasAudio }) {
   return (
@@ -1430,7 +1690,7 @@ function transportBtnStyle() {
 }
 
 // ── Library sidebar ──────────────────────────────────────────────
-function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onCleanVoice, stemJob, voiceCleanJob }) {
+function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onCleanVoice, onSplitVocals, stemJob, voiceCleanJob, vocalsSplitJob }) {
   return (
     <aside
       style={{
@@ -1473,6 +1733,7 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
         tracks.map((t) => {
           const isThisSplitting = stemJob?.trackId === t.id && stemJob?.status === "processing";
           const isThisCleaning = voiceCleanJob?.trackId === t.id && voiceCleanJob?.status === "processing";
+          const isThisVocalsSplitting = vocalsSplitJob?.trackId === t.id && vocalsSplitJob?.status === "processing";
           return (
             <div
               key={t.id}
@@ -1520,7 +1781,7 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
                     title={
                       isThisSplitting
                         ? "Splitting in progress…"
-                        : "Split into 4 stems (vocals/drum/bass/piano) · 20 credits"
+                        : "Split into 6 stems (vocals/drum/bass/piano/electric_guitar/acoustic_guitar) · 30 credits"
                     }
                     style={{
                       padding: "4px 9px",
@@ -1538,6 +1799,34 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
                     }}
                   >
                     {isThisSplitting ? "…" : "🔬 Split"}
+                  </button>
+                )}
+                {onSplitVocals && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onSplitVocals(t); }}
+                    disabled={isThisVocalsSplitting}
+                    title={
+                      isThisVocalsSplitting
+                        ? "Splitting vocals…"
+                        : "Split vocal into lead + backing harmonies · 10 credits"
+                    }
+                    style={{
+                      padding: "4px 9px",
+                      borderRadius: 999,
+                      background: isThisVocalsSplitting ? "rgba(196,181,253,0.20)" : "transparent",
+                      border: "1px solid rgba(196,181,253,0.55)",
+                      color: "#c4b5fd",
+                      fontSize: 10,
+                      fontWeight: 800,
+                      letterSpacing: "0.04em",
+                      cursor: isThisVocalsSplitting ? "default" : "pointer",
+                      fontFamily: "inherit",
+                      opacity: isThisVocalsSplitting ? 0.7 : 1,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {isThisVocalsSplitting ? "…" : "🎤 Vocals"}
                   </button>
                 )}
                 {onCleanVoice && (

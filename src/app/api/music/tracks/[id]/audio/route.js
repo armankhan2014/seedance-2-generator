@@ -13,8 +13,12 @@
 // Sources (?source= query param):
 //   • main            (default) — track.r2Url || audioUrl || streamUrl
 //   • stem-<label>    — track.studioStems[<label>] (LALAL multistem result)
-//                       e.g. stem-vocals, stem-drum, stem-bass, stem-piano
+//                       e.g. stem-vocals, stem-drum, stem-bass, stem-piano,
+//                       stem-electric_guitar, stem-acoustic_guitar
 //   • voice-clean     — track.voiceCleanUrl (LALAL voice_clean result)
+//   • vocals-<label>  — track.vocalsSplit[<label>] (LALAL lead+backing
+//                       vocals split). label ∈ {lead, backing,
+//                       no_vocals, mix_no_lead}
 //
 // Why one route with a switch instead of N separate routes:
 // they all do the same thing — auth + ownership + look up some URL
@@ -46,6 +50,8 @@ const ALLOWED_STEM_LABELS = new Set([
   "acoustic_guitar",
 ]);
 
+const ALLOWED_VOCALS_LABELS = new Set(["lead", "backing", "no_vocals", "mix_no_lead"]);
+
 export async function GET(req, { params }) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
@@ -65,6 +71,7 @@ export async function GET(req, { params }) {
       status: true,
       studioStems: true,
       voiceCleanUrl: true,
+      vocalsSplit: true,
     },
   });
   if (!track) {
@@ -88,6 +95,12 @@ export async function GET(req, { params }) {
     // through optional chaining so a track with no Studio split
     // returns a clean 404 instead of crashing.
     url = track.studioStems?.[label] || null;
+  } else if (source.startsWith("vocals-")) {
+    const label = source.slice("vocals-".length);
+    if (!ALLOWED_VOCALS_LABELS.has(label)) {
+      return NextResponse.json({ error: "Unknown vocals label" }, { status: 400 });
+    }
+    url = track.vocalsSplit?.[label] || null;
   } else {
     return NextResponse.json({ error: "Unknown source kind" }, { status: 400 });
   }
