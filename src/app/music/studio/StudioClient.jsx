@@ -1860,7 +1860,7 @@ function BpmInput({ resolvedBpm, onOverride }) {
           if (e.key === "Enter") e.currentTarget.blur();
         }}
         placeholder="—"
-        title="Beats per minute (auto-fills from loaded track; type to override)"
+        title="Beats per minute. Auto-fills from the loaded track. When set, loop drags + clicks snap to bar boundaries — hold Shift while dragging to bypass snap."
         style={{
           width: 56,
           padding: "6px 8px",
@@ -2475,25 +2475,30 @@ function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth, onSeek, lo
     e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
     const startX = e.clientX;
-    const startT = (e.clientX - rect.left) / pixelsPerSecond;
+    const rawStartT = (e.clientX - rect.left) / pixelsPerSecond;
     let didDrag = false;
     function onMove(ev) {
       const dx = Math.abs(ev.clientX - startX);
       if (dx < 5) return; // jitter — keep waiting
       didDrag = true;
       if (!onSetLoopRegion) return;
-      const curT = (ev.clientX - rect.left) / pixelsPerSecond;
+      const rawCurT = (ev.clientX - rect.left) / pixelsPerSecond;
+      // Snap both endpoints to bar boundaries (when BPM resolved).
+      // Shift bypasses snap for fine-tuning.
+      const snap = !ev.shiftKey;
+      const startT = snapToBar(rawStartT, mixBpm, snap);
+      const curT = snapToBar(rawCurT, mixBpm, snap);
       const minT = Math.max(0, Math.min(startT, curT));
       const maxT = Math.min(timelineSeconds, Math.max(startT, curT));
-      // Live-update during drag so the user sees the region grow.
       onSetLoopRegion({ start: minT, end: maxT });
     }
-    function onUp() {
+    function onUp(ev) {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
       if (!didDrag) {
-        // Pure click → seek. Don't touch loop region.
-        onSeek(startT);
+        // Pure click → seek. Snap the seek position too so the
+        // playhead lands cleanly on a bar.
+        onSeek(snapToBar(rawStartT, mixBpm, !ev.shiftKey));
       }
     }
     window.addEventListener("mousemove", onMove);
@@ -2620,6 +2625,7 @@ function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth, onSeek, lo
               pixelsPerSecond={pixelsPerSecond}
               loopRegion={loopRegion}
               timelineSeconds={timelineSeconds}
+              mixBpm={mixBpm}
               onUpdate={onSetLoopRegion}
             />
             <LoopEdgeHandle
@@ -2628,6 +2634,7 @@ function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth, onSeek, lo
               pixelsPerSecond={pixelsPerSecond}
               loopRegion={loopRegion}
               timelineSeconds={timelineSeconds}
+              mixBpm={mixBpm}
               onUpdate={onSetLoopRegion}
             />
             <LoopEdgeHandle
@@ -2636,6 +2643,7 @@ function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth, onSeek, lo
               pixelsPerSecond={pixelsPerSecond}
               loopRegion={loopRegion}
               timelineSeconds={timelineSeconds}
+              mixBpm={mixBpm}
               onUpdate={onSetLoopRegion}
             />
           </>
@@ -2651,7 +2659,7 @@ function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth, onSeek, lo
 // Renders the yellow visual + handles the move drag.
 // Lower zIndex than LoopEdgeHandle so the edges still grab the
 // cursor first within their 8px hit zone.
-function LoopBodyDrag({ x, width, pixelsPerSecond, loopRegion, timelineSeconds, onUpdate }) {
+function LoopBodyDrag({ x, width, pixelsPerSecond, loopRegion, timelineSeconds, mixBpm, onUpdate }) {
   function handleMouseDown(e) {
     e.preventDefault();
     e.stopPropagation();
@@ -2662,8 +2670,12 @@ function LoopBodyDrag({ x, width, pixelsPerSecond, loopRegion, timelineSeconds, 
     function onMove(ev) {
       const dx = ev.clientX - startMouseX;
       const dt = dx / pixelsPerSecond;
-      // Clamp so the region stays inside [0, timelineSeconds].
       let newStart = initialStart + dt;
+      // Snap the new start to the bar grid before clamping —
+      // keeps the region length constant + lands the start on
+      // a beat. Shift bypasses snap.
+      newStart = snapToBar(newStart, mixBpm, !ev.shiftKey);
+      // Clamp so the region stays inside [0, timelineSeconds].
       if (newStart < 0) newStart = 0;
       if (newStart + length > timelineSeconds) newStart = timelineSeconds - length;
       onUpdate({ start: newStart, end: newStart + length });
@@ -2701,14 +2713,16 @@ function LoopBodyDrag({ x, width, pixelsPerSecond, loopRegion, timelineSeconds, 
 // — feels like the cursor "catches" the boundary. Cursor: ew-resize
 // signals what's about to happen. Stops propagation so the underlying
 // ruler doesn't fire its own click-to-seek when the user drags an edge.
-function LoopEdgeHandle({ edge, x, pixelsPerSecond, loopRegion, timelineSeconds, onUpdate }) {
+function LoopEdgeHandle({ edge, x, pixelsPerSecond, loopRegion, timelineSeconds, mixBpm, onUpdate }) {
   function handleMouseDown(e) {
     e.preventDefault();
     e.stopPropagation();
     const ruler = e.currentTarget.parentElement;
     const rect = ruler.getBoundingClientRect();
     function onMove(ev) {
-      const curT = (ev.clientX - rect.left) / pixelsPerSecond;
+      const rawT = (ev.clientX - rect.left) / pixelsPerSecond;
+      // Snap to bar grid (when BPM resolved + Shift not held).
+      const curT = snapToBar(rawT, mixBpm, !ev.shiftKey);
       if (edge === "start") {
         // Clamp: can't go below 0, can't cross over end.
         const newStart = Math.max(0, Math.min(curT, loopRegion.end - 0.1));
@@ -3095,6 +3109,22 @@ function Playhead({ playhead, pixelsPerSecond }) {
       }}
     />
   );
+}
+
+// Snap a timeline second to the nearest musical bar boundary,
+// given a BPM. 4/4 time assumed (one bar = 4 beats). Snap is a
+// "magnetic" feel: if the cursor is within half a bar of a
+// boundary, it snaps to that boundary; otherwise stays free.
+// Returns the input unchanged when:
+//   • snap is disabled (Shift held during the drag), OR
+//   • no BPM is resolved (no bar grid to snap to).
+//
+// Centralised so the three drag handlers (create-region, edge
+// resize, body move) all snap consistently.
+function snapToBar(seconds, bpm, snapEnabled) {
+  if (!snapEnabled || !bpm || bpm <= 0) return seconds;
+  const barDuration = (60 / bpm) * 4;
+  return Math.round(seconds / barDuration) * barDuration;
 }
 
 function formatTime(s) {
