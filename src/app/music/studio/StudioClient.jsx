@@ -55,9 +55,11 @@ const C = {
 // scroll on most screens.
 const TIMELINE_SECONDS = 300;
 const PIXELS_PER_SECOND_DEFAULT = 5;
-// Three colour hues per lane so the waveforms aren't all
-// monochrome. Cycle by lane index.
-const LANE_HUES = [70, 195, 320]; // lime, cyan, magenta
+// Six colour hues — one per lane — so a fully-loaded mix reads as
+// six distinct visual streams. Spread across the colour wheel
+// (~60° apart) so adjacent lanes don't blur into each other.
+const LANE_HUES = [70, 195, 320, 25, 270, 145]; // lime, cyan, magenta, orange, purple, green
+const LANE_COUNT = LANE_HUES.length;
 
 export default function StudioClient() {
   // ── Library state ─────────────────────────────────────────────
@@ -81,12 +83,85 @@ export default function StudioClient() {
       .finally(() => setLibraryLoading(false));
   }, []);
 
+  // ── Arrangement persistence ───────────────────────────────────
+  // Saves the lightweight state (which tracks are on which lanes +
+  // their volume/mute/solo + master volume) to localStorage. On
+  // mount, after the library loads, we restore by looking up each
+  // saved trackId in the library + calling loadLane().
+  //
+  // We DO NOT persist the audio buffers themselves (huge, plus
+  // they re-decode in ~1s) or the playhead position (fresh-start
+  // every session is the right default).
+  //
+  // Throttled write — debounced 500ms so a slider drag doesn't
+  // hammer localStorage on every pixel.
+  const STORAGE_KEY = "sd-studio-v0-state";
+  const restoredRef = useRef(false);
+  // Restore once, after library loads + before any user input.
+  useEffect(() => {
+    if (libraryLoading || restoredRef.current) return;
+    restoredRef.current = true;
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (!saved || saved.version !== 1) return;
+      if (Number.isFinite(saved.masterVolume)) setMasterVolume(saved.masterVolume);
+      if (Array.isArray(saved.lanes)) {
+        // Hydrate non-audio lane settings first (volume / mute /
+        // solo) so they apply immediately.
+        setLanes((prev) =>
+          prev.map((l, i) => {
+            const s = saved.lanes[i];
+            if (!s) return l;
+            return {
+              ...l,
+              volume: Number.isFinite(s.volume) ? s.volume : l.volume,
+              muted: !!s.muted,
+              solo: !!s.solo,
+            };
+          })
+        );
+        // Then async-load any lanes with a saved trackId. Loop
+        // synchronously to preserve order; loadLane handles
+        // decode + state update.
+        saved.lanes.forEach((s, i) => {
+          if (!s?.trackId) return;
+          const track = library.find((t) => t.id === s.trackId);
+          if (track) loadLane(i, track);
+        });
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libraryLoading, library]);
+  // Persist on every relevant change.
+  useEffect(() => {
+    if (!restoredRef.current) return; // don't save until after first restore pass
+    const t = setTimeout(() => {
+      try {
+        const payload = {
+          version: 1,
+          savedAt: Date.now(),
+          masterVolume,
+          lanes: lanes.map((l) => ({
+            trackId: l.trackId,
+            volume: l.volume,
+            muted: l.muted,
+            solo: l.solo,
+          })),
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      } catch {}
+    }, 500);
+    return () => clearTimeout(t);
+  }, [lanes, masterVolume]);
+
   // ── Lanes state (v0: 3 fixed) ─────────────────────────────────
   // Each lane has: { trackId, src, name, hue, audioBuffer, peaks,
   // duration, volume (0..1), muted, solo }. trackId === null means
   // empty lane.
   const [lanes, setLanes] = useState(() =>
-    [0, 1, 2].map((i) => ({
+    Array.from({ length: LANE_COUNT }, (_, i) => ({
       trackId: null,
       src: null,
       name: null,
@@ -106,7 +181,7 @@ export default function StudioClient() {
   const ctxRef = useRef(null);
   const masterGainRef = useRef(null);
   const sourcesRef = useRef([]); // active AudioBufferSourceNodes
-  const trackGainsRef = useRef([null, null, null]); // GainNode per lane
+  const trackGainsRef = useRef(Array(LANE_COUNT).fill(null)); // GainNode per lane
   // Decoded AudioBuffers cached by src URL so re-dropping the same
   // track on another lane reuses the existing decode.
   const bufferCache = useRef(new Map());
@@ -350,6 +425,39 @@ export default function StudioClient() {
     setIsPlaying(false);
   }
 
+  // Click-to-scrub: jump the playhead to a specific timeline second.
+  // If we're currently playing, stop the existing sources + restart
+  // them at the new offset so playback continues seamlessly from
+  // the new position. If we're paused, just update the offset for
+  // the next play() call.
+  function seekTo(seconds) {
+    const clamped = Math.max(0, Math.min(TIMELINE_SECONDS, seconds));
+    if (isPlaying) {
+      // Restart playback from the new offset.
+      stopAllSources();
+      playbackOffsetRef.current = clamped;
+      setPlayhead(clamped);
+      const ctx = ensureCtx();
+      const startAt = ctx.currentTime + 0.05;
+      playbackStartRef.current = startAt;
+      const newSources = [];
+      for (let i = 0; i < lanes.length; i++) {
+        const lane = lanes[i];
+        if (!lane.audioBuffer) continue;
+        if (clamped >= lane.duration) continue;
+        const src = ctx.createBufferSource();
+        src.buffer = lane.audioBuffer;
+        src.connect(trackGainsRef.current[i]);
+        src.start(startAt, clamped);
+        newSources.push(src);
+      }
+      sourcesRef.current = newSources;
+    } else {
+      playbackOffsetRef.current = clamped;
+      setPlayhead(clamped);
+    }
+  }
+
   function stopAllSources() {
     for (const s of sourcesRef.current) {
       try { s.stop(); } catch {}
@@ -367,6 +475,49 @@ export default function StudioClient() {
       }
     };
   }, []);
+
+  // Keyboard shortcuts — standard DAW expectations:
+  //   • Space   → play / pause
+  //   • Escape  → stop (return playhead to 0)
+  //   • Home    → jump to start
+  // Only fires when the user ISN'T typing into an input or
+  // contenteditable element, so the spacebar in a volume-slider
+  // tooltip (or anywhere else) doesn't accidentally pause playback.
+  useEffect(() => {
+    function shouldIgnore(target) {
+      if (!target) return false;
+      const tag = target.tagName;
+      return (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target.isContentEditable
+      );
+    }
+    function onKey(e) {
+      if (shouldIgnore(e.target)) return;
+      // Space — toggle play/pause. preventDefault so the page
+      // doesn't scroll.
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (isPlaying) pause();
+        else play();
+        return;
+      }
+      if (e.code === "Escape") {
+        e.preventDefault();
+        stopAll();
+        return;
+      }
+      if (e.code === "Home") {
+        e.preventDefault();
+        seekTo(0);
+        return;
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isPlaying, lanes]); // re-bind so the latest play/pause/seekTo closures fire
 
   // ── Per-lane setters ─────────────────────────────────────────
   function setLaneVolume(i, v) {
@@ -415,6 +566,7 @@ export default function StudioClient() {
         onPause={pause}
         onStop={stopAll}
         onMasterVolume={setMasterVolume}
+        onSeek={seekTo}
       />
       <main style={{ display: "flex", height: "calc(100vh - 56px - 60px)", overflow: "hidden" }}>
         <LibrarySidebar
@@ -435,6 +587,7 @@ export default function StudioClient() {
           onToggleMute={toggleLaneMute}
           onToggleSolo={toggleLaneSolo}
           onClear={clearLane}
+          onSeek={seekTo}
         />
       </main>
     </div>
@@ -481,7 +634,7 @@ function TopBar() {
 }
 
 // ── Transport bar ────────────────────────────────────────────────
-function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onStop, onMasterVolume }) {
+function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onStop, onMasterVolume, onSeek }) {
   return (
     <div
       style={{
@@ -530,6 +683,13 @@ function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onSt
         {formatTime(playhead)}
       </div>
       <div style={{ flex: 1 }} />
+      {/* Keyboard hint — discoverable text so users learn the
+          DAW-standard shortcuts without needing docs. */}
+      <span style={{ fontSize: 10.5, color: C.muted, marginRight: 14, display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        <KbdHint k="Space">play / pause</KbdHint>
+        <KbdHint k="Esc">stop</KbdHint>
+        <KbdHint k="Home">to start</KbdHint>
+      </span>
       <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 11, color: C.muted, fontWeight: 700, letterSpacing: "0.04em" }}>MASTER</span>
         <input
@@ -544,6 +704,31 @@ function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onSt
         />
       </div>
     </div>
+  );
+}
+
+// Inline keyboard-shortcut hint pill. Used in the transport bar to
+// surface DAW-standard shortcuts without a docs page.
+function KbdHint({ k, children }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+      <kbd
+        style={{
+          padding: "1px 6px",
+          background: C.panel,
+          border: `1px solid ${C.border}`,
+          borderRadius: 4,
+          fontSize: 9.5,
+          fontWeight: 700,
+          color: C.textSoft,
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+          lineHeight: 1.4,
+        }}
+      >
+        {k}
+      </kbd>
+      <span>{children}</span>
+    </span>
   );
 }
 
@@ -645,7 +830,7 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap }) {
 }
 
 // ── Timeline area ────────────────────────────────────────────────
-function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timelineWidth, onDrop, onDragOver, onVolume, onToggleMute, onToggleSolo, onClear }) {
+function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timelineWidth, onDrop, onDragOver, onVolume, onToggleMute, onToggleSolo, onClear, onSeek }) {
   return (
     <div
       style={{
@@ -656,7 +841,12 @@ function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timel
         flexDirection: "column",
       }}
     >
-      <TimeRuler timelineSeconds={timelineSeconds} pixelsPerSecond={pixelsPerSecond} timelineWidth={timelineWidth} />
+      <TimeRuler
+        timelineSeconds={timelineSeconds}
+        pixelsPerSecond={pixelsPerSecond}
+        timelineWidth={timelineWidth}
+        onSeek={onSeek}
+      />
       <div style={{ position: "relative" }}>
         {lanes.map((lane, i) => (
           <TrackLane
@@ -680,7 +870,17 @@ function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timel
 }
 
 // Time ruler — minute:second ticks across the top of the timeline.
-function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth }) {
+// Clicking anywhere on the ruler scrubs the playhead to that second.
+// Cursor: pointer when onSeek is wired, so users discover the
+// interaction without docs.
+function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth, onSeek }) {
+  function handleClick(e) {
+    if (!onSeek) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const seconds = x / pixelsPerSecond;
+    onSeek(seconds);
+  }
   const labels = [];
   // Tick every 30s for label, every 10s for minor tick.
   for (let s = 0; s <= timelineSeconds; s += 10) {
@@ -698,6 +898,7 @@ function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth }) {
               ? `1px solid rgba(255,255,255,0.10)`
               : `1px solid rgba(255,255,255,0.05)`,
           width: 1,
+          pointerEvents: "none",
         }}
       >
         {s % 30 === 0 && (
@@ -720,7 +921,16 @@ function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth }) {
   }
   return (
     <div style={{ position: "sticky", top: 0, zIndex: 2, background: C.panelSoft, borderBottom: `1px solid ${C.border}`, marginLeft: 220 }}>
-      <div style={{ position: "relative", width: timelineWidth, height: 28 }}>
+      <div
+        onClick={handleClick}
+        title="Click to jump the playhead here"
+        style={{
+          position: "relative",
+          width: timelineWidth,
+          height: 28,
+          cursor: onSeek ? "pointer" : "default",
+        }}
+      >
         {labels}
       </div>
     </div>
