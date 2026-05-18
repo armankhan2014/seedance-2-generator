@@ -232,6 +232,23 @@ export default function StudioClient() {
   // looped playback.
   const [loopRegion, setLoopRegion] = useState(null);
   const [loopEnabled, setLoopEnabled] = useState(true);
+  // BPM for the bar-grid overlay on the time ruler. Auto-resolved
+  // from the first non-empty library-track lane's tempo; user can
+  // override via the BPM input in the transport bar. null = no bar
+  // grid drawn.
+  const [mixBpmOverride, setMixBpmOverride] = useState(null);
+  // Resolve effective BPM. We track tempo on each lane as part of
+  // the lane object now (see loadLane below). For stems/voice-clean
+  // results that don't carry an explicit tempo, we fall back to the
+  // FIRST lane in the row that has one — usually the source the
+  // user split, since stems land on lanes 0-N.
+  const resolvedBpm = useMemo(() => {
+    if (Number.isFinite(mixBpmOverride) && mixBpmOverride > 0) return mixBpmOverride;
+    for (const l of lanes) {
+      if (l.tempo && l.tempo > 0) return l.tempo;
+    }
+    return null;
+  }, [lanes, mixBpmOverride]);
   // When playback starts, we capture: (a) AudioContext.currentTime
   // at that moment, (b) the offset within the timeline. The actual
   // playhead is derived as `offset + (ctx.currentTime -
@@ -367,6 +384,14 @@ export default function StudioClient() {
     return cached;
   }
 
+  // Helper — derive a "best guess" BPM for the current mix. Uses
+  // the FIRST non-empty lane's stored tempo. If lanes hold stems
+  // from a parent track, we look up the parent's tempo via the
+  // library cache. Falls back to user's manual override
+  // (mixBpmOverride) if set, else null (no bar grid drawn).
+  // Centralised here so the time ruler stays a pure component.
+  // (defined later — see mixBpm useMemo right below the lane state)
+
   // Load a library track into a specific lane. Decodes audio,
   // computes peaks, updates lane state. Idempotent — re-dropping
   // the same track on the same lane just refreshes the metadata.
@@ -384,7 +409,7 @@ export default function StudioClient() {
     setLanes((prev) =>
       prev.map((l, i) =>
         i === laneIndex
-          ? { ...l, trackId: track.id, src, name: track.title, loading: true, error: null }
+          ? { ...l, trackId: track.id, src, name: track.title, tempo: track.tempo || null, loading: true, error: null }
           : l
       )
     );
@@ -554,6 +579,10 @@ export default function StudioClient() {
     // Stop any current playback so we don't get a confusing
     // half-fade when lanes swap underneath an active source.
     if (isPlaying) stopAll();
+    // Resolve parent track's tempo so stems carry the same BPM
+    // for the bar-grid overlay.
+    const parentTrack = library.find((t) => t.id === parentTrackId);
+    const parentTempo = parentTrack?.tempo || null;
     // Load each stem onto its predetermined lane in STEM_LANE_ORDER.
     for (let i = 0; i < STEM_LANE_ORDER.length && i < LANE_COUNT; i++) {
       const label = STEM_LANE_ORDER[i];
@@ -568,7 +597,7 @@ export default function StudioClient() {
       setLanes((prev) =>
         prev.map((l, idx) =>
           idx === i
-            ? { ...l, trackId: `stem:${label}`, src: proxySrc, name: `Stem: ${label}`, volume: defaultVolume, muted: false, solo: false, loading: true, error: null }
+            ? { ...l, trackId: `stem:${label}`, src: proxySrc, name: `Stem: ${label}`, tempo: parentTempo, volume: defaultVolume, muted: false, solo: false, loading: true, error: null }
             : l
         )
       );
@@ -678,6 +707,8 @@ export default function StudioClient() {
   async function applyVocalsSplitToLanes(parentTrackId, sourceName, vocalsSplit) {
     if (!vocalsSplit || typeof vocalsSplit !== "object") return;
     if (isPlaying) stopAll();
+    const parentTrack = library.find((t) => t.id === parentTrackId);
+    const parentTempo = parentTrack?.tempo || null;
     const candidates = [];
     // Auto-balance: lead loud (it IS the song), backing softer
     // (harmony layer). User can tweak after.
@@ -695,7 +726,7 @@ export default function StudioClient() {
       setLanes((prev) =>
         prev.map((l, i) =>
           i === laneIndex
-            ? { ...l, trackId: `vocals-${c.label}:${parentTrackId}`, src: proxySrc, name: c.display, volume: c.volume, muted: false, solo: false, loading: true, error: null }
+            ? { ...l, trackId: `vocals-${c.label}:${parentTrackId}`, src: proxySrc, name: c.display, tempo: parentTempo, volume: c.volume, muted: false, solo: false, loading: true, error: null }
             : l
         )
       );
@@ -825,10 +856,12 @@ export default function StudioClient() {
     const laneIndex = targetIdx === -1 ? 0 : targetIdx;
     const niceName = `🧹 Clean: ${sourceName || "voice"}`;
     const proxySrc = `/api/music/tracks/${parentTrackId}/audio?source=voice-clean`;
+    const parentTrack = library.find((t) => t.id === parentTrackId);
+    const parentTempo = parentTrack?.tempo || null;
     setLanes((prev) =>
       prev.map((l, i) =>
         i === laneIndex
-          ? { ...l, trackId: `voice-clean:${Date.now()}`, src: proxySrc, name: niceName, volume: 0.92, muted: false, solo: false, loading: true, error: null }
+          ? { ...l, trackId: `voice-clean:${Date.now()}`, src: proxySrc, name: niceName, tempo: parentTempo, volume: 0.92, muted: false, solo: false, loading: true, error: null }
           : l
       )
     );
@@ -1187,6 +1220,8 @@ export default function StudioClient() {
         loopRegion={loopRegion}
         onToggleLoop={() => setLoopEnabled((v) => !v)}
         onClearLoop={() => setLoopRegion(null)}
+        resolvedBpm={resolvedBpm}
+        onBpmOverride={setMixBpmOverride}
       />
       <main style={{ display: "flex", height: "calc(100vh - 56px - 60px)", overflow: "hidden" }}>
         <LibrarySidebar
@@ -1216,6 +1251,7 @@ export default function StudioClient() {
           onSeek={seekTo}
           loopRegion={loopRegion}
           onSetLoopRegion={setLoopRegion}
+          mixBpm={resolvedBpm}
         />
       </main>
     </div>
@@ -1648,7 +1684,7 @@ function VocalsSplitBanner({ job, onDismiss }) {
 }
 
 // ── Transport bar ────────────────────────────────────────────────
-function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onStop, onMasterVolume, onSeek, onExport, onExportStems, exporting, hasAudio, loopEnabled, loopRegion, onToggleLoop, onClearLoop }) {
+function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onStop, onMasterVolume, onSeek, onExport, onExportStems, exporting, hasAudio, loopEnabled, loopRegion, onToggleLoop, onClearLoop, resolvedBpm, onBpmOverride }) {
   return (
     <div
       style={{
@@ -1700,6 +1736,12 @@ function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onSt
       >
         {formatTime(playhead)}
       </div>
+      {/* BPM input — auto-resolves from the first loaded lane's
+          tempo, user can override. When BPM is set, the time
+          ruler draws musical bar markers in the lime brand color. */}
+      {(onBpmOverride !== undefined) && (
+        <BpmInput resolvedBpm={resolvedBpm} onOverride={onBpmOverride} />
+      )}
       <div style={{ flex: 1 }} />
       {/* Keyboard hint — discoverable text so users learn the
           DAW-standard shortcuts without needing docs. */}
@@ -1759,6 +1801,66 @@ function KbdHint({ k, children }) {
       </kbd>
       <span>{children}</span>
     </span>
+  );
+}
+
+// BPM input — small editable number field in the transport bar.
+// Auto-fills from the first loaded lane's stored tempo (via
+// `resolvedBpm`), but the user can type any value to override.
+// Empty input clears the override → resolved BPM (if any) takes
+// over. Numeric input, clamped to 30-300 BPM (well past any
+// realistic music). When a BPM is set, the time ruler renders
+// musical bar markers in the brand lime color.
+function BpmInput({ resolvedBpm, onOverride }) {
+  const [text, setText] = useState("");
+  // Sync the visible value to the resolved BPM unless the user is
+  // actively typing (text non-empty).
+  useEffect(() => {
+    if (text === "" && resolvedBpm) setText(String(resolvedBpm));
+    if (text === "" && !resolvedBpm) setText("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedBpm]);
+  function commit(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 30 || n > 300) {
+      // Reset to resolvedBpm or blank.
+      setText(resolvedBpm ? String(resolvedBpm) : "");
+      onOverride(null);
+      return;
+    }
+    onOverride(n);
+  }
+  return (
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 6, marginLeft: 4 }}>
+      <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 700, letterSpacing: "0.06em" }}>BPM</span>
+      <input
+        type="number"
+        min={30}
+        max={300}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={(e) => commit(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+        }}
+        placeholder="—"
+        title="Beats per minute (auto-fills from loaded track; type to override)"
+        style={{
+          width: 56,
+          padding: "6px 8px",
+          background: C.panel,
+          border: `1px solid ${C.border}`,
+          borderRadius: 6,
+          color: resolvedBpm ? C.accent : C.textSoft,
+          fontSize: 12.5,
+          fontWeight: 800,
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+          fontVariantNumeric: "tabular-nums",
+          textAlign: "center",
+          outline: "none",
+        }}
+      />
+    </div>
   );
 }
 
@@ -2271,7 +2373,7 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
 }
 
 // ── Timeline area ────────────────────────────────────────────────
-function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timelineWidth, onDrop, onDragOver, onVolume, onToggleMute, onToggleSolo, onClear, onSeek, loopRegion, onSetLoopRegion }) {
+function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timelineWidth, onDrop, onDragOver, onVolume, onToggleMute, onToggleSolo, onClear, onSeek, loopRegion, onSetLoopRegion, mixBpm }) {
   return (
     <div
       style={{
@@ -2289,6 +2391,7 @@ function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timel
         onSeek={onSeek}
         loopRegion={loopRegion}
         onSetLoopRegion={onSetLoopRegion}
+        mixBpm={mixBpm}
       />
       <div style={{ position: "relative" }}>
         {lanes.map((lane, i) => (
@@ -2340,7 +2443,7 @@ function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timel
 //                    separates "drag" from "click" so users don't
 //                    accidentally create tiny regions by jitter.
 // Cursor: pointer + tooltip explain both modes.
-function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth, onSeek, loopRegion, onSetLoopRegion }) {
+function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth, onSeek, loopRegion, onSetLoopRegion, mixBpm }) {
   function handleMouseDown(e) {
     if (!onSeek) return;
     e.preventDefault();
@@ -2370,6 +2473,55 @@ function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth, onSeek, lo
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
   }
+  // Musical bar markers — only drawn when we have a resolved BPM
+  // for the mix. One bar = 4 beats at the given BPM (4/4 time —
+  // 99% of pop / rock / electronic / Bollywood is 4/4 so we don't
+  // bother with a time-signature input for v0). Bars are labelled
+  // 1, 2, 3… with every 4th bar (a "phrase") emphasized brighter.
+  // Drawn UNDER the seconds labels so they don't fight for
+  // attention — the seconds are still the primary read.
+  const barMarkers = [];
+  if (mixBpm && mixBpm > 0) {
+    const barDuration = (60 / mixBpm) * 4; // 4 beats per bar in 4/4
+    for (let bar = 1; bar * barDuration <= timelineSeconds; bar++) {
+      const x = bar * barDuration * pixelsPerSecond;
+      const isPhrase = bar % 4 === 0;
+      barMarkers.push(
+        <div
+          key={`bar-${bar}`}
+          style={{
+            position: "absolute",
+            left: x,
+            top: 16,
+            bottom: 0,
+            width: 1,
+            borderLeft: isPhrase
+              ? "1px solid rgba(217,255,0,0.30)"
+              : "1px solid rgba(217,255,0,0.10)",
+            pointerEvents: "none",
+          }}
+        >
+          {isPhrase && (
+            <span
+              style={{
+                position: "absolute",
+                bottom: -1,
+                left: 3,
+                fontSize: 8.5,
+                color: "rgba(217,255,0,0.45)",
+                fontWeight: 700,
+                fontVariantNumeric: "tabular-nums",
+                pointerEvents: "none",
+              }}
+            >
+              {bar}
+            </span>
+          )}
+        </div>
+      );
+    }
+  }
+
   const labels = [];
   // Tick every 30s for label, every 10s for minor tick.
   for (let s = 0; s <= timelineSeconds; s += 10) {
@@ -2421,6 +2573,10 @@ function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth, onSeek, lo
           userSelect: "none",
         }}
       >
+        {/* Bar markers (musical time grid) — rendered FIRST so they
+            sit behind the seconds labels + loop region. Only present
+            when a BPM is resolved. */}
+        {barMarkers}
         {/* Loop region highlight — rendered BEFORE labels so the
             ticks stay readable above the yellow band. The left + right
             edges are tiny invisible drag-handles that let users
