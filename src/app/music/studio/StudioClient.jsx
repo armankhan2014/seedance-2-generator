@@ -141,27 +141,14 @@ export default function StudioClient() {
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [libraryLoading, library]);
-  // Persist on every relevant change.
-  useEffect(() => {
-    if (!restoredRef.current) return; // don't save until after first restore pass
-    const t = setTimeout(() => {
-      try {
-        const payload = {
-          version: 1,
-          savedAt: Date.now(),
-          masterVolume,
-          lanes: lanes.map((l) => ({
-            trackId: l.trackId,
-            volume: l.volume,
-            muted: l.muted,
-            solo: l.solo,
-          })),
-        };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-      } catch {}
-    }, 500);
-    return () => clearTimeout(t);
-  }, [lanes, masterVolume]);
+  // NOTE: the persistence (save-on-change) useEffect that pairs with
+  // this restore one used to live RIGHT HERE. Bug fix 2026-05-18 —
+  // moved it below the `lanes` + `masterVolume` useState calls,
+  // because referencing those in its dependency array before they're
+  // declared was throwing a SSR-time TDZ error ("Cannot access X
+  // before initialization") + 500'ing the /music/studio page for
+  // any signed-in user. Search "Persist on every relevant change"
+  // to find its new home.
 
   // ── Lanes state (v0: 3 fixed) ─────────────────────────────────
   // Each lane has: { trackId, src, name, hue, audioBuffer, peaks,
@@ -230,6 +217,33 @@ export default function StudioClient() {
   const playbackStartRef = useRef(0);
   const playbackOffsetRef = useRef(0);
   const rafRef = useRef(null);
+
+  // Persist arrangement on every relevant change. Moved here from
+  // its original position next to the restore effect (above the
+  // `lanes` + `masterVolume` useStates) because referencing those
+  // in this effect's dependency array before they were declared
+  // threw a TDZ ReferenceError at SSR time — search the bug-fix
+  // comment near `}, [libraryLoading, library]);` for context.
+  useEffect(() => {
+    if (!restoredRef.current) return; // don't save until after first restore pass
+    const t = setTimeout(() => {
+      try {
+        const payload = {
+          version: 1,
+          savedAt: Date.now(),
+          masterVolume,
+          lanes: lanes.map((l) => ({
+            trackId: l.trackId,
+            volume: l.volume,
+            muted: l.muted,
+            solo: l.solo,
+          })),
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      } catch {}
+    }, 500);
+    return () => clearTimeout(t);
+  }, [lanes, masterVolume]);
 
   // Smooth-update the playhead while playing.
   useEffect(() => {
