@@ -1,0 +1,160 @@
+// Thin server-side wrapper around the LALAL.AI stem-separation API.
+// Docs: https://www.lalal.ai/api/
+//
+// Studio Pro v2 uses LALAL because Suno's vocal-removal endpoint
+// only operates on Suno-generated audio (gated by taskId+audioId);
+// LALAL takes any audio file and returns higher-quality stems with
+// finer instrument isolation (vocals / drum / piano / bass /
+// electric_guitar / acoustic_guitar — up to 6 in one /multistem/
+// call).
+//
+// Auth: X-License-Key header. Set LALAL_API_KEY in Vercel env.
+//
+// Flow used by /api/music/studio/stems/*:
+//   1. uploadAudio(buffer, filename) → { source_id, expires, ... }
+//   2. startMultistemSplit(source_id, stems[]) → { task_id }
+//   3. checkTasks([task_id]) → progress|success|error per task
+//   4. (optional) deleteSource(source_id) — cleanup
+//
+// LALAL files expire 24h after upload; their download URLs are
+// stable for 1h after that. We mirror successful stem outputs to
+// R2 in the check route so they survive long-term.
+
+const LALAL_BASE = "https://www.lalal.ai/api/v1";
+
+export function isLalalConfigured() {
+  return !!process.env.LALAL_API_KEY;
+}
+
+function ensureKey() {
+  const key = process.env.LALAL_API_KEY;
+  if (!key) {
+    const err = new Error(
+      "Studio stems aren't configured yet — admin needs to set LALAL_API_KEY in env."
+    );
+    err.code = "NO_LALAL_KEY";
+    throw err;
+  }
+  return key;
+}
+
+// Upload audio to LALAL. They want the binary body directly with a
+// filename in the Content-Disposition header (NOT multipart/form-data
+// — read their spec carefully).
+//
+// Returns: { id (source_id), name, size, duration, expires }
+export async function uploadAudio(buffer, filename = "track.mp3") {
+  const apiKey = ensureKey();
+  const res = await fetch(`${LALAL_BASE}/upload/`, {
+    method: "POST",
+    headers: {
+      "X-License-Key": apiKey,
+      // RFC 6266: encode filename for safety (handles non-ASCII).
+      "Content-Disposition": `attachment; filename="${filename.replace(/"/g, "")}"`,
+      "Content-Type": "application/octet-stream",
+    },
+    body: buffer,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(json?.detail || `LALAL upload error ${res.status}`);
+    err.status = res.status;
+    err.body = json;
+    throw err;
+  }
+  return json;
+}
+
+// Start a multistem split job. `stems` is an array of up to 6 stem
+// names from: ["vocals", "drum", "piano", "bass", "electric_guitar",
+// "acoustic_guitar"]. extraction_level "clear_cut" minimises
+// cross-bleed (better for clean stems); "deep_extraction" preserves
+// more nuance.
+//
+// IMPORTANT: each stem in the list multiplies the duration billed
+// (a 3-min song × 4 stems = 12 min consumed). Keep the default
+// stem set small for cost control.
+//
+// Returns: { task_id }
+export async function startMultistemSplit({ sourceId, stems, extractionLevel = "deep_extraction" }) {
+  const apiKey = ensureKey();
+  if (!Array.isArray(stems) || stems.length === 0) {
+    throw new Error("stems must be a non-empty array");
+  }
+  const res = await fetch(`${LALAL_BASE}/split/multistem/`, {
+    method: "POST",
+    headers: {
+      "X-License-Key": apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      source_id: sourceId,
+      presets: {
+        stem_list: stems,
+        extraction_level: extractionLevel,
+      },
+    }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(json?.detail || `LALAL split error ${res.status}`);
+    err.status = res.status;
+    err.body = json;
+    throw err;
+  }
+  return json;
+}
+
+// Check the status of one or more task IDs. Rate limit is 30/min;
+// we poll once every 5-10s in the client so we stay well below.
+//
+// Returns: { result: { <taskId>: { status, progress|tracks|error, ... } } }
+// status values: "progress" | "success" | "error" | "cancelled" | "server_error"
+export async function checkTasks(taskIds) {
+  const apiKey = ensureKey();
+  const res = await fetch(`${LALAL_BASE}/check/`, {
+    method: "POST",
+    headers: {
+      "X-License-Key": apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ task_ids: Array.isArray(taskIds) ? taskIds : [taskIds] }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(json?.detail || `LALAL check error ${res.status}`);
+    err.status = res.status;
+    err.body = json;
+    throw err;
+  }
+  return json;
+}
+
+// Best-effort delete of a source file from LALAL storage. Doesn't
+// invalidate already-completed task download URLs immediately (CDN
+// caches them for 1h), but stops the source from counting against
+// quota. We call this after we've mirrored stems to R2.
+export async function deleteSource(sourceId) {
+  const apiKey = ensureKey();
+  await fetch(`${LALAL_BASE}/delete/`, {
+    method: "POST",
+    headers: {
+      "X-License-Key": apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ source_id: sourceId }),
+  }).catch(() => {});
+}
+
+// Flat credit cost for a Studio multistem split. Wholesale cost
+// scales by duration × number_of_stems (LALAL bills per
+// stem-minute). For v0 we ship a fixed 4-stem split (vocals / drum
+// / bass / piano) — that's 4× the source duration in LALAL minutes,
+// so a 3-min track consumes 12 minutes. We charge 20 credits which
+// gives ~3× margin at LALAL's standard tier.
+export const STUDIO_STEM_COST = 20;
+
+// The default multistem set for Studio v2 first ship. Order matters
+// — controls which lane each stem lands on after split. Keep this
+// in sync with the LALAL_STEMS constant in StudioClient.jsx.
+export const STUDIO_DEFAULT_STEMS = ["vocals", "drum", "bass", "piano"];

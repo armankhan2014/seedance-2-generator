@@ -357,6 +357,16 @@ model MusicTrack {
   // Null on originals + on standalone (single-variant) tracks. Non-null
   // means "this row is the alt take of parentTrackId".
   parentTrackId   String?
+  // Studio Pro v2 — LALAL.AI-powered stem separation. Distinct from
+  // the Suno-based stem columns above because they use different
+  // upstream services + different stem taxonomies. studioStems is a
+  // JSON column { vocals, drum, bass, piano, electric_guitar,
+  // acoustic_guitar }, each value the R2-mirrored URL. Null when no
+  // Studio split has been performed yet.
+  studioStemTaskId String?
+  studioStemStatus String?   // null | "processing" | "completed" | "failed"
+  studioStems      Json?
+  studioStemError  String?   @db.Text
   deletedAt      DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -370,6 +380,7 @@ model MusicTrack {
   @@index([public, createdAt(sort: Desc)])
   @@index([stemTaskId])
   @@index([parentTrackId])
+  @@index([studioStemTaskId])
 }
 
 // Web Push subscription for browser notifications. Mirrors the model

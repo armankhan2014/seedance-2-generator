@@ -62,6 +62,13 @@ const LANE_HUES = [70, 195, 320, 25, 270, 145]; // lime, cyan, magenta, orange, 
 const LANE_COUNT = LANE_HUES.length;
 
 export default function StudioClient() {
+  // ── Studio stem-separation state (v2, LALAL.AI-powered) ──────
+  // Tracks one active split job at a time. UI shows a progress
+  // banner above the timeline while running; on completion, the
+  // 4 returned stems auto-load onto lanes 0-3 (replacing whatever
+  // was there).
+  const [stemJob, setStemJob] = useState(null); // { trackId, taskId, status, progress, error }
+
   // ── Library state ─────────────────────────────────────────────
   const [library, setLibrary] = useState([]);
   const [libraryLoading, setLibraryLoading] = useState(true);
@@ -380,6 +387,151 @@ export default function StudioClient() {
     );
   }
 
+  // ── Stem separation (LALAL.AI) ───────────────────────────────
+  // Kick off a 4-stem split (vocals / drum / bass / piano) on a
+  // library track. Costs 20 credits per the server route. While
+  // running we poll /check every 6s; when complete we auto-load the
+  // 4 returned stems onto lanes 0-3 (replacing whatever was there).
+  // Order matters — we lock the stem→lane mapping here so users
+  // know which lane to expect each stem on.
+  const STEM_LANE_ORDER = ["vocals", "drum", "bass", "piano"];
+  async function splitStems(track) {
+    if (!track?.id) return;
+    if (stemJob && stemJob.status === "processing") {
+      flashStemMsg("Already splitting — wait for it to finish");
+      return;
+    }
+    setStemJob({ trackId: track.id, status: "starting", progress: 0, sourceName: track.title });
+    try {
+      const res = await fetch("/api/music/studio/stems/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackId: track.id, stems: STEM_LANE_ORDER }),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        setStemJob({ trackId: track.id, status: "failed", error: j.error || "Couldn't start split" });
+        return;
+      }
+      // Already done — load stems directly.
+      if (j.alreadyDone && j.studioStems) {
+        setStemJob({ trackId: track.id, status: "completed" });
+        applyStemsToLanes(j.studioStems);
+        return;
+      }
+      setStemJob({
+        trackId: track.id,
+        taskId: j.taskId,
+        status: "processing",
+        progress: 0,
+        sourceName: track.title,
+      });
+    } catch (e) {
+      setStemJob({ trackId: track.id, status: "failed", error: e?.message || "Network error" });
+    }
+  }
+
+  // Poll the active stem job every 6 seconds. Stops on completion
+  // or failure. Also auto-loads the stems onto lanes when complete.
+  useEffect(() => {
+    if (!stemJob || stemJob.status !== "processing" || !stemJob.taskId || !stemJob.trackId) return;
+    let stopped = false;
+    let tries = 0;
+    const MAX = 50; // ~5 min cap at 6s intervals
+    async function tick() {
+      while (!stopped && tries < MAX) {
+        await new Promise((r) => setTimeout(r, 6000));
+        if (stopped) return;
+        tries++;
+        try {
+          const res = await fetch(
+            `/api/music/studio/stems/${stemJob.taskId}?trackId=${encodeURIComponent(stemJob.trackId)}`
+          );
+          const j = await res.json();
+          if (!res.ok) {
+            setStemJob((prev) => ({ ...prev, status: "failed", error: j.error }));
+            return;
+          }
+          if (j.studioStemStatus === "completed" && j.studioStems) {
+            setStemJob({ trackId: stemJob.trackId, status: "completed" });
+            applyStemsToLanes(j.studioStems);
+            return;
+          }
+          if (j.studioStemStatus === "failed") {
+            setStemJob({ trackId: stemJob.trackId, status: "failed", error: j.error });
+            return;
+          }
+          // Still progressing — update %.
+          setStemJob((prev) => ({ ...prev, progress: j.progress || 0 }));
+        } catch (e) {
+          // Network blip — keep trying.
+        }
+      }
+      if (!stopped && tries >= MAX) {
+        setStemJob((prev) => ({ ...prev, status: "failed", error: "Stem job timed out (5 min)." }));
+      }
+    }
+    tick();
+    return () => { stopped = true; };
+  }, [stemJob?.taskId, stemJob?.trackId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Apply a completed stem map onto the first N lanes. Strip the
+  // metadata keys (_sourceId / _stems / _startedAt) the start route
+  // stashed during processing.
+  async function applyStemsToLanes(studioStems) {
+    if (!studioStems || typeof studioStems !== "object") return;
+    // Filter out our internal metadata keys.
+    const cleaned = Object.fromEntries(
+      Object.entries(studioStems).filter(([k]) => !k.startsWith("_"))
+    );
+    // Stop any current playback so we don't get a confusing
+    // half-fade when lanes swap underneath an active source.
+    if (isPlaying) stopAll();
+    // Load each stem onto its predetermined lane in STEM_LANE_ORDER.
+    for (let i = 0; i < STEM_LANE_ORDER.length && i < LANE_COUNT; i++) {
+      const label = STEM_LANE_ORDER[i];
+      const url = cleaned[label];
+      if (!url) continue;
+      // Lane name + colour come from the existing lane defaults;
+      // we override .name to the stem label so users can see what
+      // each lane is. The src points directly at the R2-mirrored
+      // stem URL (same-origin path on our R2 host).
+      setLanes((prev) =>
+        prev.map((l, idx) =>
+          idx === i
+            ? { ...l, trackId: `stem:${label}`, src: url, name: `Stem: ${label}`, loading: true, error: null }
+            : l
+        )
+      );
+      try {
+        const { audioBuffer, peaks, duration } = await decodeTrack(url);
+        // eslint-disable-next-line no-loop-func
+        setLanes((prev) =>
+          prev.map((l, idx) =>
+            idx === i
+              ? { ...l, audioBuffer, peaks, duration, loading: false }
+              : l
+          )
+        );
+      } catch (e) {
+        setLanes((prev) =>
+          prev.map((l, idx) =>
+            idx === i ? { ...l, loading: false, error: e?.message || "Stem load failed" } : l
+          )
+        );
+      }
+    }
+  }
+
+  // Tiny toast helper for stem-job UX feedback. The stemJob banner
+  // shows status long-form; this is for momentary errors during
+  // user input.
+  const [stemMsg, setStemMsg] = useState("");
+  function flashStemMsg(m) {
+    setStemMsg(m);
+    setTimeout(() => setStemMsg(""), 3000);
+  }
+
   // ── Transport ────────────────────────────────────────────────
   // Play from current playhead. Schedule every loaded lane's
   // AudioBufferSourceNode at the SAME ctx.currentTime so they're
@@ -558,6 +710,7 @@ export default function StudioClient() {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif" }}>
       <TopBar />
+      <StemJobBanner job={stemJob} flash={stemMsg} onDismiss={() => setStemJob(null)} />
       <TransportBar
         isPlaying={isPlaying}
         playhead={playhead}
@@ -574,6 +727,8 @@ export default function StudioClient() {
           loading={libraryLoading}
           onDragStart={handleDragStart}
           onTap={loadIntoNextEmptyLane}
+          onSplitStems={splitStems}
+          stemJob={stemJob}
         />
         <TimelineArea
           lanes={lanes}
@@ -630,6 +785,150 @@ function TopBar() {
       </div>
       <span style={{ fontSize: 11, color: C.muted }}>Multi-track audio editor</span>
     </header>
+  );
+}
+
+// Banner shown above the transport bar while a stem-split job is
+// running (or just landed in success / failure). Self-dismisses on
+// success after lanes auto-load; on failure stays until the user
+// closes it so they can read the error.
+function StemJobBanner({ job, flash, onDismiss }) {
+  // Flash takes precedence — short transient error from user input
+  // (e.g. "Already splitting"). Render either flash OR job-status
+  // banner, not both, to keep the surface calm.
+  if (flash) {
+    return (
+      <div
+        style={{
+          padding: "8px 16px",
+          background: "rgba(239,68,68,0.10)",
+          borderBottom: `1px solid rgba(239,68,68,0.32)`,
+          fontSize: 12,
+          color: "#fca5a5",
+          fontWeight: 600,
+        }}
+      >
+        {flash}
+      </div>
+    );
+  }
+  if (!job) return null;
+  // Auto-disappear on success after a short delay so the lanes get
+  // the user's attention next.
+  if (job.status === "completed") {
+    return (
+      <div
+        style={{
+          padding: "10px 16px",
+          background: C.accentSoft,
+          borderBottom: `1px solid ${C.borderHover}`,
+          fontSize: 12.5,
+          color: C.accent,
+          fontWeight: 700,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+        }}
+      >
+        <span>✓ Stems loaded onto lanes 1-4 — hit play to mix.</span>
+        <button
+          onClick={onDismiss}
+          style={{
+            marginLeft: "auto",
+            padding: "3px 8px",
+            background: "transparent",
+            border: `1px solid ${C.borderHover}`,
+            borderRadius: 6,
+            color: C.accent,
+            fontSize: 10.5,
+            fontWeight: 700,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          Dismiss
+        </button>
+      </div>
+    );
+  }
+  if (job.status === "failed") {
+    return (
+      <div
+        style={{
+          padding: "10px 16px",
+          background: "rgba(239,68,68,0.10)",
+          borderBottom: `1px solid rgba(239,68,68,0.32)`,
+          fontSize: 12.5,
+          color: "#fca5a5",
+          fontWeight: 600,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+        }}
+      >
+        <span>✕ Stem split failed: {job.error || "Unknown error"}. Credits refunded.</span>
+        <button
+          onClick={onDismiss}
+          style={{
+            marginLeft: "auto",
+            padding: "3px 8px",
+            background: "transparent",
+            border: `1px solid rgba(239,68,68,0.5)`,
+            borderRadius: 6,
+            color: "#fca5a5",
+            fontSize: 10.5,
+            fontWeight: 700,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          Dismiss
+        </button>
+      </div>
+    );
+  }
+  // Starting / processing.
+  const pct = Math.max(2, Math.min(100, job.progress || 0));
+  return (
+    <div
+      style={{
+        padding: "10px 16px",
+        background: C.panelSoft,
+        borderBottom: `1px solid ${C.border}`,
+        fontSize: 12.5,
+        color: C.textSoft,
+        fontWeight: 600,
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+      }}
+    >
+      <span style={{ flexShrink: 0 }}>
+        🔬 Splitting <b style={{ color: C.text }}>{job.sourceName || "track"}</b> into stems…
+      </span>
+      <div
+        style={{
+          flex: 1,
+          maxWidth: 260,
+          height: 6,
+          background: "rgba(255,255,255,0.06)",
+          borderRadius: 999,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            height: "100%",
+            width: `${pct}%`,
+            background: `linear-gradient(90deg, ${C.accent}, ${C.accentDark})`,
+            transition: "width 0.4s",
+          }}
+        />
+      </div>
+      <span style={{ fontVariantNumeric: "tabular-nums", color: C.muted, fontSize: 11 }}>
+        {pct}%
+      </span>
+    </div>
   );
 }
 
@@ -750,7 +1049,7 @@ function transportBtnStyle() {
 }
 
 // ── Library sidebar ──────────────────────────────────────────────
-function LibrarySidebar({ tracks, loading, onDragStart, onTap }) {
+function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, stemJob }) {
   return (
     <aside
       style={{
@@ -790,41 +1089,77 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap }) {
         </div>
       )}
       {!loading &&
-        tracks.map((t) => (
-          <div
-            key={t.id}
-            draggable
-            onDragStart={(e) => onDragStart(e, t)}
-            onClick={() => onTap(t)}
-            style={{
-              padding: "10px 14px",
-              borderBottom: `1px solid ${C.border}`,
-              cursor: "grab",
-              userSelect: "none",
-              transition: "background 0.12s",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = C.panelSoft)}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            title="Drag onto a lane, or tap to load into the next empty lane"
-          >
+        tracks.map((t) => {
+          const isThisSplitting = stemJob?.trackId === t.id && stemJob?.status === "processing";
+          return (
             <div
+              key={t.id}
+              draggable
+              onDragStart={(e) => onDragStart(e, t)}
+              onClick={() => onTap(t)}
               style={{
-                fontSize: 12.5,
-                fontWeight: 700,
-                color: C.text,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
+                padding: "10px 14px",
+                borderBottom: `1px solid ${C.border}`,
+                cursor: "grab",
+                userSelect: "none",
+                transition: "background 0.12s",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
               }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = C.panelSoft)}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              title="Drag onto a lane, or tap to load into the next empty lane"
             >
-              {t.title}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    color: C.text,
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                  }}
+                >
+                  {t.title}
+                </div>
+                <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>
+                  {(t.genre || "—")}{t.mood ? ` · ${t.mood}` : ""}{t.tempo ? ` · ${t.tempo} BPM` : ""}
+                  {t.actualDuration || t.durationReq ? ` · ${formatTime(t.actualDuration || t.durationReq)}` : ""}
+                </div>
+              </div>
+              {onSplitStems && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onSplitStems(t); }}
+                  disabled={isThisSplitting}
+                  title={
+                    isThisSplitting
+                      ? "Splitting in progress…"
+                      : "Split into 4 stems (vocals/drum/bass/piano) and load onto lanes · 20 credits"
+                  }
+                  style={{
+                    flexShrink: 0,
+                    padding: "5px 10px",
+                    borderRadius: 999,
+                    background: isThisSplitting ? C.accentSoft : "transparent",
+                    border: `1px solid ${C.borderHover}`,
+                    color: C.accent,
+                    fontSize: 10.5,
+                    fontWeight: 800,
+                    letterSpacing: "0.04em",
+                    cursor: isThisSplitting ? "default" : "pointer",
+                    fontFamily: "inherit",
+                    opacity: isThisSplitting ? 0.7 : 1,
+                  }}
+                >
+                  {isThisSplitting ? "…" : "🔬 Split"}
+                </button>
+              )}
             </div>
-            <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>
-              {(t.genre || "—")}{t.mood ? ` · ${t.mood}` : ""}{t.tempo ? ` · ${t.tempo} BPM` : ""}
-              {t.actualDuration || t.durationReq ? ` · ${formatTime(t.actualDuration || t.durationReq)}` : ""}
-            </div>
-          </div>
-        ))}
+          );
+        })}
     </aside>
   );
 }
