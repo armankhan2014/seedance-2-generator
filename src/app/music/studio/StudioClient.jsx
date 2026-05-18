@@ -1571,29 +1571,22 @@ function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onSt
         background: C.panelSoft,
       }}
     >
-      <button
+      <TransportBtn
         onClick={onStop}
-        aria-label="Stop"
         title="Stop"
-        style={transportBtnStyle()}
+        ariaLabel="Stop"
       >
         ⏹
-      </button>
-      <button
+      </TransportBtn>
+      <TransportBtn
         onClick={isPlaying ? onPause : onPlay}
-        aria-label={isPlaying ? "Pause" : "Play"}
         title={isPlaying ? "Pause" : "Play (Space)"}
-        style={{
-          ...transportBtnStyle(),
-          background: isPlaying ? C.accent : C.panel,
-          border: `1px solid ${isPlaying ? C.accent : C.border}`,
-          color: isPlaying ? "#0a0a0a" : C.accent,
-          width: 48,
-          height: 38,
-        }}
+        ariaLabel={isPlaying ? "Pause" : "Play"}
+        active={isPlaying}
+        width={48}
       >
         {isPlaying ? "❚❚" : "▶"}
-      </button>
+      </TransportBtn>
       {/* Loop control — uses LoopControl below so the hover-state
           handlers + alignment logic are isolated from the rest of
           the transport bar's JSX. */}
@@ -1706,6 +1699,62 @@ function KbdHint({ k, children }) {
   );
 }
 
+// Unified transport-bar button — handles its own hover state so
+// every button in the bar (stop, play/pause, loop) shows the SAME
+// "lime icon + lime fill when active or hovered" treatment.
+//
+// Before this, the stop button was muted grey and the loop button's
+// inactive state was grey — only the play button felt clickable.
+// Arman flagged 2026-05-18 that the others should feel the same.
+//
+// Visual states (per the play button's pattern):
+//   • idle      — lime glyph on dark panel + dim border
+//   • hover     — lime fill 10% wash + bright border + lime glyph
+//   • active    — solid lime fill + dark glyph (the "pressed-on" look)
+//   • active+hover — same as active but uses accentDark for the press
+//                    feedback of "I'm about to release"
+function TransportBtn({ onClick, children, title, ariaLabel, active = false, width = 38, height = 38 }) {
+  const [hover, setHover] = useState(false);
+  // Resolve the three colour properties from the active/hover combo.
+  const bg = active
+    ? (hover ? C.accentDark : C.accent)
+    : (hover ? "rgba(217,255,0,0.12)" : C.panel);
+  const border = active
+    ? C.accent
+    : (hover ? C.borderHover : C.border);
+  const fg = active
+    ? "#0a0a0a"
+    : C.accent;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title={title}
+      aria-label={ariaLabel || title}
+      style={{
+        width,
+        height,
+        minWidth: width,
+        borderRadius: 8,
+        background: bg,
+        border: `1px solid ${border}`,
+        color: fg,
+        fontSize: 14,
+        cursor: "pointer",
+        fontFamily: "inherit",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        transition: "background 0.12s, color 0.12s, border-color 0.12s",
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 // Loop control — extracted from TransportBar so the hover-state
 // + click-target logic isn't tangled with the rest of the bar.
 //
@@ -1729,12 +1778,14 @@ function LoopControl({ loopEnabled, loopRegion, onToggleLoop, onClearLoop }) {
   const [clearHover, setClearHover] = useState(false);
 
   const isActive = loopEnabled && loopRegion;
-  // Resolve toggle-button visual state.
+  // Resolve toggle-button visual state. Matches the TransportBtn
+  // pattern (lime icon by default, lime fill when active or hovered)
+  // so the loop pill reads as a sibling of the stop / play buttons.
   const toggleBg = isActive
     ? toggleHover ? C.accentDark : C.accent
-    : toggleHover ? C.panelSoft : C.panel;
+    : toggleHover ? "rgba(217,255,0,0.12)" : C.panel;
   const toggleBorder = isActive ? C.accent : (toggleHover ? C.borderHover : C.border);
-  const toggleFg = isActive ? "#0a0a0a" : (toggleHover ? C.accent : C.textSoft);
+  const toggleFg = isActive ? "#0a0a0a" : C.accent;
 
   return (
     <div style={{ display: "inline-flex", alignItems: "stretch", height: 38 }}>
@@ -1811,12 +1862,12 @@ function LoopControl({ loopEnabled, loopRegion, onToggleLoop, onClearLoop }) {
             borderRadius: "0 8px 8px 0",
             background: isActive
               ? (clearHover ? C.accentDark : C.accent)
-              : (clearHover ? C.panelSoft : C.panel),
+              : (clearHover ? "rgba(217,255,0,0.12)" : C.panel),
             border: `1px solid ${isActive ? C.accent : (clearHover ? C.borderHover : C.border)}`,
             borderLeft: isActive
               ? "1px solid rgba(0,0,0,0.22)"
               : `1px solid ${C.border}`,
-            color: isActive ? "#0a0a0a" : (clearHover ? C.text : C.muted),
+            color: isActive ? "#0a0a0a" : C.accent,
             fontSize: 16,
             lineHeight: 1,
             cursor: "pointer",
