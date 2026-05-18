@@ -223,6 +223,15 @@ export default function StudioClient() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playhead, setPlayhead] = useState(0); // seconds
   const [masterVolume, setMasterVolume] = useState(0.9);
+  // Loop region: { start, end } in timeline seconds, or null.
+  // Created by dragging on the time ruler. Doesn't auto-play —
+  // the user still needs loop ON (loopEnabled) for the playhead
+  // to wrap when it reaches loopRegion.end. Separating "has a
+  // region" from "loop is on" lets users select a region for
+  // reference (e.g. seeing where the chorus is) without forcing
+  // looped playback.
+  const [loopRegion, setLoopRegion] = useState(null);
+  const [loopEnabled, setLoopEnabled] = useState(true);
   // When playback starts, we capture: (a) AudioContext.currentTime
   // at that moment, (b) the offset within the timeline. The actual
   // playhead is derived as `offset + (ctx.currentTime -
@@ -270,6 +279,13 @@ export default function StudioClient() {
       if (!ctx) return;
       const p = playbackOffsetRef.current + (ctx.currentTime - playbackStartRef.current);
       setPlayhead(p);
+      // Loop check FIRST — if we're past the loop's end + loop is on,
+      // jump back to loop start. seekTo handles restarting sources at
+      // the new offset, so playback continues seamlessly.
+      if (loopEnabled && loopRegion && loopRegion.end > loopRegion.start && p >= loopRegion.end) {
+        seekTo(loopRegion.start);
+        return; // seekTo restarts the playback loop; next RAF picks up there.
+      }
       // Auto-stop at end of longest lane (or timeline cap).
       const maxDur = Math.max(
         ...lanes.map((l) => (l.audioBuffer ? l.duration : 0)),
@@ -287,7 +303,8 @@ export default function StudioClient() {
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [isPlaying, lanes]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, lanes, loopEnabled, loopRegion]);
 
   // Apply mute/solo/volume changes live, even while playing.
   // Effective gain per lane = (soloActive ? lane.solo : !lane.muted)
@@ -1076,6 +1093,10 @@ export default function StudioClient() {
         onExport={exportMix}
         exporting={exporting}
         hasAudio={lanes.some((l) => l.audioBuffer)}
+        loopEnabled={loopEnabled}
+        loopRegion={loopRegion}
+        onToggleLoop={() => setLoopEnabled((v) => !v)}
+        onClearLoop={() => setLoopRegion(null)}
       />
       <main style={{ display: "flex", height: "calc(100vh - 56px - 60px)", overflow: "hidden" }}>
         <LibrarySidebar
@@ -1103,6 +1124,8 @@ export default function StudioClient() {
           onToggleSolo={toggleLaneSolo}
           onClear={clearLane}
           onSeek={seekTo}
+          loopRegion={loopRegion}
+          onSetLoopRegion={setLoopRegion}
         />
       </main>
     </div>
@@ -1535,7 +1558,7 @@ function VocalsSplitBanner({ job, onDismiss }) {
 }
 
 // ── Transport bar ────────────────────────────────────────────────
-function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onStop, onMasterVolume, onSeek, onExport, exporting, hasAudio }) {
+function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onStop, onMasterVolume, onSeek, onExport, exporting, hasAudio, loopEnabled, loopRegion, onToggleLoop, onClearLoop }) {
   return (
     <div
       style={{
@@ -1571,6 +1594,46 @@ function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onSt
       >
         {isPlaying ? "❚❚" : "▶"}
       </button>
+      {/* 🔁 Loop toggle. Active state = lime border + lime icon.
+          When there's a loop region defined, an "×" appears next
+          to it to clear the region. */}
+      {onToggleLoop && (
+        <button
+          onClick={onToggleLoop}
+          aria-label={loopEnabled ? "Disable loop" : "Enable loop"}
+          title={
+            loopRegion
+              ? loopEnabled
+                ? `Loop ON · ${formatTime(loopRegion.start)} → ${formatTime(loopRegion.end)}`
+                : `Loop OFF · drag on ruler to set region`
+              : "Loop · drag on the time ruler to set in/out points"
+          }
+          style={{
+            ...transportBtnStyle(),
+            background: loopEnabled && loopRegion ? "rgba(217,255,0,0.15)" : C.panel,
+            border: `1px solid ${loopEnabled && loopRegion ? C.accent : C.border}`,
+            color: loopEnabled && loopRegion ? C.accent : C.textSoft,
+          }}
+        >
+          🔁
+        </button>
+      )}
+      {loopRegion && onClearLoop && (
+        <button
+          onClick={onClearLoop}
+          aria-label="Clear loop region"
+          title="Clear loop region"
+          style={{
+            ...transportBtnStyle(),
+            width: 28,
+            height: 28,
+            fontSize: 12,
+            color: C.muted,
+          }}
+        >
+          ×
+        </button>
+      )}
       <div
         style={{
           fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
@@ -1866,7 +1929,7 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
 }
 
 // ── Timeline area ────────────────────────────────────────────────
-function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timelineWidth, onDrop, onDragOver, onVolume, onToggleMute, onToggleSolo, onClear, onSeek }) {
+function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timelineWidth, onDrop, onDragOver, onVolume, onToggleMute, onToggleSolo, onClear, onSeek, loopRegion, onSetLoopRegion }) {
   return (
     <div
       style={{
@@ -1882,6 +1945,8 @@ function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timel
         pixelsPerSecond={pixelsPerSecond}
         timelineWidth={timelineWidth}
         onSeek={onSeek}
+        loopRegion={loopRegion}
+        onSetLoopRegion={onSetLoopRegion}
       />
       <div style={{ position: "relative" }}>
         {lanes.map((lane, i) => (
@@ -1899,6 +1964,26 @@ function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timel
             onClear={() => onClear(i)}
           />
         ))}
+        {/* Loop region overlay spanning all lanes — purely visual,
+            mirrors the yellow band on the time ruler so users can
+            see which slice of the timeline will be looped. */}
+        {loopRegion && loopRegion.end > loopRegion.start && (
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              left: 220 + loopRegion.start * pixelsPerSecond,
+              width: (loopRegion.end - loopRegion.start) * pixelsPerSecond,
+              background: "rgba(217,255,0,0.06)",
+              borderLeft: `1px dashed rgba(217,255,0,0.5)`,
+              borderRight: `1px dashed rgba(217,255,0,0.5)`,
+              pointerEvents: "none",
+              zIndex: 2,
+            }}
+          />
+        )}
         <Playhead playhead={playhead} pixelsPerSecond={pixelsPerSecond} />
       </div>
     </div>
@@ -1906,16 +1991,42 @@ function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timel
 }
 
 // Time ruler — minute:second ticks across the top of the timeline.
-// Clicking anywhere on the ruler scrubs the playhead to that second.
-// Cursor: pointer when onSeek is wired, so users discover the
-// interaction without docs.
-function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth, onSeek }) {
-  function handleClick(e) {
+// Two interactions:
+//   • Single click → scrub the playhead to that second.
+//   • Click + drag → create a loop region (yellow overlay between
+//                    start/end). Drag-distance threshold of 5px
+//                    separates "drag" from "click" so users don't
+//                    accidentally create tiny regions by jitter.
+// Cursor: pointer + tooltip explain both modes.
+function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth, onSeek, loopRegion, onSetLoopRegion }) {
+  function handleMouseDown(e) {
     if (!onSeek) return;
+    e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const seconds = x / pixelsPerSecond;
-    onSeek(seconds);
+    const startX = e.clientX;
+    const startT = (e.clientX - rect.left) / pixelsPerSecond;
+    let didDrag = false;
+    function onMove(ev) {
+      const dx = Math.abs(ev.clientX - startX);
+      if (dx < 5) return; // jitter — keep waiting
+      didDrag = true;
+      if (!onSetLoopRegion) return;
+      const curT = (ev.clientX - rect.left) / pixelsPerSecond;
+      const minT = Math.max(0, Math.min(startT, curT));
+      const maxT = Math.min(timelineSeconds, Math.max(startT, curT));
+      // Live-update during drag so the user sees the region grow.
+      onSetLoopRegion({ start: minT, end: maxT });
+    }
+    function onUp() {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      if (!didDrag) {
+        // Pure click → seek. Don't touch loop region.
+        onSeek(startT);
+      }
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
   }
   const labels = [];
   // Tick every 30s for label, every 10s for minor tick.
@@ -1958,15 +2069,34 @@ function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth, onSeek }) 
   return (
     <div style={{ position: "sticky", top: 0, zIndex: 2, background: C.panelSoft, borderBottom: `1px solid ${C.border}`, marginLeft: 220 }}>
       <div
-        onClick={handleClick}
-        title="Click to jump the playhead here"
+        onMouseDown={handleMouseDown}
+        title="Click to jump the playhead · Drag to create a loop region"
         style={{
           position: "relative",
           width: timelineWidth,
           height: 28,
           cursor: onSeek ? "pointer" : "default",
+          userSelect: "none",
         }}
       >
+        {/* Loop region highlight — rendered BEFORE labels so the
+            ticks stay readable above the yellow band. */}
+        {loopRegion && loopRegion.end > loopRegion.start && (
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              left: loopRegion.start * pixelsPerSecond,
+              width: (loopRegion.end - loopRegion.start) * pixelsPerSecond,
+              background: "rgba(217,255,0,0.18)",
+              borderLeft: `2px solid ${C.accent}`,
+              borderRight: `2px solid ${C.accent}`,
+              pointerEvents: "none",
+            }}
+          />
+        )}
         {labels}
       </div>
     </div>
