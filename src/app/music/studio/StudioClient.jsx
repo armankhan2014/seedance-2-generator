@@ -2236,21 +2236,23 @@ function ActionPill({ label, cost, busy, title, color, borderColor, activeBg, on
       disabled={busy}
       title={busy ? title : `${title} · ${cost} credits`}
       style={{
-        padding: "4px 9px",
+        padding: "6px 10px",
         borderRadius: 999,
         background: busy ? activeBg : "transparent",
         border: `1px solid ${borderColor}`,
         color,
-        fontSize: 10,
+        fontSize: 11,
         fontWeight: 800,
         letterSpacing: "0.04em",
         cursor: busy ? "default" : "pointer",
         fontFamily: "inherit",
         opacity: busy ? 0.7 : 1,
         whiteSpace: "nowrap",
-        display: "inline-flex",
+        display: "flex",
         alignItems: "center",
+        justifyContent: "center",
         gap: 5,
+        width: "100%",
       }}
     >
       <span>{busy ? "…" : label}</span>
@@ -2325,33 +2327,32 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
                 cursor: "grab",
                 userSelect: "none",
                 transition: "background 0.12s",
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
               }}
               onMouseEnter={(e) => (e.currentTarget.style.background = C.panelSoft)}
               onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
               title="Drag onto a lane, or tap to load into the next empty lane"
             >
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div
-                  style={{
-                    fontSize: 12.5,
-                    fontWeight: 700,
-                    color: C.text,
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  {t.title}
-                </div>
-                <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>
-                  {(t.genre || "—")}{t.mood ? ` · ${t.mood}` : ""}{t.tempo ? ` · ${t.tempo} BPM` : ""}
-                  {t.actualDuration || t.durationReq ? ` · ${formatTime(t.actualDuration || t.durationReq)}` : ""}
-                </div>
+              <div
+                style={{
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  color: C.text,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {t.title}
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
+              <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2, marginBottom: 8 }}>
+                {(t.genre || "—")}{t.mood ? ` · ${t.mood}` : ""}{t.tempo ? ` · ${t.tempo} BPM` : ""}
+                {t.actualDuration || t.durationReq ? ` · ${formatTime(t.actualDuration || t.durationReq)}` : ""}
+              </div>
+              {/* 2x2 pill grid — left column = stem-split actions
+                  (Split + Pro 9), right column = voice actions
+                  (Vocals + Clean). Cleaner than the 1x4 vertical
+                  stack and matches the design Arman approved. */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
                 {onSplitStems && (
                   <ActionPill
                     label="🔬 Split"
@@ -2368,22 +2369,6 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
                     onClick={(e) => { e.stopPropagation(); onSplitStems(t); }}
                   />
                 )}
-                {onSplitStemsPro && (
-                  <ActionPill
-                    label="🔬+ Pro 9"
-                    cost={50}
-                    busy={isThisSplitting && stemJob?.mode === "9stem"}
-                    title={
-                      isThisSplitting
-                        ? "Pro split in progress…"
-                        : "Pro 9-stem split — adds synthesizer / strings / wind via the phoenix splitter"
-                    }
-                    color="#fbbf24"
-                    borderColor="rgba(251,191,36,0.45)"
-                    activeBg="rgba(251,191,36,0.15)"
-                    onClick={(e) => { e.stopPropagation(); onSplitStemsPro(t); }}
-                  />
-                )}
                 {onSplitVocals && (
                   <ActionPill
                     label="🎤 Vocals"
@@ -2398,6 +2383,22 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
                     borderColor="rgba(196,181,253,0.55)"
                     activeBg="rgba(196,181,253,0.20)"
                     onClick={(e) => { e.stopPropagation(); onSplitVocals(t); }}
+                  />
+                )}
+                {onSplitStemsPro && (
+                  <ActionPill
+                    label="🔬+ Pro 9"
+                    cost={50}
+                    busy={isThisSplitting && stemJob?.mode === "9stem"}
+                    title={
+                      isThisSplitting
+                        ? "Pro split in progress…"
+                        : "Pro 9-stem split — adds synthesizer / strings / wind via the phoenix splitter"
+                    }
+                    color="#fbbf24"
+                    borderColor="rgba(251,191,36,0.45)"
+                    activeBg="rgba(251,191,36,0.15)"
+                    onClick={(e) => { e.stopPropagation(); onSplitStemsPro(t); }}
                   />
                 )}
                 {onCleanVoice && (
