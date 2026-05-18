@@ -139,6 +139,7 @@ export default function StudioClient() {
               volume: Number.isFinite(s.volume) ? s.volume : l.volume,
               muted: !!s.muted,
               solo: !!s.solo,
+              customName: typeof s.customName === "string" ? s.customName : null,
             };
           })
         );
@@ -172,6 +173,10 @@ export default function StudioClient() {
       trackId: null,
       src: null,
       name: null,
+      // Optional user-set rename — survives across reloads via the
+      // existing localStorage persistence loop. Falls through to
+      // `name` when null.
+      customName: null,
       hue: LANE_HUES[i],
       audioBuffer: null,
       peaks: null,
@@ -276,6 +281,7 @@ export default function StudioClient() {
             volume: l.volume,
             muted: l.muted,
             solo: l.solo,
+            customName: l.customName,
           })),
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -1171,6 +1177,15 @@ export default function StudioClient() {
   function toggleLaneSolo(i) {
     setLanes((prev) => prev.map((l, idx) => (idx === i ? { ...l, solo: !l.solo } : l)));
   }
+  // Rename a lane. Empty/whitespace input clears the customName so
+  // the auto-generated name takes over again. Persists across
+  // reloads via the existing localStorage save effect.
+  function renameLane(i, raw) {
+    const v = (raw || "").trim();
+    setLanes((prev) =>
+      prev.map((l, idx) => (idx === i ? { ...l, customName: v || null } : l))
+    );
+  }
 
   // ── Drag/drop wiring helpers ─────────────────────────────────
   // Library cards set `application/x-sd-track-id` on dragstart.
@@ -1247,6 +1262,7 @@ export default function StudioClient() {
           onVolume={setLaneVolume}
           onToggleMute={toggleLaneMute}
           onToggleSolo={toggleLaneSolo}
+          onRename={renameLane}
           onClear={clearLane}
           onSeek={seekTo}
           loopRegion={loopRegion}
@@ -2196,6 +2212,51 @@ function transportBtnStyle() {
   };
 }
 
+// Single action-pill on a library track row. Consolidates the
+// three buttons (🔬 Split / 🎤 Vocals / 🧹 Clean) — same shape,
+// same hover treatment — and surfaces the credit cost inline so
+// users see the price before they click instead of discovering
+// it via the tooltip after.
+function ActionPill({ label, cost, busy, title, color, borderColor, activeBg, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy}
+      title={busy ? title : `${title} · ${cost} credits`}
+      style={{
+        padding: "4px 9px",
+        borderRadius: 999,
+        background: busy ? activeBg : "transparent",
+        border: `1px solid ${borderColor}`,
+        color,
+        fontSize: 10,
+        fontWeight: 800,
+        letterSpacing: "0.04em",
+        cursor: busy ? "default" : "pointer",
+        fontFamily: "inherit",
+        opacity: busy ? 0.7 : 1,
+        whiteSpace: "nowrap",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+      }}
+    >
+      <span>{busy ? "…" : label}</span>
+      {!busy && (
+        <span style={{
+          fontSize: 9,
+          fontWeight: 600,
+          opacity: 0.7,
+          letterSpacing: 0,
+        }}>
+          {cost}c
+        </span>
+      )}
+    </button>
+  );
+}
+
 // ── Library sidebar ──────────────────────────────────────────────
 function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onCleanVoice, onSplitVocals, stemJob, voiceCleanJob, vocalsSplitJob }) {
   return (
@@ -2281,88 +2342,52 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
                 {onSplitStems && (
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); onSplitStems(t); }}
-                    disabled={isThisSplitting}
+                  <ActionPill
+                    label="🔬 Split"
+                    cost={30}
+                    busy={isThisSplitting}
                     title={
                       isThisSplitting
                         ? "Splitting in progress…"
-                        : "Split into 6 stems (vocals/drum/bass/piano/electric_guitar/acoustic_guitar) · 30 credits"
+                        : "Split into 6 stems (vocals/drum/bass/piano/electric_guitar/acoustic_guitar)"
                     }
-                    style={{
-                      padding: "4px 9px",
-                      borderRadius: 999,
-                      background: isThisSplitting ? C.accentSoft : "transparent",
-                      border: `1px solid ${C.borderHover}`,
-                      color: C.accent,
-                      fontSize: 10,
-                      fontWeight: 800,
-                      letterSpacing: "0.04em",
-                      cursor: isThisSplitting ? "default" : "pointer",
-                      fontFamily: "inherit",
-                      opacity: isThisSplitting ? 0.7 : 1,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {isThisSplitting ? "…" : "🔬 Split"}
-                  </button>
+                    color="#D9FF00"
+                    borderColor="rgba(217,255,0,0.40)"
+                    activeBg="rgba(217,255,0,0.10)"
+                    onClick={(e) => { e.stopPropagation(); onSplitStems(t); }}
+                  />
                 )}
                 {onSplitVocals && (
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); onSplitVocals(t); }}
-                    disabled={isThisVocalsSplitting}
+                  <ActionPill
+                    label="🎤 Vocals"
+                    cost={10}
+                    busy={isThisVocalsSplitting}
                     title={
                       isThisVocalsSplitting
                         ? "Splitting vocals…"
-                        : "Split vocal into lead + backing harmonies · 10 credits"
+                        : "Split vocal into lead + backing harmonies"
                     }
-                    style={{
-                      padding: "4px 9px",
-                      borderRadius: 999,
-                      background: isThisVocalsSplitting ? "rgba(196,181,253,0.20)" : "transparent",
-                      border: "1px solid rgba(196,181,253,0.55)",
-                      color: "#c4b5fd",
-                      fontSize: 10,
-                      fontWeight: 800,
-                      letterSpacing: "0.04em",
-                      cursor: isThisVocalsSplitting ? "default" : "pointer",
-                      fontFamily: "inherit",
-                      opacity: isThisVocalsSplitting ? 0.7 : 1,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {isThisVocalsSplitting ? "…" : "🎤 Vocals"}
-                  </button>
+                    color="#c4b5fd"
+                    borderColor="rgba(196,181,253,0.55)"
+                    activeBg="rgba(196,181,253,0.20)"
+                    onClick={(e) => { e.stopPropagation(); onSplitVocals(t); }}
+                  />
                 )}
                 {onCleanVoice && (
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); onCleanVoice(t); }}
-                    disabled={isThisCleaning}
+                  <ActionPill
+                    label="🧹 Clean"
+                    cost={6}
+                    busy={isThisCleaning}
                     title={
                       isThisCleaning
                         ? "Cleaning voice…"
-                        : "Strip background noise from the vocal · 6 credits"
+                        : "Strip background noise from the vocal"
                     }
-                    style={{
-                      padding: "4px 9px",
-                      borderRadius: 999,
-                      background: isThisCleaning ? "rgba(96,165,250,0.20)" : "transparent",
-                      border: "1px solid rgba(96,165,250,0.50)",
-                      color: "#93c5fd",
-                      fontSize: 10,
-                      fontWeight: 800,
-                      letterSpacing: "0.04em",
-                      cursor: isThisCleaning ? "default" : "pointer",
-                      fontFamily: "inherit",
-                      opacity: isThisCleaning ? 0.7 : 1,
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {isThisCleaning ? "…" : "🧹 Clean"}
-                  </button>
+                    color="#93c5fd"
+                    borderColor="rgba(96,165,250,0.50)"
+                    activeBg="rgba(96,165,250,0.20)"
+                    onClick={(e) => { e.stopPropagation(); onCleanVoice(t); }}
+                  />
                 )}
               </div>
             </div>
@@ -2373,7 +2398,7 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
 }
 
 // ── Timeline area ────────────────────────────────────────────────
-function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timelineWidth, onDrop, onDragOver, onVolume, onToggleMute, onToggleSolo, onClear, onSeek, loopRegion, onSetLoopRegion, mixBpm }) {
+function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timelineWidth, onDrop, onDragOver, onVolume, onToggleMute, onToggleSolo, onRename, onClear, onSeek, loopRegion, onSetLoopRegion, mixBpm }) {
   return (
     <div
       style={{
@@ -2406,6 +2431,7 @@ function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timel
             onVolume={(v) => onVolume(i, v)}
             onToggleMute={() => onToggleMute(i)}
             onToggleSolo={() => onToggleSolo(i)}
+            onRename={(name) => onRename(i, name)}
             onClear={() => onClear(i)}
           />
         ))}
@@ -2584,19 +2610,17 @@ function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth, onSeek, lo
             region. */}
         {loopRegion && loopRegion.end > loopRegion.start && (
           <>
-            <div
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                top: 0,
-                bottom: 0,
-                left: loopRegion.start * pixelsPerSecond,
-                width: (loopRegion.end - loopRegion.start) * pixelsPerSecond,
-                background: "rgba(217,255,0,0.18)",
-                borderLeft: `2px solid ${C.accent}`,
-                borderRight: `2px solid ${C.accent}`,
-                pointerEvents: "none",
-              }}
+            {/* Loop body is now draggable — drag inside the yellow
+                band to MOVE the whole region without changing its
+                length. zIndex lower than the edge handles so they
+                still win when the cursor is near a boundary. */}
+            <LoopBodyDrag
+              x={loopRegion.start * pixelsPerSecond}
+              width={(loopRegion.end - loopRegion.start) * pixelsPerSecond}
+              pixelsPerSecond={pixelsPerSecond}
+              loopRegion={loopRegion}
+              timelineSeconds={timelineSeconds}
+              onUpdate={onSetLoopRegion}
             />
             <LoopEdgeHandle
               edge="start"
@@ -2619,6 +2643,55 @@ function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth, onSeek, lo
         {labels}
       </div>
     </div>
+  );
+}
+
+// Loop body — the yellow band ITSELF. Dragging inside it moves
+// the whole region by the drag delta (keeping length constant).
+// Renders the yellow visual + handles the move drag.
+// Lower zIndex than LoopEdgeHandle so the edges still grab the
+// cursor first within their 8px hit zone.
+function LoopBodyDrag({ x, width, pixelsPerSecond, loopRegion, timelineSeconds, onUpdate }) {
+  function handleMouseDown(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const startMouseX = e.clientX;
+    const initialStart = loopRegion.start;
+    const initialEnd = loopRegion.end;
+    const length = initialEnd - initialStart;
+    function onMove(ev) {
+      const dx = ev.clientX - startMouseX;
+      const dt = dx / pixelsPerSecond;
+      // Clamp so the region stays inside [0, timelineSeconds].
+      let newStart = initialStart + dt;
+      if (newStart < 0) newStart = 0;
+      if (newStart + length > timelineSeconds) newStart = timelineSeconds - length;
+      onUpdate({ start: newStart, end: newStart + length });
+    }
+    function onUp() {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
+  return (
+    <div
+      onMouseDown={handleMouseDown}
+      title="Drag to move the loop region"
+      style={{
+        position: "absolute",
+        top: 0,
+        bottom: 0,
+        left: x,
+        width,
+        background: "rgba(217,255,0,0.18)",
+        borderLeft: `2px solid ${C.accent}`,
+        borderRight: `2px solid ${C.accent}`,
+        cursor: "grab",
+        zIndex: 2,
+      }}
+    />
   );
 }
 
@@ -2673,7 +2746,7 @@ function LoopEdgeHandle({ edge, x, pixelsPerSecond, loopRegion, timelineSeconds,
 }
 
 // One track lane: lane header (controls) + clip canvas.
-function TrackLane({ laneIndex, lane, timelineWidth, pixelsPerSecond, onDrop, onDragOver, onVolume, onToggleMute, onToggleSolo, onClear }) {
+function TrackLane({ laneIndex, lane, timelineWidth, pixelsPerSecond, onDrop, onDragOver, onVolume, onToggleMute, onToggleSolo, onRename, onClear }) {
   return (
     <div
       style={{
@@ -2688,6 +2761,7 @@ function TrackLane({ laneIndex, lane, timelineWidth, pixelsPerSecond, onDrop, on
         onVolume={onVolume}
         onToggleMute={onToggleMute}
         onToggleSolo={onToggleSolo}
+        onRename={onRename}
         onClear={onClear}
       />
       <div
@@ -2749,7 +2823,29 @@ function TrackLane({ laneIndex, lane, timelineWidth, pixelsPerSecond, onDrop, on
   );
 }
 
-function LaneHeader({ laneIndex, lane, onVolume, onToggleMute, onToggleSolo, onClear }) {
+function LaneHeader({ laneIndex, lane, onVolume, onToggleMute, onToggleSolo, onRename, onClear }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef(null);
+  // Effective display name: user override beats auto-generated.
+  const displayName = lane.customName || lane.name || `Track ${laneIndex + 1}`;
+  function startEdit() {
+    if (!onRename) return;
+    setDraft(lane.customName || lane.name || "");
+    setEditing(true);
+    // Focus + select-all next tick once input renders.
+    setTimeout(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }, 0);
+  }
+  function commit() {
+    onRename(draft);
+    setEditing(false);
+  }
+  function cancel() {
+    setEditing(false);
+  }
   return (
     <div
       style={{
@@ -2773,20 +2869,58 @@ function LaneHeader({ laneIndex, lane, onVolume, onToggleMute, onToggleSolo, onC
             flexShrink: 0,
           }}
         />
-        <span
-          style={{
-            fontSize: 11.5,
-            fontWeight: 700,
-            color: lane.name ? C.text : C.muted,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            flex: 1,
-            minWidth: 0,
-          }}
-        >
-          {lane.name || `Track ${laneIndex + 1}`}
-        </span>
+        {editing ? (
+          <input
+            ref={inputRef}
+            type="text"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { e.preventDefault(); commit(); }
+              else if (e.key === "Escape") { e.preventDefault(); cancel(); }
+            }}
+            placeholder={`Track ${laneIndex + 1}`}
+            maxLength={60}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              padding: "2px 4px",
+              background: C.panelSoft,
+              border: `1px solid ${C.borderHover}`,
+              borderRadius: 4,
+              color: C.text,
+              fontSize: 11.5,
+              fontWeight: 700,
+              fontFamily: "inherit",
+              outline: "none",
+            }}
+          />
+        ) : (
+          <span
+            onDoubleClick={startEdit}
+            onClick={(e) => {
+              // Single click on an empty lane's name does nothing —
+              // double-click to edit avoids accidental edits when
+              // the user is trying to drop something on the lane.
+              if (lane.trackId) startEdit();
+            }}
+            title={onRename ? `${displayName} — double-click to rename` : displayName}
+            style={{
+              fontSize: 11.5,
+              fontWeight: 700,
+              color: (lane.customName || lane.name) ? C.text : C.muted,
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              flex: 1,
+              minWidth: 0,
+              cursor: onRename && lane.trackId ? "text" : "default",
+            }}
+          >
+            {displayName}
+          </span>
+        )}
         {lane.trackId && (
           <button
             type="button"
