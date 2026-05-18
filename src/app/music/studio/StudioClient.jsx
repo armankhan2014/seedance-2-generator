@@ -1197,6 +1197,41 @@ export default function StudioClient() {
     );
   }
 
+  // Rename a library track. PATCHes the API + optimistically updates
+  // the local library list. Empty input is rejected (server returns
+  // 400) so we don't try to commit. Any lane already loaded from the
+  // renamed track also updates its display name so the timeline
+  // stays in sync.
+  async function renameLibraryTrack(trackId, raw) {
+    const title = (raw || "").trim().slice(0, 80);
+    if (!title) return;
+    const prev = library;
+    const current = prev.find((t) => t.id === trackId);
+    if (!current || current.title === title) return;
+    // Optimistic update.
+    setLibrary((arr) => arr.map((t) => (t.id === trackId ? { ...t, title } : t)));
+    setLanes((arr) =>
+      arr.map((l) => (l.trackId === trackId ? { ...l, name: title } : l))
+    );
+    try {
+      const res = await fetch(`/api/music/tracks/${trackId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `HTTP ${res.status}`);
+    } catch (e) {
+      // Roll back on failure — leave the user with the old name and
+      // flash the stem-message banner so they know it didn't stick.
+      console.error("[RENAME] failed:", e?.message);
+      setLibrary(prev);
+      setLanes((arr) =>
+        arr.map((l) => (l.trackId === trackId ? { ...l, name: current.title } : l))
+      );
+      flashStemMsg("Rename failed — try again");
+    }
+  }
+
   // ── Drag/drop wiring helpers ─────────────────────────────────
   // Library cards set `application/x-sd-track-id` on dragstart.
   // Track lanes accept that mime type and look up the track from
@@ -1258,6 +1293,7 @@ export default function StudioClient() {
           onSplitStemsPro={(t) => splitStems(t, "9stem")}
           onCleanVoice={cleanVoice}
           onSplitVocals={splitVocals}
+          onRenameTrack={renameLibraryTrack}
           stemJob={stemJob}
           voiceCleanJob={voiceCleanJob}
           vocalsSplitJob={vocalsSplitJob}
@@ -2270,8 +2306,83 @@ function ActionPill({ label, cost, busy, title, color, borderColor, activeBg, on
   );
 }
 
+// One library row's title — clickable to rename inline. Double-click
+// to enter edit mode; Enter or blur commits, Escape cancels. Mirrors
+// the lane-rename UX in LaneHeader so the two surfaces feel the same.
+function LibraryTrackTitle({ title, onRename }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef(null);
+  function startEdit(e) {
+    if (!onRename) return;
+    e?.stopPropagation();
+    setDraft(title || "");
+    setEditing(true);
+    setTimeout(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }, 0);
+  }
+  function commit() {
+    const next = draft.trim();
+    setEditing(false);
+    if (next && next !== title) onRename(next);
+  }
+  function cancel() {
+    setEditing(false);
+  }
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") { e.preventDefault(); commit(); }
+          else if (e.key === "Escape") { e.preventDefault(); cancel(); }
+        }}
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        maxLength={80}
+        style={{
+          width: "100%",
+          boxSizing: "border-box",
+          padding: "2px 4px",
+          background: C.panelSoft,
+          border: `1px solid ${C.borderHover}`,
+          borderRadius: 4,
+          color: C.text,
+          fontSize: 12.5,
+          fontWeight: 700,
+          fontFamily: "inherit",
+          outline: "none",
+        }}
+      />
+    );
+  }
+  return (
+    <div
+      onDoubleClick={startEdit}
+      title={onRename ? `${title || "Untitled"} — double-click to rename` : (title || "Untitled")}
+      style={{
+        fontSize: 12.5,
+        fontWeight: 700,
+        color: C.text,
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        cursor: onRename ? "text" : "default",
+      }}
+    >
+      {title || "Untitled"}
+    </div>
+  );
+}
+
 // ── Library sidebar ──────────────────────────────────────────────
-function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onCleanVoice, onSplitVocals, stemJob, voiceCleanJob, vocalsSplitJob, onSplitStemsPro }) {
+function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onCleanVoice, onSplitVocals, stemJob, voiceCleanJob, vocalsSplitJob, onSplitStemsPro, onRenameTrack }) {
   return (
     <aside
       style={{
@@ -2332,18 +2443,10 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
               onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
               title="Drag onto a lane, or tap to load into the next empty lane"
             >
-              <div
-                style={{
-                  fontSize: 12.5,
-                  fontWeight: 700,
-                  color: C.text,
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                }}
-              >
-                {t.title}
-              </div>
+              <LibraryTrackTitle
+                title={t.title}
+                onRename={onRenameTrack ? (v) => onRenameTrack(t.id, v) : null}
+              />
               <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2, marginBottom: 8 }}>
                 {(t.genre || "—")}{t.mood ? ` · ${t.mood}` : ""}{t.tempo ? ` · ${t.tempo} BPM` : ""}
                 {t.actualDuration || t.durationReq ? ` · ${formatTime(t.actualDuration || t.durationReq)}` : ""}

@@ -1,9 +1,10 @@
-// GET /api/music/tracks/[id]
+// GET   /api/music/tracks/[id]  — single-track read
+// PATCH /api/music/tracks/[id]  — update the title (only field exposed
+//                                 for editing right now). Body shape:
+//                                 { title: string (1–80 chars) }
 //
-// Single-track read endpoint. The /music page polls this every ~3s
-// after firing a generation so the user gets near-real-time status
-// updates (status: processing → streamUrl available → completed)
-// without needing a websocket.
+// GET is polled every ~3s by /music after firing a generation so the
+// user gets near-real-time status updates without a websocket.
 
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
@@ -63,4 +64,36 @@ export async function GET(_req, { params }) {
   });
   if (!track) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ ok: true, track });
+}
+
+// PATCH — currently supports renaming. Auth-scoped; ownership-checked
+// via updateMany so a leaked id from another account can't be edited.
+export async function PATCH(req, { params }) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Sign in" }, { status: 401 });
+  }
+  const { id } = await params;
+  if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+
+  let body;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const raw = typeof body?.title === "string" ? body.title : "";
+  const title = raw.trim().slice(0, 80);
+  if (!title) {
+    return NextResponse.json({ error: "Title cannot be empty" }, { status: 400 });
+  }
+
+  const result = await prisma.musicTrack.updateMany({
+    where: { id, userId: session.user.id, deletedAt: null },
+    data: { title },
+  });
+  if (result.count !== 1) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  return NextResponse.json({ ok: true, title });
 }
