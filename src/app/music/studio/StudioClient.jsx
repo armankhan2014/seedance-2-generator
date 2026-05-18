@@ -443,6 +443,19 @@ export default function StudioClient() {
   // most we can extract in one shot. Synth/strings/wind would need
   // /split/stem_separator/ (different endpoint) — deferred.
   const STEM_LANE_ORDER = ["vocals", "drum", "bass", "piano", "electric_guitar", "acoustic_guitar"];
+  // Per-stem default volumes that feel balanced out-of-the-box.
+  // All-lanes-at-0.85 made the mix muddy + felt like "raw output
+  // dropped onto lanes." These defaults treat vocals as the focal
+  // element + everything else underneath, like a real producer
+  // would start a mix.
+  const STEM_VOLUME_DEFAULTS = {
+    vocals: 0.95,
+    drum: 0.80,
+    bass: 0.72,
+    piano: 0.75,
+    electric_guitar: 0.72,
+    acoustic_guitar: 0.72,
+  };
   async function splitStems(track) {
     if (!track?.id) return;
     if (stemJob && stemJob.status === "processing") {
@@ -548,10 +561,14 @@ export default function StudioClient() {
       if (!rawUrl) continue;
       // Same-origin proxy URL — see comment above for why.
       const proxySrc = `/api/music/tracks/${parentTrackId}/audio?source=stem-${encodeURIComponent(label)}`;
+      // Auto-balance: per-stem default volume from STEM_VOLUME_DEFAULTS
+      // so the mix sounds reasonable immediately instead of all-loud
+      // muddy. User can adjust each slider afterwards.
+      const defaultVolume = STEM_VOLUME_DEFAULTS[label] ?? 0.85;
       setLanes((prev) =>
         prev.map((l, idx) =>
           idx === i
-            ? { ...l, trackId: `stem:${label}`, src: proxySrc, name: `Stem: ${label}`, loading: true, error: null }
+            ? { ...l, trackId: `stem:${label}`, src: proxySrc, name: `Stem: ${label}`, volume: defaultVolume, muted: false, solo: false, loading: true, error: null }
             : l
         )
       );
@@ -662,8 +679,10 @@ export default function StudioClient() {
     if (!vocalsSplit || typeof vocalsSplit !== "object") return;
     if (isPlaying) stopAll();
     const candidates = [];
-    if (vocalsSplit.lead) candidates.push({ label: "lead", display: `🎤 Lead: ${sourceName || ""}` });
-    if (vocalsSplit.backing) candidates.push({ label: "backing", display: `🎶 Backing: ${sourceName || ""}` });
+    // Auto-balance: lead loud (it IS the song), backing softer
+    // (harmony layer). User can tweak after.
+    if (vocalsSplit.lead)    candidates.push({ label: "lead",    display: `🎤 Lead: ${sourceName || ""}`,    volume: 0.95 });
+    if (vocalsSplit.backing) candidates.push({ label: "backing", display: `🎶 Backing: ${sourceName || ""}`, volume: 0.55 });
     // Find empty lanes to drop into. Use ALL lanes (even non-empty)
     // if we run out of empty ones, starting from index 0.
     const emptyIndices = lanes
@@ -676,7 +695,7 @@ export default function StudioClient() {
       setLanes((prev) =>
         prev.map((l, i) =>
           i === laneIndex
-            ? { ...l, trackId: `vocals-${c.label}:${parentTrackId}`, src: proxySrc, name: c.display, loading: true, error: null }
+            ? { ...l, trackId: `vocals-${c.label}:${parentTrackId}`, src: proxySrc, name: c.display, volume: c.volume, muted: false, solo: false, loading: true, error: null }
             : l
         )
       );
@@ -809,7 +828,7 @@ export default function StudioClient() {
     setLanes((prev) =>
       prev.map((l, i) =>
         i === laneIndex
-          ? { ...l, trackId: `voice-clean:${Date.now()}`, src: proxySrc, name: niceName, loading: true, error: null }
+          ? { ...l, trackId: `voice-clean:${Date.now()}`, src: proxySrc, name: niceName, volume: 0.92, muted: false, solo: false, loading: true, error: null }
           : l
       )
     );
@@ -927,6 +946,68 @@ export default function StudioClient() {
   // up). 16-bit PCM at 44.1 kHz = CD-quality, file size is
   // bytes-per-second × duration = ~10 MB/min stereo.
   const [exporting, setExporting] = useState(false);
+
+  // Render an array of lanes to a single mixed-down AudioBuffer
+  // using OfflineAudioContext. Shared by exportMix (renders the
+  // FULL mix with solo/mute respected) and exportAllStems (renders
+  // each lane in isolation).
+  //
+  // `applyMix`: when true, respects current mute/solo + uses each
+  // lane's user-set volume. When false, treats each lane as
+  // standalone (always audible, gain 1.0) — used for individual-stem
+  // export so the user gets the raw stem, not their mix balance.
+  async function renderLanesToWav(laneList, opts = {}) {
+    const { applyMix = true } = opts;
+    const sampleRate = 44100;
+    const numChannels = 2;
+    const dur = Math.min(
+      TIMELINE_SECONDS,
+      Math.max(...laneList.map((l) => l.duration || 0), 0.001)
+    );
+    const lengthSamples = Math.ceil(dur * sampleRate);
+    const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const offline = new Offline(numChannels, lengthSamples, sampleRate);
+    const masterGain = offline.createGain();
+    masterGain.gain.value = applyMix ? masterVolume : 1.0;
+    masterGain.connect(offline.destination);
+    const anySolo = applyMix ? lanes.some((l) => l.solo) : false;
+    for (const lane of laneList) {
+      if (!lane.audioBuffer) continue;
+      let effectiveGain;
+      if (applyMix) {
+        const audibleByMute = !lane.muted;
+        const audibleBySolo = anySolo ? lane.solo : true;
+        effectiveGain = audibleByMute && audibleBySolo ? lane.volume : 0;
+        if (effectiveGain === 0) continue;
+      } else {
+        effectiveGain = 1.0;
+      }
+      const src = offline.createBufferSource();
+      src.buffer = lane.audioBuffer;
+      const g = offline.createGain();
+      g.gain.value = effectiveGain;
+      src.connect(g);
+      g.connect(masterGain);
+      src.start(0);
+    }
+    return await offline.startRendering();
+  }
+
+  // Convert an AudioBuffer → WAV → Blob → trigger download.
+  // Used by both the mix export and individual-stem export.
+  function downloadAudioBufferAsWav(buffer, filename) {
+    const wavBytes = audioBufferToWav(buffer);
+    const blob = new Blob([wavBytes], { type: "audio/wav" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
   async function exportMix() {
     if (exporting) return;
     if (isPlaying) stopAll();
@@ -937,49 +1018,57 @@ export default function StudioClient() {
     }
     setExporting(true);
     try {
-      const sampleRate = 44100;
-      const numChannels = 2; // stereo output
-      const mixDuration = Math.min(
-        TIMELINE_SECONDS,
-        Math.max(...audibleLanes.map((l) => l.duration))
-      );
-      const lengthSamples = Math.ceil(mixDuration * sampleRate);
-      const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-      const offline = new Offline(numChannels, lengthSamples, sampleRate);
-      const masterGain = offline.createGain();
-      masterGain.gain.value = masterVolume;
-      masterGain.connect(offline.destination);
-      // Match the live mix: solo overrides mute logic.
-      const anySolo = lanes.some((l) => l.solo);
-      for (const lane of lanes) {
-        if (!lane.audioBuffer) continue;
-        const audibleByMute = !lane.muted;
-        const audibleBySolo = anySolo ? lane.solo : true;
-        const effectiveGain = audibleByMute && audibleBySolo ? lane.volume : 0;
-        if (effectiveGain === 0) continue;
-        const src = offline.createBufferSource();
-        src.buffer = lane.audioBuffer;
-        const g = offline.createGain();
-        g.gain.value = effectiveGain;
-        src.connect(g);
-        g.connect(masterGain);
-        src.start(0);
-      }
-      const rendered = await offline.startRendering();
-      const wavBytes = audioBufferToWav(rendered);
-      const blob = new Blob([wavBytes], { type: "audio/wav" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
+      const rendered = await renderLanesToWav(audibleLanes, { applyMix: true });
       const stamp = new Date().toISOString().slice(0, 10);
-      a.download = `studio-mix-${stamp}.wav`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      downloadAudioBufferAsWav(rendered, `studio-mix-${stamp}.wav`);
       flashStemMsg(`✓ Exported studio-mix-${stamp}.wav`);
     } catch (e) {
       console.error("[STUDIO_EXPORT]", e);
+      flashStemMsg(`Export failed: ${e?.message || "unknown error"}`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  // Export each loaded lane as its own WAV file. No mix/solo logic
+  // applied — each stem comes out raw at gain 1.0 so the user gets
+  // the original audio they can re-mix in their own DAW. Sequential
+  // downloads with a small delay so the browser doesn't swallow
+  // any of them. Modern browsers ask "Allow multiple downloads?"
+  // once on the first hit; user clicks Allow and the rest cascade.
+  async function exportAllStems() {
+    if (exporting) return;
+    if (isPlaying) stopAll();
+    const audibleLanes = lanes.filter((l) => l.audioBuffer);
+    if (audibleLanes.length === 0) {
+      flashStemMsg("Load at least one stem before exporting");
+      return;
+    }
+    setExporting(true);
+    try {
+      const stamp = new Date().toISOString().slice(0, 10);
+      flashStemMsg(`Rendering ${audibleLanes.length} stems…`);
+      // Render all in parallel — OfflineAudioContext is its own
+      // worker so they don't fight for the main thread.
+      const renders = await Promise.all(
+        audibleLanes.map((lane) => renderLanesToWav([lane], { applyMix: false }))
+      );
+      // Sequential downloads with a small gap so the browser
+      // queues them cleanly. Filename uses a safe slug of the lane
+      // name + the date stamp.
+      for (let i = 0; i < renders.length; i++) {
+        const lane = audibleLanes[i];
+        const safeName = (lane.name || `stem-${i + 1}`)
+          .replace(/[^\w\-]+/g, "_")
+          .replace(/_+/g, "_")
+          .replace(/^_|_$/g, "")
+          .slice(0, 40) || `stem-${i + 1}`;
+        downloadAudioBufferAsWav(renders[i], `${safeName}-${stamp}.wav`);
+        await new Promise((r) => setTimeout(r, 350));
+      }
+      flashStemMsg(`✓ Exported ${audibleLanes.length} stems`);
+    } catch (e) {
+      console.error("[STUDIO_EXPORT_STEMS]", e);
       flashStemMsg(`Export failed: ${e?.message || "unknown error"}`);
     } finally {
       setExporting(false);
@@ -1091,6 +1180,7 @@ export default function StudioClient() {
         onMasterVolume={setMasterVolume}
         onSeek={seekTo}
         onExport={exportMix}
+        onExportStems={exportAllStems}
         exporting={exporting}
         hasAudio={lanes.some((l) => l.audioBuffer)}
         loopEnabled={loopEnabled}
@@ -1558,7 +1648,7 @@ function VocalsSplitBanner({ job, onDismiss }) {
 }
 
 // ── Transport bar ────────────────────────────────────────────────
-function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onStop, onMasterVolume, onSeek, onExport, exporting, hasAudio, loopEnabled, loopRegion, onToggleLoop, onClearLoop }) {
+function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onStop, onMasterVolume, onSeek, onExport, onExportStems, exporting, hasAudio, loopEnabled, loopRegion, onToggleLoop, onClearLoop }) {
   return (
     <div
       style={{
@@ -1618,44 +1708,17 @@ function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onSt
         <KbdHint k="Esc">stop</KbdHint>
         <KbdHint k="Home">to start</KbdHint>
       </span>
-      {/* 🎧 Export — renders the current mix (respecting mute /
-          solo / volume / master) to a WAV file via
-          OfflineAudioContext + downloads it. Client-side only,
-          zero server cost. Disabled while a render is in flight
-          OR when no audio is loaded. */}
+      {/* 🎧 Export — split button: main click = export the mix,
+          chevron opens a dropdown with the "export individual
+          stems" option. Client-side render via OfflineAudioContext,
+          zero server cost. */}
       {onExport && (
-        <button
-          onClick={onExport}
-          disabled={exporting || !hasAudio}
-          aria-label="Export mix as WAV"
-          title={
-            !hasAudio
-              ? "Load at least one track first"
-              : exporting
-                ? "Rendering mix…"
-                : "Export current mix as WAV (free, client-side)"
-          }
-          style={{
-            padding: "8px 14px",
-            borderRadius: 8,
-            background: exporting
-              ? C.panelSoft
-              : !hasAudio
-                ? C.panelSoft
-                : `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`,
-            border: `1px solid ${exporting || !hasAudio ? C.border : C.accent}`,
-            color: exporting || !hasAudio ? C.muted : "#0a0a0a",
-            fontSize: 12,
-            fontWeight: 800,
-            letterSpacing: "0.04em",
-            cursor: exporting || !hasAudio ? "default" : "pointer",
-            fontFamily: "inherit",
-            marginRight: 14,
-            whiteSpace: "nowrap",
-          }}
-        >
-          {exporting ? "Rendering…" : "🎧 Export WAV"}
-        </button>
+        <ExportSplitButton
+          onExportMix={onExport}
+          onExportStems={onExportStems}
+          exporting={exporting}
+          hasAudio={hasAudio}
+        />
       )}
       <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 11, color: C.muted, fontWeight: 700, letterSpacing: "0.04em" }}>MASTER</span>
@@ -1697,6 +1760,135 @@ function KbdHint({ k, children }) {
       <span>{children}</span>
     </span>
   );
+}
+
+// Split button for Export — main click runs the mix export, the
+// chevron half opens a small popover with "Export each stem
+// separately" as a secondary option. Filmmakers usually want the
+// MIX (primary action), but stems-separately is the killer
+// secondary action so they can re-mix in their own DAW.
+function ExportSplitButton({ onExportMix, onExportStems, exporting, hasAudio }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const wrapRef = useRef(null);
+  // Close on outside click.
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onDoc(e) {
+      if (!wrapRef.current || !wrapRef.current.contains(e.target)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [menuOpen]);
+  const disabled = exporting || !hasAudio;
+  const limeBg = `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`;
+  return (
+    <div
+      ref={wrapRef}
+      style={{ position: "relative", display: "inline-flex", marginRight: 14 }}
+    >
+      <button
+        onClick={onExportMix}
+        disabled={disabled}
+        title={
+          !hasAudio
+            ? "Load at least one track first"
+            : exporting
+              ? "Rendering…"
+              : "Export current mix as a single WAV (free, client-side)"
+        }
+        style={{
+          padding: "8px 14px",
+          borderRadius: "8px 0 0 8px",
+          background: disabled ? C.panelSoft : limeBg,
+          border: `1px solid ${disabled ? C.border : C.accent}`,
+          borderRight: "none",
+          color: disabled ? C.muted : "#0a0a0a",
+          fontSize: 12,
+          fontWeight: 800,
+          letterSpacing: "0.04em",
+          cursor: disabled ? "default" : "pointer",
+          fontFamily: "inherit",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {exporting ? "Rendering…" : "🎧 Export WAV"}
+      </button>
+      {onExportStems && (
+        <button
+          onClick={() => !disabled && setMenuOpen((o) => !o)}
+          disabled={disabled}
+          aria-label="More export options"
+          title="More export options"
+          style={{
+            padding: "0 10px",
+            borderRadius: "0 8px 8px 0",
+            background: disabled ? C.panelSoft : limeBg,
+            border: `1px solid ${disabled ? C.border : C.accent}`,
+            borderLeft: disabled
+              ? `1px solid ${C.border}`
+              : "1px solid rgba(0,0,0,0.22)",
+            color: disabled ? C.muted : "#0a0a0a",
+            fontSize: 11,
+            fontWeight: 800,
+            cursor: disabled ? "default" : "pointer",
+            fontFamily: "inherit",
+            display: "inline-flex",
+            alignItems: "center",
+          }}
+        >
+          ▾
+        </button>
+      )}
+      {menuOpen && onExportStems && (
+        <div
+          style={{
+            position: "absolute",
+            top: 42,
+            right: 0,
+            minWidth: 220,
+            background: C.panel,
+            border: `1px solid ${C.borderHover}`,
+            borderRadius: 10,
+            padding: 6,
+            boxShadow: "0 18px 48px -12px rgba(0,0,0,0.85)",
+            zIndex: 50,
+          }}
+        >
+          <button
+            onClick={() => { setMenuOpen(false); onExportMix(); }}
+            style={dropdownItemStyle()}
+          >
+            🎧 Export mix (single WAV)
+          </button>
+          <button
+            onClick={() => { setMenuOpen(false); onExportStems(); }}
+            style={dropdownItemStyle()}
+          >
+            📦 Export each stem (separate WAVs)
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function dropdownItemStyle() {
+  return {
+    width: "100%",
+    padding: "9px 12px",
+    background: "transparent",
+    border: "none",
+    color: C.text,
+    fontSize: 12.5,
+    fontWeight: 700,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    textAlign: "left",
+    borderRadius: 6,
+    transition: "background 0.12s",
+  };
 }
 
 // Unified transport-bar button — handles its own hover state so
