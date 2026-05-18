@@ -2269,11 +2269,48 @@ function ActionPill({ label, cost, busy, title, color, borderColor, activeBg, on
 }
 
 // ── Library sidebar ──────────────────────────────────────────────
+// R7 fresh redesign:
+//   • Sticky search at the top — filter by title / prompt / genre / mood.
+//   • Date sections (Today / This week / Earlier) so it's obvious
+//     which tracks are new vs. stale.
+//   • Each row is 3 lines: title · meta (time-ago + duration + BPM) ·
+//     a single inline row of monochrome text-action buttons (Split /
+//     Pro 9 / Vocals / Clean). Pills are gone. Each action shows its
+//     credit cost only on hover so the resting row reads as a music
+//     library, not a price list.
+//   • Hover the row → row tint + action-text colors light up so the
+//     four operations are still discoverable but stay quiet at rest.
 function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onCleanVoice, onSplitVocals, stemJob, voiceCleanJob, vocalsSplitJob, onSplitStemsPro }) {
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return tracks;
+    return tracks.filter((t) =>
+      (t.title  || "").toLowerCase().includes(q)
+      || (t.prompt || "").toLowerCase().includes(q)
+      || (t.genre  || "").toLowerCase().includes(q)
+      || (t.mood   || "").toLowerCase().includes(q)
+    );
+  }, [tracks, query]);
+
+  // Bucket by age. tracks come back from the API ordered newest-first
+  // already, so each bucket preserves that order.
+  const grouped = useMemo(() => {
+    const buckets = { "Today": [], "This week": [], "Earlier": [] };
+    for (const t of filtered) {
+      const ageHr = (Date.now() - new Date(t.createdAt).getTime()) / 3600_000;
+      if (ageHr < 24)         buckets["Today"].push(t);
+      else if (ageHr < 24*7)  buckets["This week"].push(t);
+      else                    buckets["Earlier"].push(t);
+    }
+    return buckets;
+  }, [filtered]);
+
   return (
     <aside
       style={{
-        width: 260,
+        width: 280,
         flexShrink: 0,
         borderRight: `1px solid ${C.border}`,
         background: C.panel,
@@ -2282,146 +2319,296 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
         flexDirection: "column",
       }}
     >
+      {/* Sticky header — title, count, search */}
       <div
         style={{
-          padding: "12px 14px",
+          padding: "12px 14px 10px",
           borderBottom: `1px solid ${C.border}`,
           position: "sticky",
           top: 0,
           background: C.panel,
-          zIndex: 1,
+          zIndex: 2,
         }}
       >
-        <div style={{ fontSize: 10, color: C.accent, letterSpacing: "0.16em", fontWeight: 800, textTransform: "uppercase" }}>
-          Your library
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 9 }}>
+          <div style={{ fontSize: 10, color: C.accent, letterSpacing: "0.16em", fontWeight: 800, textTransform: "uppercase" }}>
+            Your library
+          </div>
+          <div style={{ fontSize: 10, color: C.muted, fontWeight: 600 }}>
+            {filtered.length}{query ? ` / ${tracks.length}` : ""} track{tracks.length === 1 ? "" : "s"}
+          </div>
         </div>
-        <div style={{ fontSize: 11, color: C.muted, marginTop: 4, lineHeight: 1.4 }}>
-          Drag a track onto a lane, or tap to load into the next empty lane.
+        <div style={{ position: "relative" }}>
+          <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: C.muted, pointerEvents: "none" }}>🔍</span>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search title, prompt, genre…"
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "7px 8px 7px 28px",
+              fontSize: 12,
+              background: C.panelSoft,
+              border: `1px solid ${C.border}`,
+              borderRadius: 6,
+              color: C.text,
+              outline: "none",
+              fontFamily: "inherit",
+            }}
+            onFocus={(e) => (e.currentTarget.style.borderColor = C.borderHover)}
+            onBlur={(e) => (e.currentTarget.style.borderColor = C.border)}
+          />
         </div>
       </div>
+
       {loading && (
         <div style={{ padding: 16, fontSize: 12, color: C.muted }}>Loading library…</div>
       )}
       {!loading && tracks.length === 0 && (
-        <div style={{ padding: 16, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
+        <div style={{ padding: 18, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
           You don&rsquo;t have any completed tracks yet.{" "}
           <Link href="/music" style={{ color: C.accent }}>Generate one →</Link>
         </div>
       )}
-      {!loading &&
-        tracks.map((t) => {
-          const isThisSplitting = stemJob?.trackId === t.id && stemJob?.status === "processing";
-          const isThisCleaning = voiceCleanJob?.trackId === t.id && voiceCleanJob?.status === "processing";
-          const isThisVocalsSplitting = vocalsSplitJob?.trackId === t.id && vocalsSplitJob?.status === "processing";
-          return (
-            <div
-              key={t.id}
-              draggable
-              onDragStart={(e) => onDragStart(e, t)}
-              onClick={() => onTap(t)}
-              style={{
-                padding: "10px 14px",
-                borderBottom: `1px solid ${C.border}`,
-                cursor: "grab",
-                userSelect: "none",
-                transition: "background 0.12s",
-                display: "flex",
-                alignItems: "center",
-                gap: 10,
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = C.panelSoft)}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-              title="Drag onto a lane, or tap to load into the next empty lane"
-            >
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div
-                  style={{
-                    fontSize: 12.5,
-                    fontWeight: 700,
-                    color: C.text,
-                    whiteSpace: "nowrap",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                  }}
-                >
-                  {t.title}
-                </div>
-                <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>
-                  {(t.genre || "—")}{t.mood ? ` · ${t.mood}` : ""}{t.tempo ? ` · ${t.tempo} BPM` : ""}
-                  {t.actualDuration || t.durationReq ? ` · ${formatTime(t.actualDuration || t.durationReq)}` : ""}
-                </div>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
-                {onSplitStems && (
-                  <ActionPill
-                    label="🔬 Split"
-                    cost={30}
-                    busy={isThisSplitting && stemJob?.mode !== "9stem"}
-                    title={
-                      isThisSplitting
-                        ? "Splitting in progress…"
-                        : "Split into 6 stems (vocals/drum/bass/piano/electric_guitar/acoustic_guitar)"
-                    }
-                    color="#D9FF00"
-                    borderColor="rgba(217,255,0,0.40)"
-                    activeBg="rgba(217,255,0,0.10)"
-                    onClick={(e) => { e.stopPropagation(); onSplitStems(t); }}
+      {!loading && tracks.length > 0 && filtered.length === 0 && (
+        <div style={{ padding: 18, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
+          No tracks match &ldquo;<span style={{ color: C.textSoft }}>{query}</span>&rdquo;.
+        </div>
+      )}
+      {!loading && filtered.length > 0 && (
+        <>
+          {(["Today", "This week", "Earlier"]).map((bucket) => {
+            const rows = grouped[bucket];
+            if (rows.length === 0) return null;
+            return (
+              <LibrarySection key={bucket} title={bucket} count={rows.length}>
+                {rows.map((t) => (
+                  <LibraryRow
+                    key={t.id}
+                    t={t}
+                    onDragStart={onDragStart}
+                    onTap={onTap}
+                    onSplitStems={onSplitStems}
+                    onSplitStemsPro={onSplitStemsPro}
+                    onSplitVocals={onSplitVocals}
+                    onCleanVoice={onCleanVoice}
+                    stemJob={stemJob}
+                    voiceCleanJob={voiceCleanJob}
+                    vocalsSplitJob={vocalsSplitJob}
                   />
-                )}
-                {onSplitStemsPro && (
-                  <ActionPill
-                    label="🔬+ Pro 9"
-                    cost={50}
-                    busy={isThisSplitting && stemJob?.mode === "9stem"}
-                    title={
-                      isThisSplitting
-                        ? "Pro split in progress…"
-                        : "Pro 9-stem split — adds synthesizer / strings / wind via the phoenix splitter"
-                    }
-                    color="#fbbf24"
-                    borderColor="rgba(251,191,36,0.45)"
-                    activeBg="rgba(251,191,36,0.15)"
-                    onClick={(e) => { e.stopPropagation(); onSplitStemsPro(t); }}
-                  />
-                )}
-                {onSplitVocals && (
-                  <ActionPill
-                    label="🎤 Vocals"
-                    cost={10}
-                    busy={isThisVocalsSplitting}
-                    title={
-                      isThisVocalsSplitting
-                        ? "Splitting vocals…"
-                        : "Split vocal into lead + backing harmonies"
-                    }
-                    color="#c4b5fd"
-                    borderColor="rgba(196,181,253,0.55)"
-                    activeBg="rgba(196,181,253,0.20)"
-                    onClick={(e) => { e.stopPropagation(); onSplitVocals(t); }}
-                  />
-                )}
-                {onCleanVoice && (
-                  <ActionPill
-                    label="🧹 Clean"
-                    cost={6}
-                    busy={isThisCleaning}
-                    title={
-                      isThisCleaning
-                        ? "Cleaning voice…"
-                        : "Strip background noise from the vocal"
-                    }
-                    color="#93c5fd"
-                    borderColor="rgba(96,165,250,0.50)"
-                    activeBg="rgba(96,165,250,0.20)"
-                    onClick={(e) => { e.stopPropagation(); onCleanVoice(t); }}
-                  />
-                )}
-              </div>
-            </div>
-          );
-        })}
+                ))}
+              </LibrarySection>
+            );
+          })}
+        </>
+      )}
     </aside>
   );
+}
+
+function LibrarySection({ title, count, children }) {
+  return (
+    <div>
+      <div
+        style={{
+          padding: "10px 14px 5px",
+          fontSize: 9.5,
+          fontWeight: 800,
+          letterSpacing: "0.16em",
+          textTransform: "uppercase",
+          color: C.muted,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+        }}
+      >
+        <span>{title}</span>
+        <span style={{ fontSize: 9, color: C.muted, fontWeight: 600, opacity: 0.7 }}>{count}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// One library row. 3 lines: title, meta, action-text row. ~58px tall.
+function LibraryRow({ t, onDragStart, onTap, onSplitStems, onSplitStemsPro, onSplitVocals, onCleanVoice, stemJob, voiceCleanJob, vocalsSplitJob }) {
+  const [hover, setHover] = useState(false);
+  const isThisSplitting        = stemJob?.trackId === t.id && stemJob?.status === "processing";
+  const isThisCleaning         = voiceCleanJob?.trackId === t.id && voiceCleanJob?.status === "processing";
+  const isThisVocalsSplitting  = vocalsSplitJob?.trackId === t.id && vocalsSplitJob?.status === "processing";
+
+  // Meta line favours what's actually different between tracks: time
+  // since creation + duration + tempo. Genre/mood live in the search
+  // index instead (most generations share them so they're noise here).
+  const meta = [
+    timeAgo(t.createdAt),
+    (t.actualDuration || t.durationReq) ? formatTime(t.actualDuration || t.durationReq) : null,
+    t.tempo ? `${t.tempo} BPM` : null,
+  ].filter(Boolean).join(" · ");
+
+  return (
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, t)}
+      onClick={() => onTap(t)}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        padding: "8px 12px 9px 14px",
+        borderBottom: `1px solid ${C.border}`,
+        cursor: "grab",
+        userSelect: "none",
+        transition: "background 0.12s",
+        background: hover ? C.panelSoft : "transparent",
+      }}
+      title="Drag onto a lane, or tap to load into the next empty lane"
+    >
+      <div
+        style={{
+          fontSize: 12.5,
+          fontWeight: 700,
+          color: C.text,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          lineHeight: 1.25,
+        }}
+      >
+        {t.title || "Untitled"}
+      </div>
+      <div
+        style={{
+          fontSize: 10.5,
+          color: C.muted,
+          marginTop: 2,
+          marginBottom: 5,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          lineHeight: 1.2,
+        }}
+      >
+        {meta}
+      </div>
+      {/* Inline action row — text-only, monochrome at rest, color on
+          hover. Costs surface on individual action hover, not always
+          on display. */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          fontSize: 10.5,
+          fontWeight: 700,
+          color: hover ? C.textSoft : C.muted,
+          letterSpacing: "0.02em",
+          transition: "color 0.12s",
+        }}
+      >
+        {onSplitStems && (
+          <ActionText
+            label="Split"
+            cost={30}
+            color="#D9FF00"
+            busy={isThisSplitting && stemJob?.mode !== "9stem"}
+            disabled={isThisSplitting}
+            title="Split into 6 stems (vocals / drum / bass / piano / electric guitar / acoustic guitar)"
+            onClick={(e) => { e.stopPropagation(); onSplitStems(t); }}
+          />
+        )}
+        {onSplitStemsPro && (
+          <ActionText
+            label="Pro 9"
+            cost={50}
+            color="#fbbf24"
+            busy={isThisSplitting && stemJob?.mode === "9stem"}
+            disabled={isThisSplitting}
+            title="Pro 9-stem split — adds synthesizer / strings / wind"
+            onClick={(e) => { e.stopPropagation(); onSplitStemsPro(t); }}
+          />
+        )}
+        {onSplitVocals && (
+          <ActionText
+            label="Vocals"
+            cost={10}
+            color="#c4b5fd"
+            busy={isThisVocalsSplitting}
+            disabled={isThisVocalsSplitting}
+            title="Split vocal into lead + backing harmonies"
+            onClick={(e) => { e.stopPropagation(); onSplitVocals(t); }}
+          />
+        )}
+        {onCleanVoice && (
+          <ActionText
+            label="Clean"
+            cost={6}
+            color="#93c5fd"
+            busy={isThisCleaning}
+            disabled={isThisCleaning}
+            title="Strip background noise from the vocal"
+            onClick={(e) => { e.stopPropagation(); onCleanVoice(t); }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// A single inline text-action ("Split", "Pro 9", "Vocals", "Clean").
+// Reads as part of the row at rest, lights up to its action colour
+// on hover, shows the credit cost in the tooltip. No pill outline,
+// no background — pure text. Massively quieter than the old 1x4
+// stack of coloured pills.
+function ActionText({ label, cost, color, title, onClick, busy, disabled }) {
+  const [hover, setHover] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={busy ? undefined : onClick}
+      disabled={!!disabled}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title={busy ? `${label} — in progress…` : `${title} · ${cost} credits`}
+      style={{
+        background: "transparent",
+        border: "none",
+        padding: 0,
+        margin: 0,
+        font: "inherit",
+        cursor: disabled ? "default" : "pointer",
+        color: busy ? color : (hover ? color : "inherit"),
+        opacity: disabled && !busy ? 0.4 : 1,
+        textDecoration: hover && !disabled ? "underline" : "none",
+        textUnderlineOffset: 3,
+        whiteSpace: "nowrap",
+        fontFamily: "inherit",
+      }}
+    >
+      {busy ? `${label}…` : label}
+      {hover && !busy && (
+        <span style={{ fontSize: 9, fontWeight: 600, opacity: 0.7, marginLeft: 3, letterSpacing: 0 }}>{cost}c</span>
+      )}
+    </button>
+  );
+}
+
+// "2h ago", "Yesterday", "3 days ago". Compact, music-library
+// friendly. We don't bother with sub-hour precision — the timeline
+// in Studio doesn't care that much.
+function timeAgo(iso) {
+  if (!iso) return "";
+  const ageHr = (Date.now() - new Date(iso).getTime()) / 3600_000;
+  if (ageHr < 1)     return "Just now";
+  if (ageHr < 24)    return `${Math.floor(ageHr)}h ago`;
+  if (ageHr < 48)    return "Yesterday";
+  const days = Math.floor(ageHr / 24);
+  if (days < 7)      return `${days}d ago`;
+  if (days < 30)     return `${Math.floor(days / 7)}w ago`;
+  if (days < 365)    return `${Math.floor(days / 30)}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
 }
 
 // ── Timeline area ────────────────────────────────────────────────
