@@ -2,14 +2,13 @@
 //
 // DEMO — Library sidebar reorganisation for /music/studio.
 //
-// v2 (Arman flagged v1 as still cluttered). Now: hover-reveal action
-// pills, single-line meta with truncation, fixed row height, denser
-// section dividers. Default row is just title + meta — clean. Pills
-// fade in on hover so the row stays calm at rest.
+// v3 — every action pill self-explains. Each row shows title, meta,
+// and a single horizontal strip of 4 LABELED pills: icon + short
+// word + credit cost. Always visible (no hover guessing). Fixed
+// row height ~62px.
 //
-// All 4 actions (Split / Pro 9 / Vocals / Clean) remain available
-// per Arman's spec — they're just hidden until intent (hover) is
-// shown. Cost moves into the native tooltip.
+// Trade-off: wider sidebar (310px vs current 260px) to fit the four
+// labeled pills inline below the meta. Worth it for readability.
 //
 // Once approved, this gets ported into LibrarySidebar inside
 // StudioClient.jsx and this file gets deleted.
@@ -30,7 +29,6 @@ const C = {
   accentDark: "#A6CC00",
 };
 
-// ── Mock library data — covers all 3 date buckets + varied genres ──
 const MOCK_TRACKS = [
   { id: "t01", title: "Midnight Run",                 genre: "synthwave",   mood: "driving",    tempo: 128, actualDuration: 184, createdAt: hoursAgo(2) },
   { id: "t02", title: "Vapor Cathedral",              genre: "ambient",     mood: "ethereal",   tempo: 70,  actualDuration: 245, createdAt: hoursAgo(5) },
@@ -53,6 +51,18 @@ const SORT_OPTIONS = [
   { id: "za",       label: "Z → A"         },
   { id: "longest",  label: "Longest first" },
   { id: "shortest", label: "Shortest first"},
+];
+
+// The 4 stem/voice actions for each library track. Defined once so
+// every row stays identical + descriptions live in one place. Each
+// pill self-explains: icon + word + cost. Tooltip carries the full
+// sentence for clarity. `key` matches the existing splitStems /
+// splitVocals / cleanVoice handlers in StudioClient.jsx.
+const ACTIONS = [
+  { key: "split6",   icon: "🔬",  word: "Split",  cost: 30, color: "#D9FF00", border: "rgba(217,255,0,0.40)",  desc: "Split into 6 stems (vocals / drum / bass / piano / electric guitar / acoustic guitar)" },
+  { key: "split9",   icon: "🔬+", word: "Pro 9",  cost: 50, color: "#fbbf24", border: "rgba(251,191,36,0.45)", desc: "Pro 9-stem split — adds synthesizer / strings / wind" },
+  { key: "vocals",   icon: "🎤",  word: "Vocals", cost: 10, color: "#c4b5fd", border: "rgba(196,181,253,0.55)", desc: "Split vocal into lead + backing harmonies" },
+  { key: "clean",    icon: "🧹",  word: "Clean",  cost: 6,  color: "#93c5fd", border: "rgba(96,165,250,0.50)",  desc: "Strip background noise from the vocal" },
 ];
 
 function formatTime(s) {
@@ -105,12 +115,11 @@ export default function LibraryDemoPage() {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, padding: 24, fontFamily: "system-ui, sans-serif" }}>
       <h1 style={{ fontSize: 16, fontWeight: 800, letterSpacing: "0.04em", textTransform: "uppercase", color: C.accent, marginBottom: 6 }}>
-        Demo · Library sidebar (v2)
+        Demo · Library sidebar (v3)
       </h1>
       <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.55, maxWidth: 640, marginBottom: 18 }}>
-        Each row is now just title + meta. <strong style={{ color: C.textSoft }}>Hover a row</strong>
-        {" "}to reveal the 4 action pills. Cost moved into tooltip. Search + sort sticky at top.
-        Date-group dividers stay subtle.
+        Every pill now reads its own name and credit cost. No more guessing what 🔬 means.
+        Sidebar widened to 310&nbsp;px so the four labeled pills fit on one line below each track.
       </p>
 
       <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
@@ -125,15 +134,22 @@ export default function LibraryDemoPage() {
 
         <div style={{ flex: 1, fontSize: 12, color: C.textSoft, lineHeight: 1.6, maxWidth: 480 }}>
           <div style={{ fontSize: 11, color: C.accent, letterSpacing: "0.16em", fontWeight: 800, textTransform: "uppercase", marginBottom: 8 }}>
-            What changed vs. v1
+            What each pill does
           </div>
-          <ul style={{ paddingLeft: 18, margin: 0 }}>
-            <li>Action pills are <strong>hidden by default</strong> — only show on row hover. Row stays calm.</li>
-            <li>Single-line meta with ellipsis truncation; row height is fixed at ~46px.</li>
-            <li>Cost lives in the tooltip, not on the pill — pill is icon-only.</li>
-            <li>Search + sort are sticky and use the same monochrome treatment as the rest of Studio.</li>
-            <li>Section dividers are 1px thin rules with a small uppercase label.</li>
+          <ul style={{ paddingLeft: 18, margin: 0, fontSize: 12 }}>
+            {ACTIONS.map((a) => (
+              <li key={a.key} style={{ marginBottom: 4 }}>
+                <span style={{ color: a.color, fontWeight: 700 }}>{a.icon} {a.word}</span>
+                <span style={{ color: C.muted }}> — {a.cost} credits — </span>
+                <span style={{ color: C.textSoft }}>{a.desc}</span>
+              </li>
+            ))}
           </ul>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 14, lineHeight: 1.5 }}>
+            Drag a row onto a lane, or tap to load into the next empty lane. Search filters title /
+            genre / mood. Sort newest / oldest preserves date-section headers; other sorts present a
+            single flat list.
+          </div>
         </div>
       </div>
     </div>
@@ -144,7 +160,7 @@ function LibrarySidebar({ tracks, grouped, query, setQuery, sort, setSort }) {
   return (
     <aside
       style={{
-        width: 300,
+        width: 310,
         flexShrink: 0,
         height: "calc(100vh - 100px)",
         borderRight: `1px solid ${C.border}`,
@@ -155,7 +171,6 @@ function LibrarySidebar({ tracks, grouped, query, setQuery, sort, setSort }) {
         borderRadius: 8,
       }}
     >
-      {/* Sticky header */}
       <div
         style={{
           padding: "14px 14px 10px",
@@ -236,7 +251,7 @@ function LibrarySidebar({ tracks, grouped, query, setQuery, sort, setSort }) {
         <>
           {(["Today", "This week", "Earlier"]).map((bucket) => {
             const rows = grouped[bucket];
-            if (rows.length === 0) return null; // hide empty sections entirely
+            if (rows.length === 0) return null;
             return (
               <Section key={bucket} title={bucket} count={rows.length}>
                 {rows.map((t) => <TrackRow key={t.id} t={t} />)}
@@ -274,10 +289,8 @@ function Section({ title, count, children }) {
   );
 }
 
-// One library row. Fixed-height. Hover reveals action pills.
 function TrackRow({ t }) {
   const [hover, setHover] = useState(false);
-  // Single-line meta string. Genre + (BPM) + (duration).
   const meta = [
     t.genre || "—",
     t.tempo ? `${t.tempo} BPM` : null,
@@ -287,80 +300,63 @@ function TrackRow({ t }) {
   return (
     <div
       style={{
-        position: "relative",
-        height: 46,
-        padding: "0 12px 0 14px",
+        padding: "8px 12px 8px 14px",
         borderBottom: `1px solid ${C.border}`,
         cursor: "grab",
         userSelect: "none",
         transition: "background 0.12s",
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
         background: hover ? C.panelSoft : "transparent",
       }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       title="Drag onto a lane, or tap to load into the next empty lane"
     >
-      {/* Title + meta — left side, claims the row */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: 13,
-            fontWeight: 700,
-            color: C.text,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            lineHeight: 1.2,
-          }}
-        >
-          {t.title}
-        </div>
-        <div
-          style={{
-            fontSize: 10.5,
-            color: C.muted,
-            marginTop: 2,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            lineHeight: 1.2,
-          }}
-        >
-          {meta}
-        </div>
-      </div>
-
-      {/* Action pills — fade in on hover. The right edge gets a subtle
-          gradient mask so long titles don't visibly slam into the pills. */}
+      {/* Title */}
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 4,
-          flexShrink: 0,
-          opacity: hover ? 1 : 0,
-          pointerEvents: hover ? "auto" : "none",
-          transition: "opacity 0.14s",
-          // Subtle paint behind the pills to ensure legibility even
-          // if the title is long and overflows visually.
-          background: hover ? `linear-gradient(to right, transparent 0, ${C.panelSoft} 12px)` : "transparent",
-          paddingLeft: 12,
+          fontSize: 12.5,
+          fontWeight: 700,
+          color: C.text,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          lineHeight: 1.25,
         }}
       >
-        <IconPill icon="🔬"  cost={30} title="Split into 6 stems"                       color="#D9FF00" borderColor="rgba(217,255,0,0.40)" />
-        <IconPill icon="🔬+" cost={50} title="Pro 9-stem (adds synth / strings / wind)"  color="#fbbf24" borderColor="rgba(251,191,36,0.45)" />
-        <IconPill icon="🎤"  cost={10} title="Split lead vs backing vocals"              color="#c4b5fd" borderColor="rgba(196,181,253,0.55)" />
-        <IconPill icon="🧹"  cost={6}  title="Strip background noise from vocals"        color="#93c5fd" borderColor="rgba(96,165,250,0.50)" />
+        {t.title}
+      </div>
+
+      {/* Meta */}
+      <div
+        style={{
+          fontSize: 10.5,
+          color: C.muted,
+          marginTop: 2,
+          marginBottom: 6,
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          lineHeight: 1.2,
+        }}
+      >
+        {meta}
+      </div>
+
+      {/* Action pills — always visible, labeled, single row */}
+      <div style={{ display: "flex", gap: 4 }}>
+        {ACTIONS.map((a) => (
+          <LabeledPill key={a.key} icon={a.icon} word={a.word} cost={a.cost} title={a.desc} color={a.color} borderColor={a.border} />
+        ))}
       </div>
     </div>
   );
 }
 
-// Compact circular icon button. Cost lives in the tooltip.
-function IconPill({ icon, cost, title, color, borderColor }) {
+// A self-explaining pill: icon + word + cost number. Tooltip carries
+// the full sentence. The pill is wide enough that its purpose is
+// obvious at a glance — no need to hover for a tooltip just to
+// learn what 🔬 means.
+function LabeledPill({ icon, word, cost, title, color, borderColor }) {
   const [h, setH] = useState(false);
   return (
     <button
@@ -370,25 +366,28 @@ function IconPill({ icon, cost, title, color, borderColor }) {
       onMouseLeave={() => setH(false)}
       title={`${title} · ${cost} credits`}
       style={{
-        width: 26,
-        height: 26,
+        flex: 1,
+        minWidth: 0,
+        padding: "4px 6px",
         borderRadius: 999,
-        background: h ? `${color}1a` : "transparent",  // 1a = 10% alpha
+        background: h ? `${color}1a` : "transparent",
         border: `1px solid ${borderColor}`,
         color,
-        fontSize: 12,
+        fontSize: 10,
         fontWeight: 700,
         cursor: "pointer",
         fontFamily: "inherit",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: 0,
-        lineHeight: 1,
+        gap: 3,
+        whiteSpace: "nowrap",
         transition: "background 0.1s",
       }}
     >
-      {icon}
+      <span style={{ fontSize: 11 }}>{icon}</span>
+      <span style={{ letterSpacing: "0.02em" }}>{word}</span>
+      <span style={{ fontSize: 9, fontWeight: 600, opacity: 0.7 }}>{cost}</span>
     </button>
   );
 }
