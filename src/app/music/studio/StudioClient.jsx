@@ -55,10 +55,12 @@ const C = {
 // scroll on most screens.
 const TIMELINE_SECONDS = 300;
 const PIXELS_PER_SECOND_DEFAULT = 5;
-// Six colour hues — one per lane — so a fully-loaded mix reads as
-// six distinct visual streams. Spread across the colour wheel
-// (~60° apart) so adjacent lanes don't blur into each other.
-const LANE_HUES = [70, 195, 320, 25, 270, 145]; // lime, cyan, magenta, orange, purple, green
+// Nine colour hues — one per lane — so a fully-loaded Pro 9-stem
+// mix reads as nine distinct visual streams. Spread across the
+// colour wheel so adjacent lanes don't blur into each other. The
+// first 6 are the standard multistem set; the last 3 land
+// synthesizer / strings / wind (Pro 9-stem split) onto lanes 6-8.
+const LANE_HUES = [70, 195, 320, 25, 270, 145, 0, 240, 100]; // lime, cyan, magenta, orange, purple, green, red, deep-blue, chartreuse
 const LANE_COUNT = LANE_HUES.length;
 
 export default function StudioClient() {
@@ -463,17 +465,17 @@ export default function StudioClient() {
   }
 
   // ── Stem separation (LALAL.AI) ───────────────────────────────
-  // Kick off a 6-stem split (vocals / drum / bass / piano /
-  // electric_guitar / acoustic_guitar) on a library track. Costs 30
-  // credits per the server route. While running we poll /check
-  // every 6s; when complete we auto-load the 6 returned stems onto
-  // lanes 0-5 (replacing whatever was there). Order matters — we
-  // lock the stem→lane mapping here so users know which lane to
-  // expect each stem on. Bumped from 4 → 6 stems 2026-05-18; the
-  // LALAL multistem endpoint maxes at 6 per call, so this is the
-  // most we can extract in one shot. Synth/strings/wind would need
-  // /split/stem_separator/ (different endpoint) — deferred.
-  const STEM_LANE_ORDER = ["vocals", "drum", "bass", "piano", "electric_guitar", "acoustic_guitar"];
+  // Kick off a stem split on a library track. Two modes:
+  //   • 6stem (default, 30 credits): vocals/drum/bass/piano/
+  //     electric_guitar/acoustic_guitar via one multistem call.
+  //   • 9stem (Pro, 50 credits): the 6 above PLUS synthesizer/
+  //     strings/wind via 3 extra stem_separator calls on the
+  //     phoenix splitter. R6 2026-05-18.
+  // Order matters — we lock the stem→lane mapping here so users
+  // know which lane to expect each stem on. For 6stem mode only
+  // the first 6 entries will resolve; the iteration in
+  // applyStemsToLanes skips labels that aren't in the result.
+  const STEM_LANE_ORDER = ["vocals", "drum", "bass", "piano", "electric_guitar", "acoustic_guitar", "synthesizer", "strings", "wind"];
   // Per-stem default volumes that feel balanced out-of-the-box.
   // All-lanes-at-0.85 made the mix muddy + felt like "raw output
   // dropped onto lanes." These defaults treat vocals as the focal
@@ -486,19 +488,27 @@ export default function StudioClient() {
     piano: 0.75,
     electric_guitar: 0.72,
     acoustic_guitar: 0.72,
+    synthesizer: 0.68,
+    strings: 0.70,
+    wind: 0.68,
   };
-  async function splitStems(track) {
+  // Sent to the server as { stems: [...] } — we ask only for the
+  // 6 standard stems regardless of mode. The 3 extra Pro stems are
+  // dispatched server-side via separate stem_separator calls and
+  // merged into studioStems on completion.
+  const STEM_REQUEST_SET = STEM_LANE_ORDER.slice(0, 6);
+  async function splitStems(track, mode = "6stem") {
     if (!track?.id) return;
     if (stemJob && stemJob.status === "processing") {
       flashStemMsg("Already splitting — wait for it to finish");
       return;
     }
-    setStemJob({ trackId: track.id, status: "starting", progress: 0, sourceName: track.title });
+    setStemJob({ trackId: track.id, status: "starting", progress: 0, sourceName: track.title, mode });
     try {
       const res = await fetch("/api/music/studio/stems/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trackId: track.id, stems: STEM_LANE_ORDER }),
+        body: JSON.stringify({ trackId: track.id, stems: STEM_REQUEST_SET, mode }),
       });
       const j = await res.json();
       if (!res.ok) {
@@ -1245,6 +1255,7 @@ export default function StudioClient() {
           onDragStart={handleDragStart}
           onTap={loadIntoNextEmptyLane}
           onSplitStems={splitStems}
+          onSplitStemsPro={(t) => splitStems(t, "9stem")}
           onCleanVoice={cleanVoice}
           onSplitVocals={splitVocals}
           stemJob={stemJob}
@@ -2258,7 +2269,7 @@ function ActionPill({ label, cost, busy, title, color, borderColor, activeBg, on
 }
 
 // ── Library sidebar ──────────────────────────────────────────────
-function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onCleanVoice, onSplitVocals, stemJob, voiceCleanJob, vocalsSplitJob }) {
+function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onCleanVoice, onSplitVocals, stemJob, voiceCleanJob, vocalsSplitJob, onSplitStemsPro }) {
   return (
     <aside
       style={{
@@ -2345,7 +2356,7 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
                   <ActionPill
                     label="🔬 Split"
                     cost={30}
-                    busy={isThisSplitting}
+                    busy={isThisSplitting && stemJob?.mode !== "9stem"}
                     title={
                       isThisSplitting
                         ? "Splitting in progress…"
@@ -2355,6 +2366,22 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
                     borderColor="rgba(217,255,0,0.40)"
                     activeBg="rgba(217,255,0,0.10)"
                     onClick={(e) => { e.stopPropagation(); onSplitStems(t); }}
+                  />
+                )}
+                {onSplitStemsPro && (
+                  <ActionPill
+                    label="🔬+ Pro 9"
+                    cost={50}
+                    busy={isThisSplitting && stemJob?.mode === "9stem"}
+                    title={
+                      isThisSplitting
+                        ? "Pro split in progress…"
+                        : "Pro 9-stem split — adds synthesizer / strings / wind via the phoenix splitter"
+                    }
+                    color="#fbbf24"
+                    borderColor="rgba(251,191,36,0.45)"
+                    activeBg="rgba(251,191,36,0.15)"
+                    onClick={(e) => { e.stopPropagation(); onSplitStemsPro(t); }}
                   />
                 )}
                 {onSplitVocals && (

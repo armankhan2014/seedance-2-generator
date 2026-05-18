@@ -266,3 +266,50 @@ export const STUDIO_DEFAULT_STEMS = [
   "electric_guitar",
   "acoustic_guitar",
 ];
+
+// "Pro 9-stem" mode — adds synth / strings / wind to the standard
+// 6. These three are only available via the /split/stem_separator/
+// endpoint with the phoenix splitter, NOT via /split/multistem/, so
+// the kickoff route fires one multistem call (the 6 above) PLUS
+// 3 parallel stem_separator calls for these three. Total: 4 LALAL
+// tasks per Pro 9-stem split.
+export const STUDIO_PRO_EXTRA_STEMS = ["synthesizer", "strings", "wind"];
+// Wholesale cost is 9 stem-minutes upstream per minute of source
+// audio. We charge 50 credits — ~3× margin at LALAL's standard
+// tier, still markedly cheaper than going to a dedicated stem
+// service for orchestral / electronic work.
+export const STUDIO_PRO_STEM_COST = 50;
+
+// Start a single-stem separator job. Used by Pro 9-stem mode to
+// extract the three multistem-unavailable stems (synth / strings
+// / wind). Phoenix splitter is the only one that supports these,
+// per the LALAL docs.
+//
+// Returns: { task_id }
+export async function startStemSeparator({ sourceId, stem }) {
+  const apiKey = ensureKey();
+  if (!stem) throw new Error("stem is required");
+  const res = await fetch(`${LALAL_BASE}/split/stem_separator/`, {
+    method: "POST",
+    headers: {
+      "X-License-Key": apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      source_id: sourceId,
+      presets: {
+        stem,
+        splitter: "phoenix",
+        extraction_level: "deep_extraction",
+      },
+    }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(json?.detail || `LALAL stem-separator error ${res.status}`);
+    err.status = res.status;
+    err.body = json;
+    throw err;
+  }
+  return json;
+}

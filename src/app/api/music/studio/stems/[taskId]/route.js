@@ -10,7 +10,13 @@
 //                  R2 URLs on MusicTrack.studioStems, refunds nothing
 //                  (paid + delivered), returns the final stem map.
 //   • "error" / "cancelled" → flips studioStemStatus to "failed" and
-//                  refunds STUDIO_STEM_COST credits.
+//                  refunds the mode-aware cost (6stem = 30, 9stem = 50).
+//
+// Pro 9-stem mode: the row stores 4 task IDs in studioStemTaskIds
+// (1 multistem + 3 stem_separator). We poll them all in ONE /check/
+// batch and only flip to "completed" when every task has finished.
+// Failure of any single task fails the whole job + refunds the full
+// Pro cost — the user paid for the bundle.
 //
 // Designed for the client to call every ~5-8 seconds. LALAL rate
 // limits /check/ at 30/min — well above our cadence.
@@ -25,6 +31,7 @@ import {
   deleteSource,
   isLalalConfigured,
   STUDIO_STEM_COST,
+  STUDIO_PRO_STEM_COST,
 } from "@/lib/lalal";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +65,8 @@ export async function GET(req, { params }) {
       id: true,
       userId: true,
       studioStemTaskId: true,
+      studioStemTaskIds: true,
+      studioStemMode: true,
       studioStemStatus: true,
       studioStems: true,
     },
@@ -78,10 +87,19 @@ export async function GET(req, { params }) {
     });
   }
 
-  // Hit LALAL /check/.
+  // Determine which task IDs to poll. New rows have studioStemTaskIds
+  // (an array); older rows from before R6 only have the single
+  // studioStemTaskId — fall back to that so legacy splits keep working.
+  const taskIds = Array.isArray(track.studioStemTaskIds) && track.studioStemTaskIds.length > 0
+    ? track.studioStemTaskIds
+    : [track.studioStemTaskId];
+  const mode = track.studioStemMode === "9stem" ? "9stem" : "6stem";
+  const refundAmount = mode === "9stem" ? STUDIO_PRO_STEM_COST : STUDIO_STEM_COST;
+
+  // Hit LALAL /check/ for all task IDs in one shot.
   let checkRes;
   try {
-    checkRes = await checkTasks([taskId]);
+    checkRes = await checkTasks(taskIds);
   } catch (e) {
     console.error("[STUDIO_STEMS_CHECK] LALAL check failed:", e?.message);
     return NextResponse.json(
@@ -89,35 +107,31 @@ export async function GET(req, { params }) {
       { status: e.status || 502 }
     );
   }
-  const taskResult = checkRes?.result?.[taskId];
-  if (!taskResult) {
+  const results = taskIds.map((id) => ({ id, r: checkRes?.result?.[id] }));
+  // Treat a missing task as a service-side expiry — same failure
+  // semantics as upstream "error".
+  const missing = results.filter((x) => !x.r);
+  if (missing.length > 0) {
     return NextResponse.json(
       { error: "Task not found upstream — may have expired (24h)." },
       { status: 404 }
     );
   }
 
-  // ── Still running ────────────────────────────────────────────
-  if (taskResult.status === "progress") {
-    return NextResponse.json({
-      ok: true,
-      studioStemStatus: "processing",
-      progress: taskResult.progress || 0,
-    });
-  }
-
-  // ── Failed ────────────────────────────────────────────────────
-  if (taskResult.status === "error" || taskResult.status === "cancelled" || taskResult.status === "server_error") {
-    const msg = typeof taskResult.error === "string"
-      ? taskResult.error
-      : taskResult.error?.detail || "Stem service failed";
+  // ── Failed (any single task failure fails the whole bundle) ──
+  const failed = results.find(
+    (x) => x.r.status === "error" || x.r.status === "cancelled" || x.r.status === "server_error"
+  );
+  if (failed) {
+    const msg = typeof failed.r.error === "string"
+      ? failed.r.error
+      : failed.r.error?.detail || "Stem service failed";
     await prisma.musicTrack.updateMany({
       where: { id: track.id, studioStemStatus: "processing" },
       data: { studioStemStatus: "failed", studioStemError: msg },
     });
-    // Refund.
     await prisma.user
-      .update({ where: { id: userId }, data: { credits: { increment: STUDIO_STEM_COST } } })
+      .update({ where: { id: userId }, data: { credits: { increment: refundAmount } } })
       .catch(() => {});
     return NextResponse.json({
       ok: true,
@@ -127,17 +141,34 @@ export async function GET(req, { params }) {
     });
   }
 
-  // ── Success — mirror stems to R2 ─────────────────────────────
-  if (taskResult.status === "success") {
-    const tracks = taskResult.result?.tracks || [];
-    // Build label → URL map from the upstream tracks array. We keep
-    // only "stem" type entries (the "back" entries are the
-    // everything-but-this-stem residuals; useful only for QA, skip
-    // for v0).
+  // ── Still running (any task not yet successful) ──────────────
+  const stillProgressing = results.filter((x) => x.r.status !== "success");
+  if (stillProgressing.length > 0) {
+    // Average upstream progress across all tasks for a smoother UI.
+    const sum = results.reduce((acc, x) => {
+      if (x.r.status === "success") return acc + 100;
+      return acc + (x.r.progress || 0);
+    }, 0);
+    const avg = Math.round(sum / results.length);
+    return NextResponse.json({
+      ok: true,
+      studioStemStatus: "processing",
+      progress: avg,
+    });
+  }
+
+  // ── All tasks succeeded — merge + mirror stems to R2 ─────────
+  {
+    // Build label → URL map by walking every task's tracks array.
+    // For multistem this gives 6 stems; each stem_separator task
+    // contributes 1 more. "back" entries (residuals) are skipped.
     const lalalUrls = {};
-    for (const t of tracks) {
-      if (t?.type === "stem" && t?.label && t?.url) {
-        lalalUrls[t.label] = t.url;
+    for (const { r } of results) {
+      const tracks = r.result?.tracks || [];
+      for (const t of tracks) {
+        if (t?.type === "stem" && t?.label && t?.url) {
+          lalalUrls[t.label] = t.url;
+        }
       }
     }
     if (Object.keys(lalalUrls).length === 0) {
@@ -147,7 +178,7 @@ export async function GET(req, { params }) {
         data: { studioStemStatus: "failed", studioStemError: "Upstream returned no stems" },
       });
       await prisma.user
-        .update({ where: { id: userId }, data: { credits: { increment: STUDIO_STEM_COST } } })
+        .update({ where: { id: userId }, data: { credits: { increment: refundAmount } } })
         .catch(() => {});
       return NextResponse.json({
         ok: true,
@@ -211,12 +242,4 @@ export async function GET(req, { params }) {
       studioStems,
     });
   }
-
-  // Unknown status — log and keep client polling.
-  console.warn("[STUDIO_STEMS_CHECK] Unknown status:", taskResult.status);
-  return NextResponse.json({
-    ok: true,
-    studioStemStatus: "processing",
-    progress: 0,
-  });
 }

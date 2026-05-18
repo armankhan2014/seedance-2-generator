@@ -367,6 +367,15 @@ model MusicTrack {
   studioStemStatus String?   // null | "processing" | "completed" | "failed"
   studioStems      Json?
   studioStemError  String?   @db.Text
+  // Pro 9-stem mode (R6): when the user picks Pro split, we fire
+  // ONE multistem call (the 6 standard stems) + 3 stem_separator
+  // calls (synth/strings/wind). studioStemTaskIds holds all 4
+  // task IDs as a JSON array; the check route polls them in one
+  // batched LALAL /check/ call and only flips to "completed"
+  // when every job is done. Null for legacy 6-stem splits — the
+  // single studioStemTaskId above is the only ID those use.
+  studioStemMode   String?   // null | "6stem" | "9stem"
+  studioStemTaskIds Json?
   // Studio Pro voice-clean (LALAL /split/voice_clean/). Strips
   // background noise from a vocal recording. Separate from stem
   // split so the two operations don't step on each other —

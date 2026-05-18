@@ -29,9 +29,12 @@ import { prisma } from "@/lib/prisma";
 import {
   uploadAudio,
   startMultistemSplit,
+  startStemSeparator,
   isLalalConfigured,
   STUDIO_STEM_COST,
+  STUDIO_PRO_STEM_COST,
   STUDIO_DEFAULT_STEMS,
+  STUDIO_PRO_EXTRA_STEMS,
 } from "@/lib/lalal";
 
 export const dynamic = "force-dynamic";
@@ -71,7 +74,7 @@ export async function POST(req) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
   const trackId = typeof body?.trackId === "string" ? body.trackId : "";
-  // Caller can override the stem list; default to the 4-stem
+  // Caller can override the stem list; default to the 6-stem
   // sensible-for-most-songs set. Clamp to LALAL's allowed values +
   // 6-stem max.
   const rawStems = Array.isArray(body?.stems) ? body.stems : STUDIO_DEFAULT_STEMS;
@@ -85,6 +88,11 @@ export async function POST(req) {
       { status: 400 }
     );
   }
+  // Mode: "6stem" (default, just multistem) vs "9stem" (multistem +
+  // 3 stem_separator calls for synth/strings/wind). Anything else
+  // is treated as 6stem to preserve backward compat with old clients.
+  const mode = body?.mode === "9stem" ? "9stem" : "6stem";
+  const cost = mode === "9stem" ? STUDIO_PRO_STEM_COST : STUDIO_STEM_COST;
 
   const track = await prisma.musicTrack.findFirst({
     where: { id: trackId, userId, deletedAt: null },
@@ -136,20 +144,22 @@ export async function POST(req) {
   }
 
   // ── Debit credits ──────────────────────────────────────────────
+  // Mode-aware: 6stem charges STUDIO_STEM_COST (30), 9stem charges
+  // STUDIO_PRO_STEM_COST (50) for the extra 3 stem_separator calls.
   const debit = await prisma.user.updateMany({
-    where: { id: userId, credits: { gte: STUDIO_STEM_COST } },
-    data: { credits: { decrement: STUDIO_STEM_COST } },
+    where: { id: userId, credits: { gte: cost } },
+    data: { credits: { decrement: cost } },
   });
   if (debit.count !== 1) {
     return NextResponse.json(
-      { error: "Insufficient credits", code: "NO_CREDITS", cost: STUDIO_STEM_COST },
+      { error: "Insufficient credits", code: "NO_CREDITS", cost },
       { status: 402 }
     );
   }
 
   async function refund(reason) {
     await prisma.user
-      .update({ where: { id: userId }, data: { credits: { increment: STUDIO_STEM_COST } } })
+      .update({ where: { id: userId }, data: { credits: { increment: cost } } })
       .catch((e) => console.error("[STUDIO_STEMS] refund failed:", e?.message));
     console.warn(`[STUDIO_STEMS] refund — ${reason}`);
   }
@@ -182,6 +192,11 @@ export async function POST(req) {
     );
   }
 
+  // Fire the multistem call (handles the 6 standard stems). For
+  // 9stem mode we then fan out to 3 parallel stem_separator calls
+  // for synth / strings / wind. The multistem one comes first so
+  // we can fail fast on the most expensive call without orphaning
+  // the others.
   let task;
   try {
     task = await startMultistemSplit({
@@ -198,11 +213,43 @@ export async function POST(req) {
     );
   }
 
+  // 9-stem mode: fan out 3 stem_separator jobs in parallel. If any
+  // one fails we refund + abort, but we leave the already-started
+  // multistem task to expire on its own (LALAL has no cancel; it'll
+  // just sit unread for 24h).
+  const allTaskIds = [task.task_id];
+  const allStems = [...stems];
+  if (mode === "9stem") {
+    let extraTasks;
+    try {
+      extraTasks = await Promise.all(
+        STUDIO_PRO_EXTRA_STEMS.map((stem) =>
+          startStemSeparator({ sourceId: upload.id, stem })
+        )
+      );
+    } catch (e) {
+      await refund("LALAL stem-separator start failed");
+      console.error("[STUDIO_STEMS] stem-separator start:", e?.message);
+      return NextResponse.json(
+        { error: e?.message || "Pro stem service couldn't start the extra jobs", refunded: true },
+        { status: e.status || 502 }
+      );
+    }
+    for (const t of extraTasks) allTaskIds.push(t.task_id);
+    for (const s of STUDIO_PRO_EXTRA_STEMS) allStems.push(s);
+  }
+
   try {
     await prisma.musicTrack.update({
       where: { id: track.id },
       data: {
+        // studioStemTaskId stays the multistem one — that's what the
+        // check route's auth check matches against. studioStemTaskIds
+        // holds ALL task IDs (1 for 6stem, 4 for 9stem) and is what
+        // the check route actually polls.
         studioStemTaskId: task.task_id,
+        studioStemTaskIds: allTaskIds,
+        studioStemMode: mode,
         studioStemStatus: "processing",
         studioStemError: null,
         // Stash the source_id + stem list inside studioStems so the
@@ -210,7 +257,7 @@ export async function POST(req) {
         // actual stem URLs on completion.
         studioStems: {
           _sourceId: upload.id,
-          _stems: stems,
+          _stems: allStems,
           _startedAt: Date.now(),
         },
       },
@@ -228,7 +275,8 @@ export async function POST(req) {
     ok: true,
     studioStemStatus: "processing",
     taskId: task.task_id,
-    stems,
-    cost: STUDIO_STEM_COST,
+    stems: allStems,
+    mode,
+    cost,
   });
 }
