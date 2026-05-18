@@ -130,6 +130,49 @@ export async function checkTasks(taskIds) {
   return json;
 }
 
+// Start a voice-clean job — removes background NOISE (wind / hum /
+// traffic / crowd) from a vocal recording, leaving a clean voice
+// stem. Distinct from multistem: this is for raw recordings that
+// are otherwise unusable, not for splitting finished tracks.
+//
+// `noiseLevel` is 0 (light), 1 (medium), or 2 (aggressive). Higher
+// strips more noise but can also chew into the voice itself —
+// default to 1 unless the user knows the source is very noisy.
+//
+// Returns: { task_id }
+export async function startVoiceClean({ sourceId, noiseLevel = 1 }) {
+  const apiKey = ensureKey();
+  const res = await fetch(`${LALAL_BASE}/split/voice_clean/`, {
+    method: "POST",
+    headers: {
+      "X-License-Key": apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      source_id: sourceId,
+      presets: {
+        stem: "voice",
+        noise_cancelling_level: noiseLevel,
+      },
+    }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(json?.detail || `LALAL voice-clean error ${res.status}`);
+    err.status = res.status;
+    err.body = json;
+    throw err;
+  }
+  return json;
+}
+
+// Flat credit cost for voice cleaning. Cheaper than multistem
+// because we only ask for ONE stem (the cleaned voice). LALAL
+// bills 1× duration in minutes; we charge 6 credits which gives
+// comfortable margin while staying obviously cheaper than the
+// 20-credit multistem split.
+export const VOICE_CLEAN_COST = 6;
+
 // Best-effort delete of a source file from LALAL storage. Doesn't
 // invalidate already-completed task download URLs immediately (CDN
 // caches them for 1h), but stops the source from counting against

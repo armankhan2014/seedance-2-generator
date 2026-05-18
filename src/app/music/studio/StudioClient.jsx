@@ -69,6 +69,12 @@ export default function StudioClient() {
   // was there).
   const [stemJob, setStemJob] = useState(null); // { trackId, taskId, status, progress, error }
 
+  // ── Voice-clean state (LALAL voice_clean endpoint) ─────────────
+  // Same shape as stemJob but for the cleaned-voice flow. Strips
+  // background noise from a track's vocal. Shares the same banner +
+  // polling pattern as stem split.
+  const [voiceCleanJob, setVoiceCleanJob] = useState(null);
+
   // ── Library state ─────────────────────────────────────────────
   const [library, setLibrary] = useState([]);
   const [libraryLoading, setLibraryLoading] = useState(true);
@@ -546,6 +552,122 @@ export default function StudioClient() {
     setTimeout(() => setStemMsg(""), 3000);
   }
 
+  // ── Voice cleaning (LALAL voice_clean) ───────────────────────
+  // Kick off a voice-clean job. Cheaper (6 credits) than stem
+  // split (20). Returns ONE cleaned-voice mp3 instead of 4 stems.
+  // On success, auto-loads onto the next empty lane (vs stem split
+  // which replaces the first 4 lanes).
+  async function cleanVoice(track) {
+    if (!track?.id) return;
+    if (voiceCleanJob && voiceCleanJob.status === "processing") {
+      flashStemMsg("Already cleaning a voice — wait for it to finish");
+      return;
+    }
+    setVoiceCleanJob({ trackId: track.id, status: "starting", progress: 0, sourceName: track.title });
+    try {
+      const res = await fetch("/api/music/studio/voice-clean/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trackId: track.id, noiseLevel: 1 }),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        setVoiceCleanJob({ trackId: track.id, status: "failed", error: j.error || "Couldn't start voice clean" });
+        return;
+      }
+      if (j.alreadyDone && j.voiceCleanUrl) {
+        setVoiceCleanJob({ trackId: track.id, status: "completed" });
+        loadCleanedVoiceOntoLane(j.voiceCleanUrl, track.title);
+        return;
+      }
+      setVoiceCleanJob({
+        trackId: track.id,
+        taskId: j.taskId,
+        status: "processing",
+        progress: 0,
+        sourceName: track.title,
+      });
+    } catch (e) {
+      setVoiceCleanJob({ trackId: track.id, status: "failed", error: e?.message || "Network error" });
+    }
+  }
+
+  // Poll voice-clean job — same 6s cadence as stem split. Stops on
+  // completion / failure / 5-min cap.
+  useEffect(() => {
+    if (!voiceCleanJob || voiceCleanJob.status !== "processing" || !voiceCleanJob.taskId || !voiceCleanJob.trackId) return;
+    let stopped = false;
+    let tries = 0;
+    const MAX = 50;
+    async function tick() {
+      while (!stopped && tries < MAX) {
+        await new Promise((r) => setTimeout(r, 6000));
+        if (stopped) return;
+        tries++;
+        try {
+          const res = await fetch(
+            `/api/music/studio/voice-clean/${voiceCleanJob.taskId}?trackId=${encodeURIComponent(voiceCleanJob.trackId)}`
+          );
+          const j = await res.json();
+          if (!res.ok) {
+            setVoiceCleanJob((prev) => ({ ...prev, status: "failed", error: j.error }));
+            return;
+          }
+          if (j.voiceCleanStatus === "completed" && j.voiceCleanUrl) {
+            setVoiceCleanJob({ trackId: voiceCleanJob.trackId, status: "completed" });
+            loadCleanedVoiceOntoLane(j.voiceCleanUrl, voiceCleanJob.sourceName);
+            return;
+          }
+          if (j.voiceCleanStatus === "failed") {
+            setVoiceCleanJob((prev) => ({ ...prev, status: "failed", error: j.error }));
+            return;
+          }
+          setVoiceCleanJob((prev) => ({ ...prev, progress: j.progress || 0 }));
+        } catch (e) {}
+      }
+      if (!stopped && tries >= MAX) {
+        setVoiceCleanJob((prev) => ({ ...prev, status: "failed", error: "Voice clean timed out (5 min)." }));
+      }
+    }
+    tick();
+    return () => { stopped = true; };
+  }, [voiceCleanJob?.taskId, voiceCleanJob?.trackId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load the cleaned voice onto the next empty lane (or lane 0 if
+  // all are full). Different from stem-split's applyStemsToLanes,
+  // which always targets lanes 0-3 — for a single cleaned voice we
+  // don't want to clobber existing arrangements.
+  async function loadCleanedVoiceOntoLane(url, sourceName) {
+    if (!url) return;
+    if (isPlaying) stopAll();
+    const targetIdx = lanes.findIndex((l) => !l.trackId);
+    const laneIndex = targetIdx === -1 ? 0 : targetIdx;
+    const niceName = `🧹 Clean: ${sourceName || "voice"}`;
+    setLanes((prev) =>
+      prev.map((l, i) =>
+        i === laneIndex
+          ? { ...l, trackId: `voice-clean:${Date.now()}`, src: url, name: niceName, loading: true, error: null }
+          : l
+      )
+    );
+    try {
+      const { audioBuffer, peaks, duration } = await decodeTrack(url);
+      setLanes((prev) =>
+        prev.map((l, i) =>
+          i === laneIndex
+            ? { ...l, audioBuffer, peaks, duration, loading: false }
+            : l
+        )
+      );
+    } catch (e) {
+      setLanes((prev) =>
+        prev.map((l, i) =>
+          i === laneIndex ? { ...l, loading: false, error: e?.message || "Cleaned voice load failed" } : l
+        )
+      );
+    }
+  }
+
   // ── Transport ────────────────────────────────────────────────
   // Play from current playhead. Schedule every loaded lane's
   // AudioBufferSourceNode at the SAME ctx.currentTime so they're
@@ -725,6 +847,7 @@ export default function StudioClient() {
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif" }}>
       <TopBar />
       <StemJobBanner job={stemJob} flash={stemMsg} onDismiss={() => setStemJob(null)} />
+      <VoiceCleanBanner job={voiceCleanJob} onDismiss={() => setVoiceCleanJob(null)} />
       <TransportBar
         isPlaying={isPlaying}
         playhead={playhead}
@@ -742,7 +865,9 @@ export default function StudioClient() {
           onDragStart={handleDragStart}
           onTap={loadIntoNextEmptyLane}
           onSplitStems={splitStems}
+          onCleanVoice={cleanVoice}
           stemJob={stemJob}
+          voiceCleanJob={voiceCleanJob}
         />
         <TimelineArea
           lanes={lanes}
@@ -946,6 +1071,127 @@ function StemJobBanner({ job, flash, onDismiss }) {
   );
 }
 
+// Banner shown above the transport bar while a voice-clean job is
+// running. Same shape as StemJobBanner but with a blue accent so
+// users can tell at a glance which operation is in flight.
+function VoiceCleanBanner({ job, onDismiss }) {
+  if (!job) return null;
+  if (job.status === "completed") {
+    return (
+      <div
+        style={{
+          padding: "10px 16px",
+          background: "rgba(96,165,250,0.10)",
+          borderBottom: `1px solid rgba(96,165,250,0.40)`,
+          fontSize: 12.5,
+          color: "#93c5fd",
+          fontWeight: 700,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+        }}
+      >
+        <span>✓ Cleaned voice loaded onto next empty lane — background noise removed.</span>
+        <button
+          onClick={onDismiss}
+          style={{
+            marginLeft: "auto",
+            padding: "3px 8px",
+            background: "transparent",
+            border: "1px solid rgba(96,165,250,0.50)",
+            borderRadius: 6,
+            color: "#93c5fd",
+            fontSize: 10.5,
+            fontWeight: 700,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          Dismiss
+        </button>
+      </div>
+    );
+  }
+  if (job.status === "failed") {
+    return (
+      <div
+        style={{
+          padding: "10px 16px",
+          background: "rgba(239,68,68,0.10)",
+          borderBottom: `1px solid rgba(239,68,68,0.32)`,
+          fontSize: 12.5,
+          color: "#fca5a5",
+          fontWeight: 600,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+        }}
+      >
+        <span>✕ Voice clean failed: {job.error || "Unknown error"}. Credits refunded.</span>
+        <button
+          onClick={onDismiss}
+          style={{
+            marginLeft: "auto",
+            padding: "3px 8px",
+            background: "transparent",
+            border: `1px solid rgba(239,68,68,0.5)`,
+            borderRadius: 6,
+            color: "#fca5a5",
+            fontSize: 10.5,
+            fontWeight: 700,
+            cursor: "pointer",
+            fontFamily: "inherit",
+          }}
+        >
+          Dismiss
+        </button>
+      </div>
+    );
+  }
+  const pct = Math.max(2, Math.min(100, job.progress || 0));
+  return (
+    <div
+      style={{
+        padding: "10px 16px",
+        background: C.panelSoft,
+        borderBottom: `1px solid ${C.border}`,
+        fontSize: 12.5,
+        color: C.textSoft,
+        fontWeight: 600,
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+      }}
+    >
+      <span style={{ flexShrink: 0 }}>
+        🧹 Cleaning voice on <b style={{ color: C.text }}>{job.sourceName || "track"}</b>…
+      </span>
+      <div
+        style={{
+          flex: 1,
+          maxWidth: 260,
+          height: 6,
+          background: "rgba(255,255,255,0.06)",
+          borderRadius: 999,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            height: "100%",
+            width: `${pct}%`,
+            background: "linear-gradient(90deg, #60a5fa, #3b82f6)",
+            transition: "width 0.4s",
+          }}
+        />
+      </div>
+      <span style={{ fontVariantNumeric: "tabular-nums", color: C.muted, fontSize: 11 }}>
+        {pct}%
+      </span>
+    </div>
+  );
+}
+
 // ── Transport bar ────────────────────────────────────────────────
 function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onStop, onMasterVolume, onSeek }) {
   return (
@@ -1063,7 +1309,7 @@ function transportBtnStyle() {
 }
 
 // ── Library sidebar ──────────────────────────────────────────────
-function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, stemJob }) {
+function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onCleanVoice, stemJob, voiceCleanJob }) {
   return (
     <aside
       style={{
@@ -1105,6 +1351,7 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, ste
       {!loading &&
         tracks.map((t) => {
           const isThisSplitting = stemJob?.trackId === t.id && stemJob?.status === "processing";
+          const isThisCleaning = voiceCleanJob?.trackId === t.id && voiceCleanJob?.status === "processing";
           return (
             <div
               key={t.id}
@@ -1143,34 +1390,64 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, ste
                   {t.actualDuration || t.durationReq ? ` · ${formatTime(t.actualDuration || t.durationReq)}` : ""}
                 </div>
               </div>
-              {onSplitStems && (
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); onSplitStems(t); }}
-                  disabled={isThisSplitting}
-                  title={
-                    isThisSplitting
-                      ? "Splitting in progress…"
-                      : "Split into 4 stems (vocals/drum/bass/piano) and load onto lanes · 20 credits"
-                  }
-                  style={{
-                    flexShrink: 0,
-                    padding: "5px 10px",
-                    borderRadius: 999,
-                    background: isThisSplitting ? C.accentSoft : "transparent",
-                    border: `1px solid ${C.borderHover}`,
-                    color: C.accent,
-                    fontSize: 10.5,
-                    fontWeight: 800,
-                    letterSpacing: "0.04em",
-                    cursor: isThisSplitting ? "default" : "pointer",
-                    fontFamily: "inherit",
-                    opacity: isThisSplitting ? 0.7 : 1,
-                  }}
-                >
-                  {isThisSplitting ? "…" : "🔬 Split"}
-                </button>
-              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, flexShrink: 0 }}>
+                {onSplitStems && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onSplitStems(t); }}
+                    disabled={isThisSplitting}
+                    title={
+                      isThisSplitting
+                        ? "Splitting in progress…"
+                        : "Split into 4 stems (vocals/drum/bass/piano) · 20 credits"
+                    }
+                    style={{
+                      padding: "4px 9px",
+                      borderRadius: 999,
+                      background: isThisSplitting ? C.accentSoft : "transparent",
+                      border: `1px solid ${C.borderHover}`,
+                      color: C.accent,
+                      fontSize: 10,
+                      fontWeight: 800,
+                      letterSpacing: "0.04em",
+                      cursor: isThisSplitting ? "default" : "pointer",
+                      fontFamily: "inherit",
+                      opacity: isThisSplitting ? 0.7 : 1,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {isThisSplitting ? "…" : "🔬 Split"}
+                  </button>
+                )}
+                {onCleanVoice && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onCleanVoice(t); }}
+                    disabled={isThisCleaning}
+                    title={
+                      isThisCleaning
+                        ? "Cleaning voice…"
+                        : "Strip background noise from the vocal · 6 credits"
+                    }
+                    style={{
+                      padding: "4px 9px",
+                      borderRadius: 999,
+                      background: isThisCleaning ? "rgba(96,165,250,0.20)" : "transparent",
+                      border: "1px solid rgba(96,165,250,0.50)",
+                      color: "#93c5fd",
+                      fontSize: 10,
+                      fontWeight: 800,
+                      letterSpacing: "0.04em",
+                      cursor: isThisCleaning ? "default" : "pointer",
+                      fontFamily: "inherit",
+                      opacity: isThisCleaning ? 0.7 : 1,
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {isThisCleaning ? "…" : "🧹 Clean"}
+                  </button>
+                )}
+              </div>
             </div>
           );
         })}

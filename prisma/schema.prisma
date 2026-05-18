@@ -367,6 +367,15 @@ model MusicTrack {
   studioStemStatus String?   // null | "processing" | "completed" | "failed"
   studioStems      Json?
   studioStemError  String?   @db.Text
+  // Studio Pro voice-clean (LALAL /split/voice_clean/). Strips
+  // background noise from a vocal recording. Separate from stem
+  // split so the two operations don't step on each other —
+  // user could split stems AND voice-clean the lead vocal on the
+  // same track if they wanted.
+  voiceCleanTaskId String?
+  voiceCleanStatus String?   // null | "processing" | "completed" | "failed"
+  voiceCleanUrl    String?   // R2-mirrored cleaned voice mp3
+  voiceCleanError  String?   @db.Text
   deletedAt      DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -381,6 +390,7 @@ model MusicTrack {
   @@index([stemTaskId])
   @@index([parentTrackId])
   @@index([studioStemTaskId])
+  @@index([voiceCleanTaskId])
 }
 
 // Web Push subscription for browser notifications. Mirrors the model
