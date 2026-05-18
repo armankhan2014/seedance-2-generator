@@ -2,14 +2,17 @@
 //
 // DEMO — Library sidebar reorganisation for /music/studio.
 //
-// Three changes vs. the live sidebar:
-//   1. Search box + sort dropdown at the top.
-//   2. Date-grouped sections (Today / This week / Earlier).
-//   3. Tighter rows — 2x2 grid of action pills instead of 1x4 stack.
+// v2 (Arman flagged v1 as still cluttered). Now: hover-reveal action
+// pills, single-line meta with truncation, fixed row height, denser
+// section dividers. Default row is just title + meta — clean. Pills
+// fade in on hover so the row stays calm at rest.
 //
-// All 4 action pills (Split / Pro 9 / Vocals / Clean) remain visible
-// per Arman's spec. Once approved, this gets ported into LibrarySidebar
-// inside StudioClient.jsx and this file gets deleted.
+// All 4 actions (Split / Pro 9 / Vocals / Clean) remain available
+// per Arman's spec — they're just hidden until intent (hover) is
+// shown. Cost moves into the native tooltip.
+//
+// Once approved, this gets ported into LibrarySidebar inside
+// StudioClient.jsx and this file gets deleted.
 
 import { useMemo, useState } from "react";
 
@@ -44,12 +47,12 @@ function hoursAgo(h) { return new Date(Date.now() - h * 3600_000).toISOString();
 function daysAgo(d)  { return new Date(Date.now() - d * 86400_000).toISOString(); }
 
 const SORT_OPTIONS = [
-  { id: "newest",  label: "Newest first"  },
-  { id: "oldest",  label: "Oldest first"  },
-  { id: "az",      label: "A → Z"          },
-  { id: "za",      label: "Z → A"          },
-  { id: "longest", label: "Longest first" },
-  { id: "shortest",label: "Shortest first"},
+  { id: "newest",   label: "Newest first"  },
+  { id: "oldest",   label: "Oldest first"  },
+  { id: "az",       label: "A → Z"         },
+  { id: "za",       label: "Z → A"         },
+  { id: "longest",  label: "Longest first" },
+  { id: "shortest", label: "Shortest first"},
 ];
 
 function formatTime(s) {
@@ -59,10 +62,6 @@ function formatTime(s) {
   return `${m}:${ss.toString().padStart(2, "0")}`;
 }
 
-// Group tracks into Today / This week / Earlier. Boundaries:
-//   Today    = last 24h
-//   This week = last 7 days (excluding Today)
-//   Earlier  = everything else
 function bucketTrack(iso) {
   const ageHr = (Date.now() - new Date(iso).getTime()) / 3600_000;
   if (ageHr < 24)   return "Today";
@@ -96,8 +95,6 @@ export default function LibraryDemoPage() {
     return sorted;
   }, [query, sort]);
 
-  // Group only when sort respects time order. Other sorts present a
-  // single flat list so the user's chosen order isn't fragmented.
   const grouped = useMemo(() => {
     if (sort !== "newest" && sort !== "oldest") return null;
     const buckets = { "Today": [], "This week": [], "Earlier": [] };
@@ -108,17 +105,15 @@ export default function LibraryDemoPage() {
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, padding: 24, fontFamily: "system-ui, sans-serif" }}>
       <h1 style={{ fontSize: 16, fontWeight: 800, letterSpacing: "0.04em", textTransform: "uppercase", color: C.accent, marginBottom: 6 }}>
-        Demo · Library sidebar reorg
+        Demo · Library sidebar (v2)
       </h1>
       <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.55, maxWidth: 640, marginBottom: 18 }}>
-        Search + sort at the top, date-grouped sections, tighter rows with a 2x2 pill grid.
-        All 4 actions stay visible. Mock data — once you approve the look, I&rsquo;ll port this
-        into the real <code style={{ background: C.panelSoft, padding: "1px 5px", borderRadius: 4 }}>LibrarySidebar</code>
-        in <code style={{ background: C.panelSoft, padding: "1px 5px", borderRadius: 4 }}>StudioClient.jsx</code> and delete this page.
+        Each row is now just title + meta. <strong style={{ color: C.textSoft }}>Hover a row</strong>
+        {" "}to reveal the 4 action pills. Cost moved into tooltip. Search + sort sticky at top.
+        Date-group dividers stay subtle.
       </p>
 
       <div style={{ display: "flex", gap: 24, alignItems: "flex-start" }}>
-        {/* Left: the new sidebar. */}
         <LibrarySidebar
           tracks={filtered}
           grouped={grouped}
@@ -128,35 +123,28 @@ export default function LibraryDemoPage() {
           setSort={setSort}
         />
 
-        {/* Right: side-by-side reference of what the live one looks like today. */}
-        <div style={{ flex: 1, fontSize: 12, color: C.textSoft, lineHeight: 1.6 }}>
+        <div style={{ flex: 1, fontSize: 12, color: C.textSoft, lineHeight: 1.6, maxWidth: 480 }}>
           <div style={{ fontSize: 11, color: C.accent, letterSpacing: "0.16em", fontWeight: 800, textTransform: "uppercase", marginBottom: 8 }}>
-            What&rsquo;s new
+            What changed vs. v1
           </div>
           <ul style={{ paddingLeft: 18, margin: 0 }}>
-            <li>Sticky <strong>search</strong> filters title, genre, mood.</li>
-            <li>Sort dropdown: newest / oldest / A-Z / Z-A / longest / shortest.</li>
-            <li>Sections: <em>Today</em> · <em>This week</em> · <em>Earlier</em> (only shown for time-based sorts).</li>
-            <li>Action pills go from a vertical 1x4 stack to a <strong>2x2 grid</strong> — row height ~halved.</li>
-            <li>Drag-handle indicator <code>⋮⋮</code> on hover so the drag affordance is obvious.</li>
-            <li>Empty state inside a section reads &ldquo;Nothing here&rdquo; (vs. silent blank).</li>
+            <li>Action pills are <strong>hidden by default</strong> — only show on row hover. Row stays calm.</li>
+            <li>Single-line meta with ellipsis truncation; row height is fixed at ~46px.</li>
+            <li>Cost lives in the tooltip, not on the pill — pill is icon-only.</li>
+            <li>Search + sort are sticky and use the same monochrome treatment as the rest of Studio.</li>
+            <li>Section dividers are 1px thin rules with a small uppercase label.</li>
           </ul>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 14, lineHeight: 1.5 }}>
-            Try the search and sort live ↑. Hover a row to see the drag handle. Action pills are click-stubbed
-            (no-op) in the demo.
-          </div>
         </div>
       </div>
     </div>
   );
 }
 
-// ── The new library sidebar component ────────────────────────────
 function LibrarySidebar({ tracks, grouped, query, setQuery, sort, setSort }) {
   return (
     <aside
       style={{
-        width: 280,
+        width: 300,
         flexShrink: 0,
         height: "calc(100vh - 100px)",
         borderRight: `1px solid ${C.border}`,
@@ -164,13 +152,13 @@ function LibrarySidebar({ tracks, grouped, query, setQuery, sort, setSort }) {
         overflowY: "auto",
         display: "flex",
         flexDirection: "column",
-        borderRadius: 6,
+        borderRadius: 8,
       }}
     >
-      {/* Sticky header: title + search + sort */}
+      {/* Sticky header */}
       <div
         style={{
-          padding: "12px 14px 10px",
+          padding: "14px 14px 10px",
           borderBottom: `1px solid ${C.border}`,
           position: "sticky",
           top: 0,
@@ -178,16 +166,17 @@ function LibrarySidebar({ tracks, grouped, query, setQuery, sort, setSort }) {
           zIndex: 2,
         }}
       >
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 10 }}>
           <div style={{ fontSize: 10, color: C.accent, letterSpacing: "0.16em", fontWeight: 800, textTransform: "uppercase" }}>
             Your library
           </div>
-          <div style={{ fontSize: 10, color: C.muted }}>{tracks.length} track{tracks.length === 1 ? "" : "s"}</div>
+          <div style={{ fontSize: 10, color: C.muted, fontWeight: 600 }}>
+            {tracks.length} track{tracks.length === 1 ? "" : "s"}
+          </div>
         </div>
 
-        {/* Search */}
-        <div style={{ position: "relative", marginBottom: 6 }}>
-          <span style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: C.muted, pointerEvents: "none" }}>🔍</span>
+        <div style={{ position: "relative", marginBottom: 8 }}>
+          <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: C.muted, pointerEvents: "none" }}>🔍</span>
           <input
             type="text"
             value={query}
@@ -196,8 +185,8 @@ function LibrarySidebar({ tracks, grouped, query, setQuery, sort, setSort }) {
             style={{
               width: "100%",
               boxSizing: "border-box",
-              padding: "6px 8px 6px 26px",
-              fontSize: 11.5,
+              padding: "7px 8px 7px 28px",
+              fontSize: 12,
               background: C.panelSoft,
               border: `1px solid ${C.border}`,
               borderRadius: 6,
@@ -210,16 +199,15 @@ function LibrarySidebar({ tracks, grouped, query, setQuery, sort, setSort }) {
           />
         </div>
 
-        {/* Sort */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 10, color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase" }}>Sort</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 9.5, color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 700 }}>Sort</span>
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value)}
             style={{
               flex: 1,
               padding: "4px 6px",
-              fontSize: 11,
+              fontSize: 11.5,
               background: C.panelSoft,
               border: `1px solid ${C.border}`,
               borderRadius: 5,
@@ -236,23 +224,25 @@ function LibrarySidebar({ tracks, grouped, query, setQuery, sort, setSort }) {
         </div>
       </div>
 
-      {/* Track list */}
       {tracks.length === 0 && (
-        <div style={{ padding: 18, fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>
+        <div style={{ padding: 20, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
           No tracks match &ldquo;<span style={{ color: C.textSoft }}>{query}</span>&rdquo;.
         </div>
       )}
+
       {tracks.length > 0 && !grouped && tracks.map((t) => <TrackRow key={t.id} t={t} />)}
+
       {tracks.length > 0 && grouped && (
         <>
-          {(["Today", "This week", "Earlier"]).map((bucket) => (
-            <Section key={bucket} title={bucket} count={grouped[bucket].length}>
-              {grouped[bucket].length === 0
-                ? <div style={{ padding: "8px 14px", fontSize: 10.5, color: C.muted, fontStyle: "italic" }}>Nothing here.</div>
-                : grouped[bucket].map((t) => <TrackRow key={t.id} t={t} />)
-              }
-            </Section>
-          ))}
+          {(["Today", "This week", "Earlier"]).map((bucket) => {
+            const rows = grouped[bucket];
+            if (rows.length === 0) return null; // hide empty sections entirely
+            return (
+              <Section key={bucket} title={bucket} count={rows.length}>
+                {rows.map((t) => <TrackRow key={t.id} t={t} />)}
+              </Section>
+            );
+          })}
         </>
       )}
     </aside>
@@ -264,14 +254,12 @@ function Section({ title, count, children }) {
     <div>
       <div
         style={{
-          padding: "8px 14px 4px",
+          padding: "10px 14px 5px",
           fontSize: 9.5,
           fontWeight: 800,
-          letterSpacing: "0.14em",
+          letterSpacing: "0.16em",
           textTransform: "uppercase",
           color: C.muted,
-          background: C.panel,
-          borderBottom: `1px solid ${C.border}`,
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -279,113 +267,128 @@ function Section({ title, count, children }) {
         }}
       >
         <span>{title}</span>
-        <span style={{ fontSize: 9, color: C.muted, fontWeight: 600 }}>{count}</span>
+        <span style={{ fontSize: 9, color: C.muted, fontWeight: 600, opacity: 0.7 }}>{count}</span>
       </div>
       {children}
     </div>
   );
 }
 
+// One library row. Fixed-height. Hover reveals action pills.
 function TrackRow({ t }) {
   const [hover, setHover] = useState(false);
+  // Single-line meta string. Genre + (BPM) + (duration).
+  const meta = [
+    t.genre || "—",
+    t.tempo ? `${t.tempo} BPM` : null,
+    t.actualDuration ? formatTime(t.actualDuration) : null,
+  ].filter(Boolean).join(" · ");
+
   return (
     <div
       style={{
-        padding: "7px 10px 7px 14px",
+        position: "relative",
+        height: 46,
+        padding: "0 12px 0 14px",
         borderBottom: `1px solid ${C.border}`,
         cursor: "grab",
         userSelect: "none",
         transition: "background 0.12s",
         display: "flex",
-        alignItems: "flex-start",
-        gap: 8,
+        alignItems: "center",
+        gap: 10,
         background: hover ? C.panelSoft : "transparent",
       }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       title="Drag onto a lane, or tap to load into the next empty lane"
     >
-      {/* Drag handle — visible on hover only, keeps row clean by default */}
-      <div
-        style={{
-          fontSize: 11,
-          color: hover ? C.muted : "transparent",
-          paddingTop: 2,
-          transition: "color 0.12s",
-          flexShrink: 0,
-          fontFamily: "monospace",
-          letterSpacing: "-2px",
-        }}
-      >
-        ⋮⋮
-      </div>
-
-      {/* Title + meta */}
+      {/* Title + meta — left side, claims the row */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
-            fontSize: 12.5,
+            fontSize: 13,
             fontWeight: 700,
             color: C.text,
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
+            lineHeight: 1.2,
           }}
         >
           {t.title}
         </div>
-        <div style={{ fontSize: 10.5, color: C.muted, marginTop: 1 }}>
-          {(t.genre || "—")}{t.mood ? ` · ${t.mood}` : ""}{t.tempo ? ` · ${t.tempo} BPM` : ""}
-          {t.actualDuration ? ` · ${formatTime(t.actualDuration)}` : ""}
+        <div
+          style={{
+            fontSize: 10.5,
+            color: C.muted,
+            marginTop: 2,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            lineHeight: 1.2,
+          }}
+        >
+          {meta}
         </div>
       </div>
 
-      {/* 2x2 action pill grid — half the vertical bulk of the live 1x4 stack */}
+      {/* Action pills — fade in on hover. The right edge gets a subtle
+          gradient mask so long titles don't visibly slam into the pills. */}
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "auto auto",
-          gap: 3,
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
           flexShrink: 0,
+          opacity: hover ? 1 : 0,
+          pointerEvents: hover ? "auto" : "none",
+          transition: "opacity 0.14s",
+          // Subtle paint behind the pills to ensure legibility even
+          // if the title is long and overflows visually.
+          background: hover ? `linear-gradient(to right, transparent 0, ${C.panelSoft} 12px)` : "transparent",
+          paddingLeft: 12,
         }}
       >
-        <ActionPill label="🔬"  cost={30} title="Split into 6 stems"                       color="#D9FF00" borderColor="rgba(217,255,0,0.40)" />
-        <ActionPill label="🔬+" cost={50} title="Pro 9-stem (adds synth / strings / wind)"  color="#fbbf24" borderColor="rgba(251,191,36,0.45)" />
-        <ActionPill label="🎤"  cost={10} title="Split lead vs backing vocals"              color="#c4b5fd" borderColor="rgba(196,181,253,0.55)" />
-        <ActionPill label="🧹"  cost={6}  title="Strip background noise from vocals"        color="#93c5fd" borderColor="rgba(96,165,250,0.50)" />
+        <IconPill icon="🔬"  cost={30} title="Split into 6 stems"                       color="#D9FF00" borderColor="rgba(217,255,0,0.40)" />
+        <IconPill icon="🔬+" cost={50} title="Pro 9-stem (adds synth / strings / wind)"  color="#fbbf24" borderColor="rgba(251,191,36,0.45)" />
+        <IconPill icon="🎤"  cost={10} title="Split lead vs backing vocals"              color="#c4b5fd" borderColor="rgba(196,181,253,0.55)" />
+        <IconPill icon="🧹"  cost={6}  title="Strip background noise from vocals"        color="#93c5fd" borderColor="rgba(96,165,250,0.50)" />
       </div>
     </div>
   );
 }
 
-// Compact icon-only pill — wider tooltips carry the full description.
-// The cost is on a second line so we keep the pill near-square in the
-// 2x2 grid. Hover surfaces full title text via the native tooltip.
-function ActionPill({ label, cost, title, color, borderColor }) {
+// Compact circular icon button. Cost lives in the tooltip.
+function IconPill({ icon, cost, title, color, borderColor }) {
+  const [h, setH] = useState(false);
   return (
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); }}
+      onMouseEnter={() => setH(true)}
+      onMouseLeave={() => setH(false)}
       title={`${title} · ${cost} credits`}
       style={{
-        padding: "3px 6px",
-        borderRadius: 8,
-        background: "transparent",
+        width: 26,
+        height: 26,
+        borderRadius: 999,
+        background: h ? `${color}1a` : "transparent",  // 1a = 10% alpha
         border: `1px solid ${borderColor}`,
         color,
-        fontSize: 11,
-        fontWeight: 800,
+        fontSize: 12,
+        fontWeight: 700,
         cursor: "pointer",
         fontFamily: "inherit",
         display: "flex",
-        flexDirection: "column",
         alignItems: "center",
+        justifyContent: "center",
+        padding: 0,
         lineHeight: 1,
-        minWidth: 30,
+        transition: "background 0.1s",
       }}
     >
-      <span style={{ fontSize: 12 }}>{label}</span>
-      <span style={{ fontSize: 8.5, fontWeight: 600, opacity: 0.7, marginTop: 1, letterSpacing: 0 }}>{cost}c</span>
+      {icon}
     </button>
   );
 }
