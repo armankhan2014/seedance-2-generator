@@ -84,13 +84,11 @@ export default function StudioClient() {
   // split which always targets lanes 0-5).
   const [vocalsSplitJob, setVocalsSplitJob] = useState(null);
 
-  // ── Lane selection ───────────────────────────────────────────
-  // Single-select. Click a lane's waveform area to select it; press
-  // Delete/Backspace (or use the right-click menu) to clear it.
-  const [selectedLaneIndex, setSelectedLaneIndex] = useState(null);
-  // Right-click context-menu state: { laneIndex, x, y } in viewport
-  // coords, or null when closed.
-  const [laneContext, setLaneContext] = useState(null);
+  // ── Clip context menu (right-click) ──────────────────────────
+  // { laneIndex, clipId, x, y } in viewport coords, or null when
+  // closed. The actual clip selection lives in selectedClip (below
+  // the lane state declaration).
+  const [clipContext, setClipContext] = useState(null);
 
   // ── Library state ─────────────────────────────────────────────
   const [library, setLibrary] = useState([]);
@@ -125,7 +123,10 @@ export default function StudioClient() {
   //
   // Throttled write — debounced 500ms so a slider drag doesn't
   // hammer localStorage on every pixel.
-  const STORAGE_KEY = "sd-studio-v0-state";
+  // Bumped from v0 → v1 in R8 — lane.audioBuffer/peaks/duration
+  // moved into lane.clips[] with trim/move support, so the old
+  // saved shape doesn't carry forward.
+  const STORAGE_KEY = "sd-studio-v1-state";
   const restoredRef = useRef(false);
   // Restore once, after library loads + before any user input.
   useEffect(() => {
@@ -135,11 +136,10 @@ export default function StudioClient() {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return;
       const saved = JSON.parse(raw);
-      if (!saved || saved.version !== 1) return;
+      if (!saved || saved.version !== 2) return;
       if (Number.isFinite(saved.masterVolume)) setMasterVolume(saved.masterVolume);
       if (Array.isArray(saved.lanes)) {
-        // Hydrate non-audio lane settings first (volume / mute /
-        // solo) so they apply immediately.
+        // Hydrate non-audio lane settings first.
         setLanes((prev) =>
           prev.map((l, i) => {
             const s = saved.lanes[i];
@@ -150,16 +150,43 @@ export default function StudioClient() {
               muted: !!s.muted,
               solo: !!s.solo,
               customName: typeof s.customName === "string" ? s.customName : null,
+              tempo: s.tempo || null,
             };
           })
         );
-        // Then async-load any lanes with a saved trackId. Loop
-        // synchronously to preserve order; loadLane handles
-        // decode + state update.
+        // Async-rebuild clips: for each saved clip we re-decode the
+        // audio at its src and rebuild the in-memory clip with the
+        // preserved trim/timeline state.
         saved.lanes.forEach((s, i) => {
-          if (!s?.trackId) return;
-          const track = library.find((t) => t.id === s.trackId);
-          if (track) loadLane(i, track);
+          if (!Array.isArray(s?.clips) || s.clips.length === 0) return;
+          (async () => {
+            const rebuilt = [];
+            for (const c of s.clips) {
+              if (!c?.src) continue;
+              try {
+                const { audioBuffer, peaks, duration } = await decodeTrack(c.src);
+                rebuilt.push({
+                  id: c.id || newClipId(),
+                  trackId: c.trackId || null,
+                  src: c.src,
+                  name: c.name || "",
+                  audioBuffer, peaks,
+                  bufferDuration: c.bufferDuration || duration,
+                  sourceStart: Number.isFinite(c.sourceStart) ? c.sourceStart : 0,
+                  sourceEnd: Number.isFinite(c.sourceEnd) ? c.sourceEnd : duration,
+                  timelineStart: Number.isFinite(c.timelineStart) ? c.timelineStart : 0,
+                  fadeIn: c.fadeIn || 0,
+                  fadeOut: c.fadeOut || 0,
+                });
+              } catch (e) {
+                console.warn("[STUDIO_RESTORE] clip decode failed:", e?.message);
+              }
+            }
+            if (rebuilt.length === 0) return;
+            setLanes((prev) =>
+              prev.map((l, idx) => (idx === i ? { ...l, clips: rebuilt } : l))
+            );
+          })();
         });
       }
     } catch {}
@@ -174,30 +201,75 @@ export default function StudioClient() {
   // any signed-in user. Search "Persist on every relevant change"
   // to find its new home.
 
-  // ── Lanes state (v0: 3 fixed) ─────────────────────────────────
-  // Each lane has: { trackId, src, name, hue, audioBuffer, peaks,
-  // duration, volume (0..1), muted, solo }. trackId === null means
-  // empty lane.
+  // ── Lanes state (R8: multi-clip per lane) ────────────────────
+  // Each lane is a horizontal row that owns a list of CLIPS. A clip
+  // is a region of an audio source placed at a specific timeline
+  // start position — that's what makes cut / trim / move / copy /
+  // paste possible. A lane with `clips: []` is empty.
+  //
+  // Lane shape: { customName, hue, volume, muted, solo, tempo,
+  //               clips: [], loading, error }
+  // Clip shape: { id, trackId, src, name, audioBuffer, peaks,
+  //               bufferDuration, sourceStart, sourceEnd,
+  //               timelineStart, fadeIn, fadeOut }
+  // Clip play duration  = sourceEnd - sourceStart.
+  // Clip timeline span  = [timelineStart, timelineStart + (sourceEnd - sourceStart)].
   const [lanes, setLanes] = useState(() =>
     Array.from({ length: LANE_COUNT }, (_, i) => ({
-      trackId: null,
-      src: null,
-      name: null,
-      // Optional user-set rename — survives across reloads via the
-      // existing localStorage persistence loop. Falls through to
-      // `name` when null.
       customName: null,
       hue: LANE_HUES[i],
-      audioBuffer: null,
-      peaks: null,
-      duration: 0,
       volume: 0.85,
       muted: false,
       solo: false,
+      tempo: null,
+      clips: [],
       loading: false,
       error: null,
     }))
   );
+  // Clip selection — used by Delete/Backspace, the right-click menu,
+  // and copy/paste/duplicate. Stored as `{ laneIndex, clipId }` so
+  // we can locate the clip even after re-renders shuffle array order.
+  const [selectedClip, setSelectedClip] = useState(null);
+  // Clipboard for Cmd+C / Cmd+V. Holds a frozen snapshot of the
+  // last copied clip (audioBuffer + peaks + trim points).
+  const clipboardRef = useRef(null);
+
+  // ── Clip helpers ─────────────────────────────────────────────
+  // Stable id for new clips. Doesn't need to be cryptographically
+  // unique — just unique within a session.
+  function newClipId() {
+    return `c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+  // Audio length of a clip (sec) — what plays when scheduled.
+  function clipDur(c) { return Math.max(0, c.sourceEnd - c.sourceStart); }
+  // Where the clip ends on the global timeline (sec).
+  function clipEnd(c) { return c.timelineStart + clipDur(c); }
+  // Is the lane currently sounding anything? Used for "do we have
+  // audio loaded" checks throughout.
+  function laneHasAudio(lane) { return lane.clips && lane.clips.length > 0; }
+  // First clip on the lane (or null) — convenience for display
+  // surfaces that only need ONE representative clip (lane header
+  // name, BPM resolution, etc.).
+  function firstClip(lane) { return lane.clips?.[0] || null; }
+  // Latest end-time across all clips on this lane.
+  function laneEndTime(lane) {
+    if (!lane.clips || lane.clips.length === 0) return 0;
+    let max = 0;
+    for (const c of lane.clips) {
+      const e = clipEnd(c);
+      if (e > max) max = e;
+    }
+    return max;
+  }
+  // Display name for a lane — user override beats the first clip's
+  // source name. The lane "name" is whatever the first clip carries.
+  function laneDisplayName(lane, fallbackIndex) {
+    if (lane.customName) return lane.customName;
+    const c = firstClip(lane);
+    if (c?.name) return c.name;
+    return `Track ${fallbackIndex + 1}`;
+  }
 
   // ── Audio engine — single AudioContext shared by all lanes ───
   const ctxRef = useRef(null);
@@ -283,15 +355,30 @@ export default function StudioClient() {
     const t = setTimeout(() => {
       try {
         const payload = {
-          version: 1,
+          version: 2,
           savedAt: Date.now(),
           masterVolume,
           lanes: lanes.map((l) => ({
-            trackId: l.trackId,
             volume: l.volume,
             muted: l.muted,
             solo: l.solo,
             customName: l.customName,
+            tempo: l.tempo,
+            // Clips: persist only what's needed to reconstruct after
+            // re-decode. audioBuffer / peaks are reconstructed from
+            // the source URL on restore.
+            clips: (l.clips || []).map((c) => ({
+              id: c.id,
+              trackId: c.trackId,
+              src: c.src,
+              name: c.name,
+              bufferDuration: c.bufferDuration,
+              sourceStart: c.sourceStart,
+              sourceEnd: c.sourceEnd,
+              timelineStart: c.timelineStart,
+              fadeIn: c.fadeIn,
+              fadeOut: c.fadeOut,
+            })),
           })),
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
@@ -319,11 +406,9 @@ export default function StudioClient() {
         seekTo(loopRegion.start);
         return; // seekTo restarts the playback loop; next RAF picks up there.
       }
-      // Auto-stop at end of longest lane (or timeline cap).
-      const maxDur = Math.max(
-        ...lanes.map((l) => (l.audioBuffer ? l.duration : 0)),
-        0.001
-      );
+      // Auto-stop at the end of the longest-running lane (latest
+      // clip end across all clips on any lane), or the timeline cap.
+      const maxDur = Math.max(...lanes.map(laneEndTime), 0.001);
       const stopAt = Math.min(TIMELINE_SECONDS, maxDur || TIMELINE_SECONDS);
       if (p >= stopAt) {
         stopAll();
@@ -425,17 +510,31 @@ export default function StudioClient() {
     setLanes((prev) =>
       prev.map((l, i) =>
         i === laneIndex
-          ? { ...l, trackId: track.id, src, name: track.title, tempo: track.tempo || null, loading: true, error: null }
+          ? { ...l, tempo: track.tempo || l.tempo, loading: true, error: null }
           : l
       )
     );
     try {
       ensureCtx();
       const { audioBuffer, peaks, duration } = await decodeTrack(src);
+      const clip = {
+        id: newClipId(),
+        trackId: track.id,
+        src,
+        name: track.title,
+        audioBuffer,
+        peaks,
+        bufferDuration: duration,
+        sourceStart: 0,
+        sourceEnd: duration,
+        timelineStart: 0,
+        fadeIn: 0,
+        fadeOut: 0,
+      };
       setLanes((prev) =>
         prev.map((l, i) =>
           i === laneIndex
-            ? { ...l, audioBuffer, peaks, duration, loading: false }
+            ? { ...l, clips: [clip], loading: false }
             : l
         )
       );
@@ -452,7 +551,7 @@ export default function StudioClient() {
 
   // Pick the next empty lane for "tap to load" (vs explicit drag).
   function loadIntoNextEmptyLane(track) {
-    const idx = lanes.findIndex((l) => !l.trackId);
+    const idx = lanes.findIndex((l) => !laneHasAudio(l));
     if (idx === -1) {
       // All lanes full — replace the first one.
       loadLane(0, track);
@@ -466,31 +565,212 @@ export default function StudioClient() {
     setLanes((prev) =>
       prev.map((l, i) =>
         i === laneIndex
-          ? { ...l, trackId: null, src: null, name: null, audioBuffer: null, peaks: null, duration: 0, error: null }
+          ? { ...l, clips: [], tempo: null, error: null }
           : l
       )
     );
-    // Drop selection if the cleared lane was the selected one.
-    setSelectedLaneIndex((prev) => (prev === laneIndex ? null : prev));
+    // Drop clip selection if it lived on the cleared lane.
+    setSelectedClip((prev) => (prev?.laneIndex === laneIndex ? null : prev));
   }
 
-  // Delete / Backspace clears the currently selected lane. Skips when
-  // the user is typing in an input/textarea/contenteditable so the
-  // rename + search boxes aren't affected.
+  // Remove a single clip from a lane (the multi-clip-aware delete).
+  // Drops clip selection if it pointed at this clip.
+  function deleteClip(laneIndex, clipId) {
+    if (isPlaying) stopAll();
+    setLanes((prev) =>
+      prev.map((l, i) =>
+        i === laneIndex
+          ? { ...l, clips: l.clips.filter((c) => c.id !== clipId) }
+          : l
+      )
+    );
+    setSelectedClip((prev) =>
+      prev && prev.laneIndex === laneIndex && prev.clipId === clipId ? null : prev
+    );
+  }
+
+  // Update a single clip in-place (used by trim, move, fade ops).
+  function updateClip(laneIndex, clipId, patch) {
+    setLanes((prev) =>
+      prev.map((l, i) =>
+        i === laneIndex
+          ? { ...l, clips: l.clips.map((c) => (c.id === clipId ? { ...c, ...patch } : c)) }
+          : l
+      )
+    );
+  }
+
+  // Move clip to a new timeline start (clamped >= 0).
+  function moveClip(laneIndex, clipId, newTimelineStart) {
+    updateClip(laneIndex, clipId, { timelineStart: Math.max(0, newTimelineStart) });
+  }
+
+  // Drag the LEFT edge inward: sourceStart goes forward (crops the
+  // beginning), timelineStart shifts forward by the same delta so
+  // the clip's right edge stays put on the timeline. delta can be
+  // negative to "uncrop" back to the original sourceStart=0.
+  function trimClipLeft(laneIndex, clipId, deltaSec) {
+    setLanes((prev) =>
+      prev.map((l, i) => {
+        if (i !== laneIndex) return l;
+        const clip = l.clips.find((c) => c.id === clipId);
+        if (!clip) return l;
+        const MIN_CLIP = 0.05;
+        let nextSourceStart = clip.sourceStart + deltaSec;
+        // Bounds: can't go below 0 of the buffer, can't cross sourceEnd.
+        nextSourceStart = Math.max(0, Math.min(clip.sourceEnd - MIN_CLIP, nextSourceStart));
+        const actualDelta = nextSourceStart - clip.sourceStart;
+        const nextTimelineStart = Math.max(0, clip.timelineStart + actualDelta);
+        return {
+          ...l,
+          clips: l.clips.map((c) =>
+            c.id === clipId
+              ? { ...c, sourceStart: nextSourceStart, timelineStart: nextTimelineStart }
+              : c
+          ),
+        };
+      })
+    );
+  }
+
+  // Drag the RIGHT edge: sourceEnd shifts (crops/extends the end).
+  // Can't go past bufferDuration or cross sourceStart.
+  function trimClipRight(laneIndex, clipId, deltaSec) {
+    setLanes((prev) =>
+      prev.map((l, i) => {
+        if (i !== laneIndex) return l;
+        const clip = l.clips.find((c) => c.id === clipId);
+        if (!clip) return l;
+        const MIN_CLIP = 0.05;
+        const nextSourceEnd = Math.max(
+          clip.sourceStart + MIN_CLIP,
+          Math.min(clip.bufferDuration, clip.sourceEnd + deltaSec)
+        );
+        return {
+          ...l,
+          clips: l.clips.map((c) => (c.id === clipId ? { ...c, sourceEnd: nextSourceEnd } : c)),
+        };
+      })
+    );
+  }
+
+  // Cut the selected clip at the current playhead. Splits one clip
+  // into two that share the same audioBuffer but cover adjacent
+  // [sourceStart, splitPoint] and [splitPoint, sourceEnd] regions.
+  // No-op if playhead doesn't fall within the selected clip.
+  function splitSelectedClipAtPlayhead() {
+    if (!selectedClip) return;
+    const { laneIndex, clipId } = selectedClip;
+    setLanes((prev) =>
+      prev.map((l, i) => {
+        if (i !== laneIndex) return l;
+        const clip = l.clips.find((c) => c.id === clipId);
+        if (!clip) return l;
+        // Where in the clip's source does the playhead land?
+        const offsetIntoClip = playhead - clip.timelineStart;
+        if (offsetIntoClip <= 0.02 || offsetIntoClip >= clipDur(clip) - 0.02) return l;
+        const splitSource = clip.sourceStart + offsetIntoClip;
+        const splitTimeline = clip.timelineStart + offsetIntoClip;
+        const left = { ...clip, sourceEnd: splitSource, fadeOut: 0 };
+        const right = {
+          ...clip,
+          id: newClipId(),
+          sourceStart: splitSource,
+          timelineStart: splitTimeline,
+          fadeIn: 0,
+        };
+        return { ...l, clips: [...l.clips.filter((c) => c.id !== clipId), left, right] };
+      })
+    );
+  }
+
+  // Duplicate the selected clip — appends a copy immediately after
+  // it on the same lane. The copy shares the same audio buffer (no
+  // re-decode); it just gets a new id + bumped timelineStart.
+  function duplicateSelectedClip() {
+    if (!selectedClip) return;
+    const { laneIndex, clipId } = selectedClip;
+    let newId = null;
+    setLanes((prev) =>
+      prev.map((l, i) => {
+        if (i !== laneIndex) return l;
+        const clip = l.clips.find((c) => c.id === clipId);
+        if (!clip) return l;
+        newId = newClipId();
+        const copy = { ...clip, id: newId, timelineStart: clipEnd(clip) };
+        return { ...l, clips: [...l.clips, copy] };
+      })
+    );
+    if (newId) setSelectedClip({ laneIndex, clipId: newId });
+  }
+
+  // Copy / paste — clipboard holds the clip data (NOT the audio
+  // buffer reference, which is shared in-process). Paste lands the
+  // copy at the playhead on the selected lane (or the first non-
+  // empty lane if nothing selected).
+  function copySelectedClip() {
+    if (!selectedClip) return;
+    const { laneIndex, clipId } = selectedClip;
+    const clip = lanes[laneIndex]?.clips.find((c) => c.id === clipId);
+    if (clip) clipboardRef.current = clip;
+  }
+  function pasteClip() {
+    const clip = clipboardRef.current;
+    if (!clip) return;
+    const targetLaneIndex = selectedClip?.laneIndex ?? lanes.findIndex(laneHasAudio);
+    if (targetLaneIndex < 0) return;
+    const newId = newClipId();
+    const copy = { ...clip, id: newId, timelineStart: Math.max(0, playhead) };
+    setLanes((prev) =>
+      prev.map((l, i) =>
+        i === targetLaneIndex ? { ...l, clips: [...l.clips, copy] } : l
+      )
+    );
+    setSelectedClip({ laneIndex: targetLaneIndex, clipId: newId });
+  }
+
+  // Keyboard shortcuts that act on the selected clip. Skipped while
+  // focus is inside an input/textarea/contenteditable so the rename
+  // + search boxes keep their native behavior.
   useEffect(() => {
     function onKey(e) {
-      if (selectedLaneIndex == null) return;
-      if (e.key !== "Delete" && e.key !== "Backspace") return;
       const tag = (e.target?.tagName || "").toLowerCase();
       if (tag === "input" || tag === "textarea" || e.target?.isContentEditable) return;
-      const lane = lanes[selectedLaneIndex];
-      if (!lane?.trackId) return;
-      e.preventDefault();
-      clearLane(selectedLaneIndex);
+      const mod = e.metaKey || e.ctrlKey;
+      // Delete / Backspace — remove the selected clip.
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedClip) {
+        e.preventDefault();
+        deleteClip(selectedClip.laneIndex, selectedClip.clipId);
+        return;
+      }
+      // Cmd+E or Cmd+K — split selected clip at playhead.
+      if (mod && (e.key === "e" || e.key === "E" || e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        splitSelectedClipAtPlayhead();
+        return;
+      }
+      // Cmd+D — duplicate selected clip.
+      if (mod && (e.key === "d" || e.key === "D")) {
+        e.preventDefault();
+        duplicateSelectedClip();
+        return;
+      }
+      // Cmd+C / Cmd+V — copy / paste.
+      if (mod && (e.key === "c" || e.key === "C")) {
+        if (!selectedClip) return;
+        e.preventDefault();
+        copySelectedClip();
+        return;
+      }
+      if (mod && (e.key === "v" || e.key === "V")) {
+        e.preventDefault();
+        pasteClip();
+        return;
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectedLaneIndex, lanes]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedClip, lanes, playhead]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Stem separation (LALAL.AI) ───────────────────────────────
   // Kick off a stem split on a library track. Two modes:
@@ -641,17 +921,30 @@ export default function StudioClient() {
       setLanes((prev) =>
         prev.map((l, idx) =>
           idx === i
-            ? { ...l, trackId: `stem:${label}`, src: proxySrc, name: `Stem: ${label}`, tempo: parentTempo, volume: defaultVolume, muted: false, solo: false, loading: true, error: null }
+            ? { ...l, tempo: parentTempo, volume: defaultVolume, muted: false, solo: false, loading: true, error: null }
             : l
         )
       );
       try {
         const { audioBuffer, peaks, duration } = await decodeTrack(proxySrc);
+        const clip = {
+          id: newClipId(),
+          trackId: `stem:${label}`,
+          src: proxySrc,
+          name: `Stem: ${label}`,
+          audioBuffer, peaks,
+          bufferDuration: duration,
+          sourceStart: 0,
+          sourceEnd: duration,
+          timelineStart: 0,
+          fadeIn: 0,
+          fadeOut: 0,
+        };
         // eslint-disable-next-line no-loop-func
         setLanes((prev) =>
           prev.map((l, idx) =>
             idx === i
-              ? { ...l, audioBuffer, peaks, duration, loading: false }
+              ? { ...l, clips: [clip], loading: false }
               : l
           )
         );
@@ -761,7 +1054,7 @@ export default function StudioClient() {
     // Find empty lanes to drop into. Use ALL lanes (even non-empty)
     // if we run out of empty ones, starting from index 0.
     const emptyIndices = lanes
-      .map((l, i) => (!l.trackId ? i : null))
+      .map((l, i) => (!laneHasAudio(l) ? i : null))
       .filter((i) => i !== null);
     for (let n = 0; n < candidates.length; n++) {
       const laneIndex = emptyIndices[n] ?? n; // fall back to first lanes
@@ -770,17 +1063,30 @@ export default function StudioClient() {
       setLanes((prev) =>
         prev.map((l, i) =>
           i === laneIndex
-            ? { ...l, trackId: `vocals-${c.label}:${parentTrackId}`, src: proxySrc, name: c.display, tempo: parentTempo, volume: c.volume, muted: false, solo: false, loading: true, error: null }
+            ? { ...l, tempo: parentTempo, volume: c.volume, muted: false, solo: false, loading: true, error: null }
             : l
         )
       );
       try {
         const { audioBuffer, peaks, duration } = await decodeTrack(proxySrc);
+        const clip = {
+          id: newClipId(),
+          trackId: `vocals-${c.label}:${parentTrackId}`,
+          src: proxySrc,
+          name: c.display,
+          audioBuffer, peaks,
+          bufferDuration: duration,
+          sourceStart: 0,
+          sourceEnd: duration,
+          timelineStart: 0,
+          fadeIn: 0,
+          fadeOut: 0,
+        };
         // eslint-disable-next-line no-loop-func
         setLanes((prev) =>
           prev.map((l, i) =>
             i === laneIndex
-              ? { ...l, audioBuffer, peaks, duration, loading: false }
+              ? { ...l, clips: [clip], loading: false }
               : l
           )
         );
@@ -896,7 +1202,7 @@ export default function StudioClient() {
   async function loadCleanedVoiceOntoLane(parentTrackId, sourceName) {
     if (!parentTrackId) return;
     if (isPlaying) stopAll();
-    const targetIdx = lanes.findIndex((l) => !l.trackId);
+    const targetIdx = lanes.findIndex((l) => !laneHasAudio(l));
     const laneIndex = targetIdx === -1 ? 0 : targetIdx;
     const niceName = `🧹 Clean: ${sourceName || "voice"}`;
     const proxySrc = `/api/music/tracks/${parentTrackId}/audio?source=voice-clean`;
@@ -905,16 +1211,29 @@ export default function StudioClient() {
     setLanes((prev) =>
       prev.map((l, i) =>
         i === laneIndex
-          ? { ...l, trackId: `voice-clean:${Date.now()}`, src: proxySrc, name: niceName, tempo: parentTempo, volume: 0.92, muted: false, solo: false, loading: true, error: null }
+          ? { ...l, tempo: parentTempo, volume: 0.92, muted: false, solo: false, loading: true, error: null }
           : l
       )
     );
     try {
       const { audioBuffer, peaks, duration } = await decodeTrack(proxySrc);
+      const clip = {
+        id: newClipId(),
+        trackId: `voice-clean:${Date.now()}`,
+        src: proxySrc,
+        name: niceName,
+        audioBuffer, peaks,
+        bufferDuration: duration,
+        sourceStart: 0,
+        sourceEnd: duration,
+        timelineStart: 0,
+        fadeIn: 0,
+        fadeOut: 0,
+      };
       setLanes((prev) =>
         prev.map((l, i) =>
           i === laneIndex
-            ? { ...l, audioBuffer, peaks, duration, loading: false }
+            ? { ...l, clips: [clip], loading: false }
             : l
         )
       );
@@ -928,30 +1247,52 @@ export default function StudioClient() {
   }
 
   // ── Transport ────────────────────────────────────────────────
-  // Play from current playhead. Schedule every loaded lane's
-  // AudioBufferSourceNode at the SAME ctx.currentTime so they're
-  // sample-accurate sync. Each source is connected through its
-  // lane gain so live mute/solo/volume changes take effect.
+  // Play from current playhead. For each clip on each lane,
+  // schedule an AudioBufferSourceNode that:
+  //   • starts at ctx.currentTime + (clip.timelineStart - playhead)
+  //     (or immediately if the playhead already passed the clip's
+  //     start), with the corresponding source offset and remaining
+  //     duration.
+  //   • is connected through the lane's gain so live mute/solo/
+  //     volume changes still apply.
+  // Multiple clips on the same lane all share the same gain.
+  function scheduleClipsAtOffset(startAt, offset) {
+    const ctx = ctxRef.current;
+    const newSources = [];
+    for (let i = 0; i < lanes.length; i++) {
+      const lane = lanes[i];
+      if (!lane.clips || lane.clips.length === 0) continue;
+      const gain = trackGainsRef.current[i];
+      for (const clip of lane.clips) {
+        const clipLen = clipDur(clip);
+        if (clipLen <= 0) continue;
+        const clipPlayStart = clip.timelineStart;
+        const clipPlayEnd = clipPlayStart + clipLen;
+        if (offset >= clipPlayEnd) continue; // playhead is past this clip
+        // How far into the clip's source are we?
+        const intoClip = Math.max(0, offset - clipPlayStart);
+        const sourceOffset = clip.sourceStart + intoClip;
+        const remaining = clipLen - intoClip;
+        // How long to delay the scheduling — if the clip starts in
+        // the future relative to the playhead, push the start time.
+        const delaySec = Math.max(0, clipPlayStart - offset);
+        const src = ctx.createBufferSource();
+        src.buffer = clip.audioBuffer;
+        src.connect(gain);
+        src.start(startAt + delaySec, sourceOffset, remaining);
+        newSources.push(src);
+      }
+    }
+    return newSources;
+  }
   function play() {
     const ctx = ensureCtx();
-    stopAllSources(); // clear any leftover scheduled sources
+    stopAllSources();
     const startAt = ctx.currentTime + 0.05; // 50ms lead-in
     const offset = playhead;
     playbackStartRef.current = startAt;
     playbackOffsetRef.current = offset;
-    const newSources = [];
-    for (let i = 0; i < lanes.length; i++) {
-      const lane = lanes[i];
-      if (!lane.audioBuffer) continue;
-      // If the playhead is past this lane's duration, skip it.
-      if (offset >= lane.duration) continue;
-      const src = ctx.createBufferSource();
-      src.buffer = lane.audioBuffer;
-      src.connect(trackGainsRef.current[i]);
-      src.start(startAt, offset);
-      newSources.push(src);
-    }
-    sourcesRef.current = newSources;
+    sourcesRef.current = scheduleClipsAtOffset(startAt, offset);
     setIsPlaying(true);
   }
 
@@ -980,25 +1321,13 @@ export default function StudioClient() {
   function seekTo(seconds) {
     const clamped = Math.max(0, Math.min(TIMELINE_SECONDS, seconds));
     if (isPlaying) {
-      // Restart playback from the new offset.
       stopAllSources();
       playbackOffsetRef.current = clamped;
       setPlayhead(clamped);
       const ctx = ensureCtx();
       const startAt = ctx.currentTime + 0.05;
       playbackStartRef.current = startAt;
-      const newSources = [];
-      for (let i = 0; i < lanes.length; i++) {
-        const lane = lanes[i];
-        if (!lane.audioBuffer) continue;
-        if (clamped >= lane.duration) continue;
-        const src = ctx.createBufferSource();
-        src.buffer = lane.audioBuffer;
-        src.connect(trackGainsRef.current[i]);
-        src.start(startAt, clamped);
-        newSources.push(src);
-      }
-      sourcesRef.current = newSources;
+      sourcesRef.current = scheduleClipsAtOffset(startAt, clamped);
     } else {
       playbackOffsetRef.current = clamped;
       setPlayhead(clamped);
@@ -1037,9 +1366,10 @@ export default function StudioClient() {
     const { applyMix = true } = opts;
     const sampleRate = 44100;
     const numChannels = 2;
+    // Total render length = latest clip end across all lanes.
     const dur = Math.min(
       TIMELINE_SECONDS,
-      Math.max(...laneList.map((l) => l.duration || 0), 0.001)
+      Math.max(...laneList.map(laneEndTime), 0.001)
     );
     const lengthSamples = Math.ceil(dur * sampleRate);
     const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
@@ -1049,7 +1379,7 @@ export default function StudioClient() {
     masterGain.connect(offline.destination);
     const anySolo = applyMix ? lanes.some((l) => l.solo) : false;
     for (const lane of laneList) {
-      if (!lane.audioBuffer) continue;
+      if (!laneHasAudio(lane)) continue;
       let effectiveGain;
       if (applyMix) {
         const audibleByMute = !lane.muted;
@@ -1059,13 +1389,19 @@ export default function StudioClient() {
       } else {
         effectiveGain = 1.0;
       }
-      const src = offline.createBufferSource();
-      src.buffer = lane.audioBuffer;
       const g = offline.createGain();
       g.gain.value = effectiveGain;
-      src.connect(g);
       g.connect(masterGain);
-      src.start(0);
+      // Schedule every clip at its timelineStart, with the right
+      // source offset + remaining duration.
+      for (const clip of lane.clips) {
+        const clipLen = clipDur(clip);
+        if (clipLen <= 0) continue;
+        const src = offline.createBufferSource();
+        src.buffer = clip.audioBuffer;
+        src.connect(g);
+        src.start(clip.timelineStart, clip.sourceStart, clipLen);
+      }
     }
     return await offline.startRendering();
   }
@@ -1088,7 +1424,7 @@ export default function StudioClient() {
   async function exportMix() {
     if (exporting) return;
     if (isPlaying) stopAll();
-    const audibleLanes = lanes.filter((l) => l.audioBuffer);
+    const audibleLanes = lanes.filter(laneHasAudio);
     if (audibleLanes.length === 0) {
       flashStemMsg("Load at least one track before exporting");
       return;
@@ -1116,7 +1452,7 @@ export default function StudioClient() {
   async function exportAllStems() {
     if (exporting) return;
     if (isPlaying) stopAll();
-    const audibleLanes = lanes.filter((l) => l.audioBuffer);
+    const audibleLanes = lanes.filter(laneHasAudio);
     if (audibleLanes.length === 0) {
       flashStemMsg("Load at least one stem before exporting");
       return;
@@ -1135,7 +1471,7 @@ export default function StudioClient() {
       // name + the date stamp.
       for (let i = 0; i < renders.length; i++) {
         const lane = audibleLanes[i];
-        const safeName = (lane.name || `stem-${i + 1}`)
+        const safeName = (laneDisplayName(lane, i) || `stem-${i + 1}`)
           .replace(/[^\w\-]+/g, "_")
           .replace(/_+/g, "_")
           .replace(/^_|_$/g, "")
@@ -1236,10 +1572,15 @@ export default function StudioClient() {
     const prev = library;
     const current = prev.find((t) => t.id === trackId);
     if (!current || current.title === title) return;
-    // Optimistic update.
+    // Optimistic update — also retitle any clip on any lane that
+    // was loaded from this library track so the timeline label
+    // updates in sync.
     setLibrary((arr) => arr.map((t) => (t.id === trackId ? { ...t, title } : t)));
     setLanes((arr) =>
-      arr.map((l) => (l.trackId === trackId ? { ...l, name: title } : l))
+      arr.map((l) => ({
+        ...l,
+        clips: l.clips.map((c) => (c.trackId === trackId ? { ...c, name: title } : c)),
+      }))
     );
     try {
       const res = await fetch(`/api/music/tracks/${trackId}`, {
@@ -1249,12 +1590,15 @@ export default function StudioClient() {
       });
       if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.error || `HTTP ${res.status}`);
     } catch (e) {
-      // Roll back on failure — leave the user with the old name and
-      // flash the stem-message banner so they know it didn't stick.
       console.error("[RENAME] failed:", e?.message);
       setLibrary(prev);
       setLanes((arr) =>
-        arr.map((l) => (l.trackId === trackId ? { ...l, name: current.title } : l))
+        arr.map((l) => ({
+          ...l,
+          clips: l.clips.map((c) =>
+            c.trackId === trackId ? { ...c, name: current.title } : c
+          ),
+        }))
       );
       flashStemMsg("Rename failed — try again");
     }
@@ -1303,7 +1647,7 @@ export default function StudioClient() {
         onExport={exportMix}
         onExportStems={exportAllStems}
         exporting={exporting}
-        hasAudio={lanes.some((l) => l.audioBuffer)}
+        hasAudio={lanes.some(laneHasAudio)}
         loopEnabled={loopEnabled}
         loopRegion={loopRegion}
         onToggleLoop={() => setLoopEnabled((v) => !v)}
@@ -1343,23 +1687,36 @@ export default function StudioClient() {
           loopRegion={loopRegion}
           onSetLoopRegion={setLoopRegion}
           mixBpm={resolvedBpm}
-          selectedLaneIndex={selectedLaneIndex}
-          onSelectLane={setSelectedLaneIndex}
-          onLaneContextMenu={(i, e) => {
+          selectedClip={selectedClip}
+          onSelectClip={(laneIndex, clipId) => setSelectedClip({ laneIndex, clipId })}
+          onClipContextMenu={(laneIndex, clipId, e) => {
             e.preventDefault();
-            setSelectedLaneIndex(i);
-            setLaneContext({ laneIndex: i, x: e.clientX, y: e.clientY });
+            setSelectedClip({ laneIndex, clipId });
+            setClipContext({ laneIndex, clipId, x: e.clientX, y: e.clientY });
           }}
+          onMoveClip={moveClip}
+          onTrimClipLeft={trimClipLeft}
+          onTrimClipRight={trimClipRight}
+          onDeselectAll={() => setSelectedClip(null)}
         />
       </main>
-      {laneContext && (
-        <LaneContextMenu
-          x={laneContext.x}
-          y={laneContext.y}
-          onClose={() => setLaneContext(null)}
+      {clipContext && (
+        <ClipContextMenu
+          x={clipContext.x}
+          y={clipContext.y}
+          onClose={() => setClipContext(null)}
+          canSplit={(() => {
+            const lane = lanes[clipContext.laneIndex];
+            const c = lane?.clips.find((x) => x.id === clipContext.clipId);
+            if (!c) return false;
+            const off = playhead - c.timelineStart;
+            return off > 0.02 && off < clipDur(c) - 0.02;
+          })()}
+          onSplit={() => { splitSelectedClipAtPlayhead(); setClipContext(null); }}
+          onDuplicate={() => { duplicateSelectedClip(); setClipContext(null); }}
           onDelete={() => {
-            clearLane(laneContext.laneIndex);
-            setLaneContext(null);
+            deleteClip(clipContext.laneIndex, clipContext.clipId);
+            setClipContext(null);
           }}
         />
       )}
@@ -2575,7 +2932,7 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
 }
 
 // ── Timeline area ────────────────────────────────────────────────
-function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timelineWidth, onDrop, onDragOver, onVolume, onToggleMute, onToggleSolo, onRename, onClear, onSeek, loopRegion, onSetLoopRegion, mixBpm, selectedLaneIndex, onSelectLane, onLaneContextMenu }) {
+function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timelineWidth, onDrop, onDragOver, onVolume, onToggleMute, onToggleSolo, onRename, onClear, onSeek, loopRegion, onSetLoopRegion, mixBpm, selectedClip, onSelectClip, onClipContextMenu, onMoveClip, onTrimClipLeft, onTrimClipRight, onDeselectAll }) {
   return (
     <div
       style={{
@@ -2584,6 +2941,10 @@ function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timel
         background: C.bg,
         display: "flex",
         flexDirection: "column",
+      }}
+      // Click on dead space deselects any clip.
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && onDeselectAll) onDeselectAll();
       }}
     >
       <TimeRuler
@@ -2610,9 +2971,12 @@ function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timel
             onToggleSolo={() => onToggleSolo(i)}
             onRename={(name) => onRename(i, name)}
             onClear={() => onClear(i)}
-            selected={selectedLaneIndex === i}
-            onSelect={() => onSelectLane(i)}
-            onContextMenu={(e) => onLaneContextMenu(i, e)}
+            selectedClipId={selectedClip?.laneIndex === i ? selectedClip.clipId : null}
+            onSelectClip={(clipId) => onSelectClip(i, clipId)}
+            onClipContextMenu={(clipId, e) => onClipContextMenu(i, clipId, e)}
+            onMoveClip={(clipId, newStart) => onMoveClip(i, clipId, newStart)}
+            onTrimClipLeft={(clipId, delta) => onTrimClipLeft(i, clipId, delta)}
+            onTrimClipRight={(clipId, delta) => onTrimClipRight(i, clipId, delta)}
           />
         ))}
         {/* Loop region overlay spanning all lanes — purely visual,
@@ -2940,9 +3304,80 @@ function LoopEdgeHandle({ edge, x, pixelsPerSecond, loopRegion, timelineSeconds,
 }
 
 // One track lane: lane header (controls) + clip canvas.
-// Right-click context menu on a lane's waveform area. Currently the
-// only action is Delete (clears the lane). Positions itself at the
-// click coords; closes on outside click, Escape, or scroll.
+// Right-click context menu on a CLIP. Offers Split-at-playhead
+// (when the playhead is inside the clip), Duplicate, and Delete.
+// Positions itself at the click coords; closes on outside click,
+// Escape, or scroll.
+function ClipContextMenu({ x, y, onClose, canSplit, onSplit, onDuplicate, onDelete }) {
+  useEffect(() => {
+    function onDocDown() { onClose(); }
+    function onKey(e) { if (e.key === "Escape") { e.preventDefault(); onClose(); } }
+    function onScroll() { onClose(); }
+    window.addEventListener("mousedown", onDocDown);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      window.removeEventListener("mousedown", onDocDown);
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [onClose]);
+  const Item = ({ label, hint, color, onClick, disabled, glyph }) => (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); if (!disabled) onClick(); }}
+      disabled={disabled}
+      style={{
+        width: "100%",
+        padding: "7px 10px",
+        background: "transparent",
+        border: "none",
+        color: disabled ? C.muted : (color || C.text),
+        fontSize: 12,
+        fontWeight: 700,
+        textAlign: "left",
+        cursor: disabled ? "default" : "pointer",
+        borderRadius: 4,
+        fontFamily: "inherit",
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        opacity: disabled ? 0.5 : 1,
+      }}
+      onMouseEnter={(e) => { if (!disabled) e.currentTarget.style.background = "rgba(217,255,0,0.08)"; }}
+      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+    >
+      <span style={{ width: 14, textAlign: "center" }}>{glyph}</span>
+      <span style={{ flex: 1 }}>{label}</span>
+      <span style={{ fontSize: 10, color: C.muted, fontWeight: 600 }}>{hint}</span>
+    </button>
+  );
+  return (
+    <div
+      onMouseDown={(e) => e.stopPropagation()}
+      style={{
+        position: "fixed",
+        top: y,
+        left: x,
+        zIndex: 100,
+        minWidth: 220,
+        padding: 4,
+        background: C.panel,
+        border: `1px solid ${C.border}`,
+        borderRadius: 6,
+        boxShadow: "0 6px 20px rgba(0,0,0,0.5)",
+        fontFamily: "inherit",
+      }}
+    >
+      <Item label="Split at playhead" hint="⌘E" glyph="✂" onClick={onSplit} disabled={!canSplit} />
+      <Item label="Duplicate"         hint="⌘D" glyph="⧉" onClick={onDuplicate} />
+      <Item label="Delete"            hint="Del" glyph="🗑" color={C.danger} onClick={onDelete} />
+    </div>
+  );
+}
+
+// Kept for backward compat (old code paths import-checking) — no
+// longer rendered anywhere. Safe to remove next session.
 function LaneContextMenu({ x, y, onClose, onDelete }) {
   useEffect(() => {
     function onDocDown(e) {
@@ -3010,10 +3445,8 @@ function LaneContextMenu({ x, y, onClose, onDelete }) {
   );
 }
 
-function TrackLane({ laneIndex, lane, timelineWidth, pixelsPerSecond, onDrop, onDragOver, onVolume, onToggleMute, onToggleSolo, onRename, onClear, selected, onSelect, onContextMenu }) {
-  // Only loaded lanes are selectable — empty lanes have nothing to
-  // delete, so a stray click shouldn't highlight them.
-  const canSelect = !!lane.trackId;
+function TrackLane({ laneIndex, lane, timelineWidth, pixelsPerSecond, onDrop, onDragOver, onVolume, onToggleMute, onToggleSolo, onRename, onClear, selectedClipId, onSelectClip, onClipContextMenu, onMoveClip, onTrimClipLeft, onTrimClipRight }) {
+  const hasAny = lane.clips && lane.clips.length > 0;
   return (
     <div
       style={{
@@ -3034,22 +3467,15 @@ function TrackLane({ laneIndex, lane, timelineWidth, pixelsPerSecond, onDrop, on
       <div
         onDrop={onDrop}
         onDragOver={onDragOver}
-        onClick={canSelect ? () => onSelect?.() : undefined}
-        onContextMenu={canSelect ? (e) => onContextMenu?.(e) : undefined}
         style={{
           position: "relative",
           width: timelineWidth,
           height: "100%",
-          background: lane.audioBuffer ? "transparent" : C.panel,
+          background: hasAny ? "transparent" : C.panel,
           borderLeft: `1px solid ${C.border}`,
-          // Highlight the waveform area when the lane is selected.
-          // 2px inset ring in the accent color reads clearly against
-          // any waveform hue without obscuring it.
-          boxShadow: selected ? `inset 0 0 0 2px ${C.accent}` : "none",
-          cursor: canSelect ? "pointer" : "default",
         }}
       >
-        {!lane.audioBuffer && !lane.loading && (
+        {!hasAny && !lane.loading && (
           <div
             style={{
               position: "absolute",
@@ -3078,21 +3504,150 @@ function TrackLane({ laneIndex, lane, timelineWidth, pixelsPerSecond, onDrop, on
               color: C.accent,
               fontSize: 12,
               fontWeight: 700,
+              pointerEvents: "none",
             }}
           >
-            Decoding {lane.name}…
+            Decoding…
           </div>
         )}
-        {lane.audioBuffer && (
-          <ClipCanvas
-            peaks={lane.peaks}
-            duration={lane.duration}
-            hue={lane.hue}
-            pixelsPerSecond={pixelsPerSecond}
-            name={lane.name}
-          />
-        )}
+        {hasAny &&
+          lane.clips.map((clip) => (
+            <ClipBox
+              key={clip.id}
+              clip={clip}
+              hue={lane.hue}
+              pixelsPerSecond={pixelsPerSecond}
+              selected={selectedClipId === clip.id}
+              onSelect={() => onSelectClip?.(clip.id)}
+              onContextMenu={(e) => onClipContextMenu?.(clip.id, e)}
+              onMove={(newStart) => onMoveClip?.(clip.id, newStart)}
+              onTrimLeft={(delta) => onTrimClipLeft?.(clip.id, delta)}
+              onTrimRight={(delta) => onTrimClipRight?.(clip.id, delta)}
+            />
+          ))}
       </div>
+    </div>
+  );
+}
+
+// One movable / trimable clip on a lane's timeline. Renders the
+// waveform via ClipCanvas (which now respects sourceStart/end) and
+// adds three drag affordances:
+//   • drag the body  → moves the clip's timelineStart
+//   • drag the left edge  → trim sourceStart + timelineStart together
+//   • drag the right edge → trim sourceEnd
+// Single click selects the clip (lime ring). Right-click opens the
+// context menu (Split / Duplicate / Delete) via onContextMenu.
+function ClipBox({ clip, hue, pixelsPerSecond, selected, onSelect, onContextMenu, onMove, onTrimLeft, onTrimRight }) {
+  const clipLen = Math.max(0, clip.sourceEnd - clip.sourceStart);
+  const left = clip.timelineStart * pixelsPerSecond;
+  const width = Math.max(10, clipLen * pixelsPerSecond);
+
+  function startBodyDrag(e) {
+    if (e.button !== 0) return; // left button only
+    e.stopPropagation();
+    onSelect?.();
+    const startX = e.clientX;
+    const startTimelineStart = clip.timelineStart;
+    function onMove2(ev) {
+      const dxSec = (ev.clientX - startX) / pixelsPerSecond;
+      onMove?.(Math.max(0, startTimelineStart + dxSec));
+    }
+    function onUp() {
+      window.removeEventListener("mousemove", onMove2);
+      window.removeEventListener("mouseup", onUp);
+    }
+    window.addEventListener("mousemove", onMove2);
+    window.addEventListener("mouseup", onUp);
+  }
+  function startEdgeDrag(edge, e) {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    onSelect?.();
+    const startX = e.clientX;
+    function onMove2(ev) {
+      const dxSec = (ev.clientX - startX) / pixelsPerSecond;
+      // We only fire deltas relative to the last call, so use an
+      // accumulator approach: capture lastX between calls.
+      if (edge === "left") onTrimLeft?.(dxSec - (ev._lastDx || 0));
+      else                  onTrimRight?.(dxSec - (ev._lastDx || 0));
+      // Track of last delta so subsequent moves fire incrementals.
+      // Simpler: just always fire absolute since startX, with the
+      // reducer adding atomically — but easier is just absolute-set
+      // on each frame:
+    }
+    // Re-define onMove2 with a cleaner accumulator.
+    let lastDx = 0;
+    function onMoveAccum(ev) {
+      const totalDx = (ev.clientX - startX) / pixelsPerSecond;
+      const delta = totalDx - lastDx;
+      lastDx = totalDx;
+      if (edge === "left") onTrimLeft?.(delta);
+      else                  onTrimRight?.(delta);
+    }
+    function onUp() {
+      window.removeEventListener("mousemove", onMoveAccum);
+      window.removeEventListener("mouseup", onUp);
+    }
+    window.addEventListener("mousemove", onMoveAccum);
+    window.addEventListener("mouseup", onUp);
+  }
+
+  return (
+    <div
+      onMouseDown={startBodyDrag}
+      onContextMenu={(e) => { e.preventDefault(); onSelect?.(); onContextMenu?.(e); }}
+      style={{
+        position: "absolute",
+        top: 8,
+        left,
+        height: 80,
+        width,
+        borderRadius: 6,
+        overflow: "hidden",
+        border: `1px solid hsl(${hue} 60% 35%)`,
+        background: `hsl(${hue} 60% 18%)`,
+        cursor: "grab",
+        boxShadow: selected ? `0 0 0 2px ${C.accent}` : "none",
+      }}
+      title={`${clip.name || "Clip"} — drag to move, drag edges to trim, right-click for options`}
+    >
+      <ClipCanvas
+        peaks={clip.peaks}
+        bufferDuration={clip.bufferDuration}
+        sourceStart={clip.sourceStart}
+        sourceEnd={clip.sourceEnd}
+        hue={hue}
+        pixelsPerSecond={pixelsPerSecond}
+        name={clip.name}
+      />
+      {/* Edge handles — 6px wide grab strips on each side. */}
+      <div
+        onMouseDown={(e) => startEdgeDrag("left", e)}
+        style={{
+          position: "absolute",
+          top: 0,
+          bottom: 0,
+          left: 0,
+          width: 6,
+          cursor: "ew-resize",
+          background: selected ? "rgba(217,255,0,0.35)" : "transparent",
+        }}
+        title="Drag to trim start"
+      />
+      <div
+        onMouseDown={(e) => startEdgeDrag("right", e)}
+        style={{
+          position: "absolute",
+          top: 0,
+          bottom: 0,
+          right: 0,
+          width: 6,
+          cursor: "ew-resize",
+          background: selected ? "rgba(217,255,0,0.35)" : "transparent",
+        }}
+        title="Drag to trim end"
+      />
     </div>
   );
 }
@@ -3101,11 +3656,14 @@ function LaneHeader({ laneIndex, lane, onVolume, onToggleMute, onToggleSolo, onR
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const inputRef = useRef(null);
-  // Effective display name: user override beats auto-generated.
-  const displayName = lane.customName || lane.name || `Track ${laneIndex + 1}`;
+  // Effective display name: user override beats the first clip's
+  // source name. Falls back to "Track N" when neither is set.
+  const firstClipName = lane.clips?.[0]?.name || null;
+  const displayName = lane.customName || firstClipName || `Track ${laneIndex + 1}`;
+  const hasAudio = !!(lane.clips && lane.clips.length > 0);
   function startEdit() {
     if (!onRename) return;
-    setDraft(lane.customName || lane.name || "");
+    setDraft(lane.customName || firstClipName || "");
     setEditing(true);
     // Focus + select-all next tick once input renders.
     setTimeout(() => {
@@ -3174,28 +3732,25 @@ function LaneHeader({ laneIndex, lane, onVolume, onToggleMute, onToggleSolo, onR
           <span
             onDoubleClick={startEdit}
             onClick={(e) => {
-              // Single click on an empty lane's name does nothing —
-              // double-click to edit avoids accidental edits when
-              // the user is trying to drop something on the lane.
-              if (lane.trackId) startEdit();
+              if (hasAudio) startEdit();
             }}
             title={onRename ? `${displayName} — double-click to rename` : displayName}
             style={{
               fontSize: 11.5,
               fontWeight: 700,
-              color: (lane.customName || lane.name) ? C.text : C.muted,
+              color: (lane.customName || firstClipName) ? C.text : C.muted,
               whiteSpace: "nowrap",
               overflow: "hidden",
               textOverflow: "ellipsis",
               flex: 1,
               minWidth: 0,
-              cursor: onRename && lane.trackId ? "text" : "default",
+              cursor: onRename && hasAudio ? "text" : "default",
             }}
           >
             {displayName}
           </span>
         )}
-        {lane.trackId && (
+        {hasAudio && (
           <button
             type="button"
             onClick={onClear}
@@ -3276,13 +3831,21 @@ function LaneHeader({ laneIndex, lane, onVolume, onToggleMute, onToggleSolo, onR
 // Canvas waveform for a lane's clip. Decoded peaks come pre-computed
 // from decodeTrack; we just stretch them across `duration *
 // pixelsPerSecond` width.
-function ClipCanvas({ peaks, duration, hue, pixelsPerSecond, name }) {
+// Renders the waveform for a single clip. With R8, a clip can be
+// trimmed in/out (sourceStart, sourceEnd) so we draw only the
+// portion of the peaks array that maps to that source range.
+//
+// Called from inside ClipBox which sizes + positions the wrapper —
+// so this no longer needs its own position:absolute wrapper, just
+// the canvas + name label.
+function ClipCanvas({ peaks, bufferDuration, sourceStart, sourceEnd, hue, pixelsPerSecond, name }) {
   const canvasRef = useRef(null);
-  const clipWidth = Math.max(40, duration * pixelsPerSecond);
+  const clipLen = Math.max(0, sourceEnd - sourceStart);
+  const clipWidth = Math.max(10, clipLen * pixelsPerSecond);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !peaks) return;
+    if (!canvas || !peaks || !bufferDuration) return;
     const dpr = window.devicePixelRatio || 1;
     const w = clipWidth;
     const h = 80;
@@ -3292,39 +3855,39 @@ function ClipCanvas({ peaks, duration, hue, pixelsPerSecond, name }) {
     canvas.style.height = `${h}px`;
     const ctx = canvas.getContext("2d");
     ctx.scale(dpr, dpr);
-    // Background clip pill
+    // Background fill — the wrapping ClipBox already paints a
+    // colored background, but we paint here too in case the canvas
+    // ever floats free.
     ctx.fillStyle = `hsl(${hue} 60% 18%)`;
     ctx.fillRect(0, 0, w, h);
-    // Waveform
+    // Map the visible canvas width onto the slice of peaks that
+    // corresponds to [sourceStart, sourceEnd] in the underlying
+    // buffer. peaks is bufferDuration's worth of buckets, so each
+    // bucket = bufferDuration / peaks.length seconds.
+    const startBucket = Math.floor((sourceStart / bufferDuration) * peaks.length);
+    const endBucket   = Math.ceil((sourceEnd / bufferDuration) * peaks.length);
+    const slice = Math.max(1, endBucket - startBucket);
     const center = h / 2;
-    const stride = Math.max(1, Math.floor(peaks.length / w));
     ctx.fillStyle = `hsl(${hue} 80% 65%)`;
     for (let x = 0; x < w; x++) {
-      // Average a few peak buckets per pixel so the waveform looks
-      // smoothly stretched at any zoom level.
-      const startBucket = Math.floor((x / w) * peaks.length);
+      const b0 = startBucket + Math.floor((x / w) * slice);
+      const b1 = startBucket + Math.floor(((x + 1) / w) * slice);
       let max = 0;
-      const samples = Math.max(1, stride);
-      for (let j = 0; j < samples; j++) {
-        const v = peaks[startBucket + j] || 0;
+      for (let j = b0; j < b1 && j < peaks.length; j++) {
+        const v = peaks[j] || 0;
         if (v > max) max = v;
       }
       const halfH = Math.max(1, max * (h * 0.42));
       ctx.fillRect(x, center - halfH, 1, halfH * 2);
     }
-  }, [peaks, duration, hue, clipWidth]);
+  }, [peaks, bufferDuration, sourceStart, sourceEnd, hue, clipWidth]);
 
   return (
     <div
       style={{
         position: "absolute",
-        top: 8,
-        left: 0,
-        height: 80,
-        width: clipWidth,
-        borderRadius: 6,
-        overflow: "hidden",
-        border: `1px solid hsl(${hue} 60% 35%)`,
+        inset: 0,
+        pointerEvents: "none",
       }}
       title={name}
     >
