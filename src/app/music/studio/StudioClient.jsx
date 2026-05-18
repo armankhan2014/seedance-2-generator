@@ -244,9 +244,17 @@ export default function StudioClient() {
   // Load a library track into a specific lane. Decodes audio,
   // computes peaks, updates lane state. Idempotent — re-dropping
   // the same track on the same lane just refreshes the metadata.
+  //
+  // CRITICAL: we route the audio fetch through the same-origin
+  // proxy (/api/music/tracks/[id]/audio) instead of the raw R2 URL.
+  // Web Audio's decodeAudioData() needs a CORS-clean fetch response;
+  // R2 public URLs are cross-origin from seedance.visualseffect.com
+  // and don't send the right CORS headers, which is why direct
+  // fetches were failing with "Failed to fetch" (Arman flagged
+  // 2026-05-18). The proxy strips the cross-origin problem entirely.
   async function loadLane(laneIndex, track) {
-    const src = track.r2Url || track.audioUrl || track.streamUrl;
-    if (!src) return;
+    if (!track?.id) return;
+    const src = `/api/music/tracks/${track.id}/audio`;
     setLanes((prev) =>
       prev.map((l, i) =>
         i === laneIndex
