@@ -1594,84 +1594,16 @@ function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onSt
       >
         {isPlaying ? "❚❚" : "▶"}
       </button>
-      {/* Loop control. Matches the visual language of the other
-          transport buttons (mono text glyph, lime active state
-          like ▶ play). When a region exists, the button expands
-          into a connected pill that shows the in/out times +
-          gets a tiny × on the right edge to clear. No more chunky
-          emoji + floating × — single coherent control. */}
+      {/* Loop control — uses LoopControl below so the hover-state
+          handlers + alignment logic are isolated from the rest of
+          the transport bar's JSX. */}
       {onToggleLoop && (
-        <div style={{ display: "inline-flex", alignItems: "stretch", height: 38 }}>
-          <button
-            onClick={onToggleLoop}
-            aria-label={loopEnabled ? "Disable loop" : "Enable loop"}
-            title={
-              loopRegion
-                ? loopEnabled
-                  ? `Loop ON · ${formatTime(loopRegion.start)} → ${formatTime(loopRegion.end)} · click to disable`
-                  : `Loop OFF · click to enable (region ${formatTime(loopRegion.start)} → ${formatTime(loopRegion.end)})`
-                : "Loop — drag on the time ruler to set in/out points"
-            }
-            style={{
-              height: 38,
-              padding: loopRegion ? "0 12px" : 0,
-              width: loopRegion ? "auto" : 38,
-              borderRadius: loopRegion ? "8px 0 0 8px" : 8,
-              background: loopEnabled && loopRegion ? C.accent : C.panel,
-              border: `1px solid ${loopEnabled && loopRegion ? C.accent : C.border}`,
-              borderRight: loopRegion ? "none" : `1px solid ${loopEnabled && loopRegion ? C.accent : C.border}`,
-              color: loopEnabled && loopRegion ? "#0a0a0a" : C.textSoft,
-              fontSize: 14,
-              fontWeight: 800,
-              cursor: "pointer",
-              fontFamily: "inherit",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              whiteSpace: "nowrap",
-              transition: "background 0.12s, color 0.12s",
-            }}
-          >
-            <span style={{ fontSize: 16, lineHeight: 1, fontWeight: 400 }}>↻</span>
-            {loopRegion && (
-              <span style={{
-                fontSize: 11,
-                fontWeight: 700,
-                fontVariantNumeric: "tabular-nums",
-                letterSpacing: "0.02em",
-              }}>
-                {formatTime(loopRegion.start)} → {formatTime(loopRegion.end)}
-              </span>
-            )}
-          </button>
-          {loopRegion && onClearLoop && (
-            <button
-              onClick={onClearLoop}
-              aria-label="Clear loop region"
-              title="Clear loop region"
-              style={{
-                height: 38,
-                width: 28,
-                borderRadius: "0 8px 8px 0",
-                background: loopEnabled ? C.accent : C.panel,
-                border: `1px solid ${loopEnabled ? C.accent : C.border}`,
-                borderLeft: loopEnabled
-                  ? "1px solid rgba(0,0,0,0.18)"
-                  : `1px solid ${C.border}`,
-                color: loopEnabled ? "#0a0a0a" : C.muted,
-                fontSize: 14,
-                lineHeight: 1,
-                cursor: "pointer",
-                fontFamily: "inherit",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              ×
-            </button>
-          )}
-        </div>
+        <LoopControl
+          loopEnabled={loopEnabled}
+          loopRegion={loopRegion}
+          onToggleLoop={onToggleLoop}
+          onClearLoop={onClearLoop}
+        />
       )}
       <div
         style={{
@@ -1771,6 +1703,134 @@ function KbdHint({ k, children }) {
       </kbd>
       <span>{children}</span>
     </span>
+  );
+}
+
+// Loop control — extracted from TransportBar so the hover-state
+// + click-target logic isn't tangled with the rest of the bar.
+//
+// Two visual forms:
+//   1. No region yet — single 38×38 button with the ↻ glyph
+//      perfectly centered (matches the other transport buttons:
+//      same size, same monochrome glyph aesthetic).
+//   2. Region exists — expands into a "segment pill" with two
+//      independently clickable halves:
+//        • Left half  (↻ + "0:30 → 1:00"): toggle loop on/off.
+//        • Right half (×):                  clear the region.
+//      They share a rounded outline so they read as ONE control.
+//
+// Bug fix 2026-05-18: the standalone-button case was missing
+// justifyContent:"center" + the inner glyph had no flex-shrink:0,
+// so on some browsers the ↻ floated to the upper-left of the
+// 38×38 box instead of dead-centering. Now explicit on both
+// states. Hover states added for better click affordance.
+function LoopControl({ loopEnabled, loopRegion, onToggleLoop, onClearLoop }) {
+  const [toggleHover, setToggleHover] = useState(false);
+  const [clearHover, setClearHover] = useState(false);
+
+  const isActive = loopEnabled && loopRegion;
+  // Resolve toggle-button visual state.
+  const toggleBg = isActive
+    ? toggleHover ? C.accentDark : C.accent
+    : toggleHover ? C.panelSoft : C.panel;
+  const toggleBorder = isActive ? C.accent : (toggleHover ? C.borderHover : C.border);
+  const toggleFg = isActive ? "#0a0a0a" : (toggleHover ? C.accent : C.textSoft);
+
+  return (
+    <div style={{ display: "inline-flex", alignItems: "stretch", height: 38 }}>
+      <button
+        type="button"
+        onClick={onToggleLoop}
+        onMouseEnter={() => setToggleHover(true)}
+        onMouseLeave={() => setToggleHover(false)}
+        aria-label={loopEnabled ? "Disable loop" : "Enable loop"}
+        title={
+          loopRegion
+            ? loopEnabled
+              ? `Loop ON · ${formatTime(loopRegion.start)} → ${formatTime(loopRegion.end)} · click to disable`
+              : `Loop OFF · click to enable`
+            : "Loop — drag on the time ruler to set in/out points"
+        }
+        style={{
+          height: 38,
+          padding: loopRegion ? "0 12px" : 0,
+          width: loopRegion ? "auto" : 38,
+          minWidth: 38,
+          borderRadius: loopRegion ? "8px 0 0 8px" : 8,
+          background: toggleBg,
+          border: `1px solid ${toggleBorder}`,
+          borderRight: loopRegion ? "none" : `1px solid ${toggleBorder}`,
+          color: toggleFg,
+          fontSize: 14,
+          fontWeight: 800,
+          cursor: "pointer",
+          fontFamily: "inherit",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+          whiteSpace: "nowrap",
+          transition: "background 0.12s, color 0.12s, border-color 0.12s",
+        }}
+      >
+        <span style={{
+          fontSize: 18,
+          lineHeight: 1,
+          fontWeight: 400,
+          flexShrink: 0,
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}>
+          ↻
+        </span>
+        {loopRegion && (
+          <span style={{
+            fontSize: 11,
+            fontWeight: 700,
+            fontVariantNumeric: "tabular-nums",
+            letterSpacing: "0.02em",
+            lineHeight: 1,
+          }}>
+            {formatTime(loopRegion.start)} → {formatTime(loopRegion.end)}
+          </span>
+        )}
+      </button>
+      {loopRegion && onClearLoop && (
+        <button
+          type="button"
+          onClick={onClearLoop}
+          onMouseEnter={() => setClearHover(true)}
+          onMouseLeave={() => setClearHover(false)}
+          aria-label="Clear loop region"
+          title="Clear loop region"
+          style={{
+            height: 38,
+            width: 30,
+            minWidth: 30,
+            borderRadius: "0 8px 8px 0",
+            background: isActive
+              ? (clearHover ? C.accentDark : C.accent)
+              : (clearHover ? C.panelSoft : C.panel),
+            border: `1px solid ${isActive ? C.accent : (clearHover ? C.borderHover : C.border)}`,
+            borderLeft: isActive
+              ? "1px solid rgba(0,0,0,0.22)"
+              : `1px solid ${C.border}`,
+            color: isActive ? "#0a0a0a" : (clearHover ? C.text : C.muted),
+            fontSize: 16,
+            lineHeight: 1,
+            cursor: "pointer",
+            fontFamily: "inherit",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "background 0.12s, color 0.12s, border-color 0.12s",
+          }}
+        >
+          ×
+        </button>
+      )}
+    </div>
   );
 }
 
