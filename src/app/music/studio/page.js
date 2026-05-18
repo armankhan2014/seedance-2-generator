@@ -1,18 +1,23 @@
 // /music/studio — Studio Pro DAW v0.
 //
-// Server entry. Auth-gates the page (the DAW is a paid feature so
-// anonymous traffic shouldn't see it) and hands off rendering to
-// the StudioClient which runs the Web Audio engine in the browser.
+// Server entry. Decides between:
+//   • signed-in → render StudioClient (the full DAW)
+//   • signed-out → render StudioSignIn (an inline sign-in CTA that
+//     auto-redirects back here after auth, no manual navigation
+//     needed)
 //
-// Currently a "Hello DAW" scope: 3 sync'd track lanes with Canvas
-// waveforms, drag-from-library, transport bar, per-track
-// mute/solo/volume. Editing (drag clips, trim, split, fade,
-// snap-to-grid, save projects) is v1 — multi-session build.
+// Why an inline CTA instead of a server redirect (the original
+// 2026-05-18 ship): Arman flagged that redirecting unauth traffic
+// to /music?next=/music/studio was confusing — the homepage doesn't
+// honor the `next` param + the user lands somewhere they didn't
+// expect with no clear path back. Rendering a sign-in prompt
+// in-place on /music/studio keeps the URL stable + uses NextAuth's
+// callbackUrl to return the user automatically.
 
-import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import StudioClient from "./StudioClient";
+import StudioSignIn from "./StudioSignIn";
 
 export const dynamic = "force-dynamic";
 
@@ -25,10 +30,7 @@ export const metadata = {
 export default async function StudioPage() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) {
-    // Send unauthed users to the public /music page where the
-    // sign-in modal opens. The callbackUrl preserves the path so
-    // they land back here after sign-in.
-    redirect("/music?next=/music/studio");
+    return <StudioSignIn />;
   }
   return <StudioClient />;
 }
