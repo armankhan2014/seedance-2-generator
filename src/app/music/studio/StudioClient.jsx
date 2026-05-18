@@ -764,6 +764,75 @@ export default function StudioClient() {
     sourcesRef.current = [];
   }
 
+  // ── Export mixed WAV ─────────────────────────────────────────
+  // Renders the current lane state (mute / solo / volume / master)
+  // into a single downloadable WAV file via OfflineAudioContext.
+  // All client-side — zero server cost, zero LALAL spend.
+  //
+  // Mix length is set to the longest loaded lane's duration (or the
+  // timeline cap, whichever is shorter). Stereo (mixes mono lanes
+  // up). 16-bit PCM at 44.1 kHz = CD-quality, file size is
+  // bytes-per-second × duration = ~10 MB/min stereo.
+  const [exporting, setExporting] = useState(false);
+  async function exportMix() {
+    if (exporting) return;
+    if (isPlaying) stopAll();
+    const audibleLanes = lanes.filter((l) => l.audioBuffer);
+    if (audibleLanes.length === 0) {
+      flashStemMsg("Load at least one track before exporting");
+      return;
+    }
+    setExporting(true);
+    try {
+      const sampleRate = 44100;
+      const numChannels = 2; // stereo output
+      const mixDuration = Math.min(
+        TIMELINE_SECONDS,
+        Math.max(...audibleLanes.map((l) => l.duration))
+      );
+      const lengthSamples = Math.ceil(mixDuration * sampleRate);
+      const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+      const offline = new Offline(numChannels, lengthSamples, sampleRate);
+      const masterGain = offline.createGain();
+      masterGain.gain.value = masterVolume;
+      masterGain.connect(offline.destination);
+      // Match the live mix: solo overrides mute logic.
+      const anySolo = lanes.some((l) => l.solo);
+      for (const lane of lanes) {
+        if (!lane.audioBuffer) continue;
+        const audibleByMute = !lane.muted;
+        const audibleBySolo = anySolo ? lane.solo : true;
+        const effectiveGain = audibleByMute && audibleBySolo ? lane.volume : 0;
+        if (effectiveGain === 0) continue;
+        const src = offline.createBufferSource();
+        src.buffer = lane.audioBuffer;
+        const g = offline.createGain();
+        g.gain.value = effectiveGain;
+        src.connect(g);
+        g.connect(masterGain);
+        src.start(0);
+      }
+      const rendered = await offline.startRendering();
+      const wavBytes = audioBufferToWav(rendered);
+      const blob = new Blob([wavBytes], { type: "audio/wav" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const stamp = new Date().toISOString().slice(0, 10);
+      a.download = `studio-mix-${stamp}.wav`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      flashStemMsg(`✓ Exported studio-mix-${stamp}.wav`);
+    } catch (e) {
+      console.error("[STUDIO_EXPORT]", e);
+      flashStemMsg(`Export failed: ${e?.message || "unknown error"}`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   // Cleanup on unmount.
   useEffect(() => {
     return () => {
@@ -867,6 +936,9 @@ export default function StudioClient() {
         onStop={stopAll}
         onMasterVolume={setMasterVolume}
         onSeek={seekTo}
+        onExport={exportMix}
+        exporting={exporting}
+        hasAudio={lanes.some((l) => l.audioBuffer)}
       />
       <main style={{ display: "flex", height: "calc(100vh - 56px - 60px)", overflow: "hidden" }}>
         <LibrarySidebar
@@ -1203,7 +1275,7 @@ function VoiceCleanBanner({ job, onDismiss }) {
 }
 
 // ── Transport bar ────────────────────────────────────────────────
-function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onStop, onMasterVolume, onSeek }) {
+function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onStop, onMasterVolume, onSeek, onExport, exporting, hasAudio }) {
   return (
     <div
       style={{
@@ -1259,6 +1331,45 @@ function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onSt
         <KbdHint k="Esc">stop</KbdHint>
         <KbdHint k="Home">to start</KbdHint>
       </span>
+      {/* 🎧 Export — renders the current mix (respecting mute /
+          solo / volume / master) to a WAV file via
+          OfflineAudioContext + downloads it. Client-side only,
+          zero server cost. Disabled while a render is in flight
+          OR when no audio is loaded. */}
+      {onExport && (
+        <button
+          onClick={onExport}
+          disabled={exporting || !hasAudio}
+          aria-label="Export mix as WAV"
+          title={
+            !hasAudio
+              ? "Load at least one track first"
+              : exporting
+                ? "Rendering mix…"
+                : "Export current mix as WAV (free, client-side)"
+          }
+          style={{
+            padding: "8px 14px",
+            borderRadius: 8,
+            background: exporting
+              ? C.panelSoft
+              : !hasAudio
+                ? C.panelSoft
+                : `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`,
+            border: `1px solid ${exporting || !hasAudio ? C.border : C.accent}`,
+            color: exporting || !hasAudio ? C.muted : "#0a0a0a",
+            fontSize: 12,
+            fontWeight: 800,
+            letterSpacing: "0.04em",
+            cursor: exporting || !hasAudio ? "default" : "pointer",
+            fontFamily: "inherit",
+            marginRight: 14,
+            whiteSpace: "nowrap",
+          }}
+        >
+          {exporting ? "Rendering…" : "🎧 Export WAV"}
+        </button>
+      )}
       <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
         <span style={{ fontSize: 11, color: C.muted, fontWeight: 700, letterSpacing: "0.04em" }}>MASTER</span>
         <input
@@ -1869,4 +1980,63 @@ function formatTime(s) {
   const m = Math.floor(s / 60);
   const ss = Math.floor(s % 60);
   return `${m}:${ss.toString().padStart(2, "0")}`;
+}
+
+// Encode an AudioBuffer to a standard WAV file (PCM 16-bit
+// interleaved). Used by the Export button to convert the
+// OfflineAudioContext render into a downloadable file.
+//
+// File layout: 44-byte RIFF/WAVE header followed by the
+// interleaved sample data. Channels are clamped to [-1,1] then
+// scaled to 16-bit signed integers (-32768..32767) — standard
+// CD-quality PCM that opens in any audio app or DAW.
+//
+// Returns an ArrayBuffer ready to be wrapped in a Blob.
+function audioBufferToWav(buffer) {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const bitDepth = 16;
+  const bytesPerSample = bitDepth / 8;
+  const blockAlign = numChannels * bytesPerSample;
+  const byteRate = sampleRate * blockAlign;
+  const numFrames = buffer.length;
+  const dataSize = numFrames * blockAlign;
+  const out = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(out);
+  // RIFF header
+  writeAscii(view, 0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeAscii(view, 8, "WAVE");
+  // fmt chunk
+  writeAscii(view, 12, "fmt ");
+  view.setUint32(16, 16, true);     // chunk size
+  view.setUint16(20, 1, true);      // format = PCM
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitDepth, true);
+  // data chunk
+  writeAscii(view, 36, "data");
+  view.setUint32(40, dataSize, true);
+  // Interleaved PCM samples
+  const channels = [];
+  for (let c = 0; c < numChannels; c++) channels.push(buffer.getChannelData(c));
+  let pos = 44;
+  for (let i = 0; i < numFrames; i++) {
+    for (let c = 0; c < numChannels; c++) {
+      let s = channels[c][i];
+      s = Math.max(-1, Math.min(1, s));
+      const intSample = s < 0 ? s * 0x8000 : s * 0x7fff;
+      view.setInt16(pos, intSample | 0, true);
+      pos += 2;
+    }
+  }
+  return out;
+}
+
+function writeAscii(view, offset, str) {
+  for (let i = 0; i < str.length; i++) {
+    view.setUint8(offset + i, str.charCodeAt(i));
+  }
 }
