@@ -84,6 +84,14 @@ export default function StudioClient() {
   // split which always targets lanes 0-5).
   const [vocalsSplitJob, setVocalsSplitJob] = useState(null);
 
+  // ── Lane selection ───────────────────────────────────────────
+  // Single-select. Click a lane's waveform area to select it; press
+  // Delete/Backspace (or use the right-click menu) to clear it.
+  const [selectedLaneIndex, setSelectedLaneIndex] = useState(null);
+  // Right-click context-menu state: { laneIndex, x, y } in viewport
+  // coords, or null when closed.
+  const [laneContext, setLaneContext] = useState(null);
+
   // ── Library state ─────────────────────────────────────────────
   const [library, setLibrary] = useState([]);
   const [libraryLoading, setLibraryLoading] = useState(true);
@@ -462,7 +470,27 @@ export default function StudioClient() {
           : l
       )
     );
+    // Drop selection if the cleared lane was the selected one.
+    setSelectedLaneIndex((prev) => (prev === laneIndex ? null : prev));
   }
+
+  // Delete / Backspace clears the currently selected lane. Skips when
+  // the user is typing in an input/textarea/contenteditable so the
+  // rename + search boxes aren't affected.
+  useEffect(() => {
+    function onKey(e) {
+      if (selectedLaneIndex == null) return;
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const tag = (e.target?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || e.target?.isContentEditable) return;
+      const lane = lanes[selectedLaneIndex];
+      if (!lane?.trackId) return;
+      e.preventDefault();
+      clearLane(selectedLaneIndex);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedLaneIndex, lanes]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Stem separation (LALAL.AI) ───────────────────────────────
   // Kick off a stem split on a library track. Two modes:
@@ -1315,8 +1343,26 @@ export default function StudioClient() {
           loopRegion={loopRegion}
           onSetLoopRegion={setLoopRegion}
           mixBpm={resolvedBpm}
+          selectedLaneIndex={selectedLaneIndex}
+          onSelectLane={setSelectedLaneIndex}
+          onLaneContextMenu={(i, e) => {
+            e.preventDefault();
+            setSelectedLaneIndex(i);
+            setLaneContext({ laneIndex: i, x: e.clientX, y: e.clientY });
+          }}
         />
       </main>
+      {laneContext && (
+        <LaneContextMenu
+          x={laneContext.x}
+          y={laneContext.y}
+          onClose={() => setLaneContext(null)}
+          onDelete={() => {
+            clearLane(laneContext.laneIndex);
+            setLaneContext(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -2529,7 +2575,7 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
 }
 
 // ── Timeline area ────────────────────────────────────────────────
-function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timelineWidth, onDrop, onDragOver, onVolume, onToggleMute, onToggleSolo, onRename, onClear, onSeek, loopRegion, onSetLoopRegion, mixBpm }) {
+function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timelineWidth, onDrop, onDragOver, onVolume, onToggleMute, onToggleSolo, onRename, onClear, onSeek, loopRegion, onSetLoopRegion, mixBpm, selectedLaneIndex, onSelectLane, onLaneContextMenu }) {
   return (
     <div
       style={{
@@ -2564,6 +2610,9 @@ function TimelineArea({ lanes, playhead, timelineSeconds, pixelsPerSecond, timel
             onToggleSolo={() => onToggleSolo(i)}
             onRename={(name) => onRename(i, name)}
             onClear={() => onClear(i)}
+            selected={selectedLaneIndex === i}
+            onSelect={() => onSelectLane(i)}
+            onContextMenu={(e) => onLaneContextMenu(i, e)}
           />
         ))}
         {/* Loop region overlay spanning all lanes — purely visual,
@@ -2891,7 +2940,80 @@ function LoopEdgeHandle({ edge, x, pixelsPerSecond, loopRegion, timelineSeconds,
 }
 
 // One track lane: lane header (controls) + clip canvas.
-function TrackLane({ laneIndex, lane, timelineWidth, pixelsPerSecond, onDrop, onDragOver, onVolume, onToggleMute, onToggleSolo, onRename, onClear }) {
+// Right-click context menu on a lane's waveform area. Currently the
+// only action is Delete (clears the lane). Positions itself at the
+// click coords; closes on outside click, Escape, or scroll.
+function LaneContextMenu({ x, y, onClose, onDelete }) {
+  useEffect(() => {
+    function onDocDown(e) {
+      // Any mousedown that lands outside the menu closes it. The menu
+      // items handle their own click — they don't bubble.
+      onClose();
+    }
+    function onKey(e) {
+      if (e.key === "Escape") { e.preventDefault(); onClose(); }
+    }
+    function onScroll() { onClose(); }
+    window.addEventListener("mousedown", onDocDown);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      window.removeEventListener("mousedown", onDocDown);
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [onClose]);
+  return (
+    <div
+      onMouseDown={(e) => e.stopPropagation()}
+      style={{
+        position: "fixed",
+        top: y,
+        left: x,
+        zIndex: 100,
+        minWidth: 160,
+        padding: 4,
+        background: C.panel,
+        border: `1px solid ${C.border}`,
+        borderRadius: 6,
+        boxShadow: "0 6px 20px rgba(0,0,0,0.5)",
+        fontFamily: "inherit",
+      }}
+    >
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onDelete(); }}
+        style={{
+          width: "100%",
+          padding: "7px 10px",
+          background: "transparent",
+          border: "none",
+          color: C.danger,
+          fontSize: 12,
+          fontWeight: 700,
+          textAlign: "left",
+          cursor: "pointer",
+          borderRadius: 4,
+          fontFamily: "inherit",
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(239,68,68,0.12)")}
+        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+      >
+        <span>🗑</span>
+        <span style={{ flex: 1 }}>Delete</span>
+        <span style={{ fontSize: 10, color: C.muted, fontWeight: 600 }}>Del</span>
+      </button>
+    </div>
+  );
+}
+
+function TrackLane({ laneIndex, lane, timelineWidth, pixelsPerSecond, onDrop, onDragOver, onVolume, onToggleMute, onToggleSolo, onRename, onClear, selected, onSelect, onContextMenu }) {
+  // Only loaded lanes are selectable — empty lanes have nothing to
+  // delete, so a stray click shouldn't highlight them.
+  const canSelect = !!lane.trackId;
   return (
     <div
       style={{
@@ -2912,12 +3034,19 @@ function TrackLane({ laneIndex, lane, timelineWidth, pixelsPerSecond, onDrop, on
       <div
         onDrop={onDrop}
         onDragOver={onDragOver}
+        onClick={canSelect ? () => onSelect?.() : undefined}
+        onContextMenu={canSelect ? (e) => onContextMenu?.(e) : undefined}
         style={{
           position: "relative",
           width: timelineWidth,
           height: "100%",
           background: lane.audioBuffer ? "transparent" : C.panel,
           borderLeft: `1px solid ${C.border}`,
+          // Highlight the waveform area when the lane is selected.
+          // 2px inset ring in the accent color reads clearly against
+          // any waveform hue without obscuring it.
+          boxShadow: selected ? `inset 0 0 0 2px ${C.accent}` : "none",
+          cursor: canSelect ? "pointer" : "default",
         }}
       >
         {!lane.audioBuffer && !lane.loading && (
