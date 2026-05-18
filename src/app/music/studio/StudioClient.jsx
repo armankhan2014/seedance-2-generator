@@ -1594,45 +1594,84 @@ function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onSt
       >
         {isPlaying ? "❚❚" : "▶"}
       </button>
-      {/* 🔁 Loop toggle. Active state = lime border + lime icon.
-          When there's a loop region defined, an "×" appears next
-          to it to clear the region. */}
+      {/* Loop control. Matches the visual language of the other
+          transport buttons (mono text glyph, lime active state
+          like ▶ play). When a region exists, the button expands
+          into a connected pill that shows the in/out times +
+          gets a tiny × on the right edge to clear. No more chunky
+          emoji + floating × — single coherent control. */}
       {onToggleLoop && (
-        <button
-          onClick={onToggleLoop}
-          aria-label={loopEnabled ? "Disable loop" : "Enable loop"}
-          title={
-            loopRegion
-              ? loopEnabled
-                ? `Loop ON · ${formatTime(loopRegion.start)} → ${formatTime(loopRegion.end)}`
-                : `Loop OFF · drag on ruler to set region`
-              : "Loop · drag on the time ruler to set in/out points"
-          }
-          style={{
-            ...transportBtnStyle(),
-            background: loopEnabled && loopRegion ? "rgba(217,255,0,0.15)" : C.panel,
-            border: `1px solid ${loopEnabled && loopRegion ? C.accent : C.border}`,
-            color: loopEnabled && loopRegion ? C.accent : C.textSoft,
-          }}
-        >
-          🔁
-        </button>
-      )}
-      {loopRegion && onClearLoop && (
-        <button
-          onClick={onClearLoop}
-          aria-label="Clear loop region"
-          title="Clear loop region"
-          style={{
-            ...transportBtnStyle(),
-            width: 28,
-            height: 28,
-            fontSize: 12,
-            color: C.muted,
-          }}
-        >
-          ×
-        </button>
+        <div style={{ display: "inline-flex", alignItems: "stretch", height: 38 }}>
+          <button
+            onClick={onToggleLoop}
+            aria-label={loopEnabled ? "Disable loop" : "Enable loop"}
+            title={
+              loopRegion
+                ? loopEnabled
+                  ? `Loop ON · ${formatTime(loopRegion.start)} → ${formatTime(loopRegion.end)} · click to disable`
+                  : `Loop OFF · click to enable (region ${formatTime(loopRegion.start)} → ${formatTime(loopRegion.end)})`
+                : "Loop — drag on the time ruler to set in/out points"
+            }
+            style={{
+              height: 38,
+              padding: loopRegion ? "0 12px" : 0,
+              width: loopRegion ? "auto" : 38,
+              borderRadius: loopRegion ? "8px 0 0 8px" : 8,
+              background: loopEnabled && loopRegion ? C.accent : C.panel,
+              border: `1px solid ${loopEnabled && loopRegion ? C.accent : C.border}`,
+              borderRight: loopRegion ? "none" : `1px solid ${loopEnabled && loopRegion ? C.accent : C.border}`,
+              color: loopEnabled && loopRegion ? "#0a0a0a" : C.textSoft,
+              fontSize: 14,
+              fontWeight: 800,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              whiteSpace: "nowrap",
+              transition: "background 0.12s, color 0.12s",
+            }}
+          >
+            <span style={{ fontSize: 16, lineHeight: 1, fontWeight: 400 }}>↻</span>
+            {loopRegion && (
+              <span style={{
+                fontSize: 11,
+                fontWeight: 700,
+                fontVariantNumeric: "tabular-nums",
+                letterSpacing: "0.02em",
+              }}>
+                {formatTime(loopRegion.start)} → {formatTime(loopRegion.end)}
+              </span>
+            )}
+          </button>
+          {loopRegion && onClearLoop && (
+            <button
+              onClick={onClearLoop}
+              aria-label="Clear loop region"
+              title="Clear loop region"
+              style={{
+                height: 38,
+                width: 28,
+                borderRadius: "0 8px 8px 0",
+                background: loopEnabled ? C.accent : C.panel,
+                border: `1px solid ${loopEnabled ? C.accent : C.border}`,
+                borderLeft: loopEnabled
+                  ? "1px solid rgba(0,0,0,0.18)"
+                  : `1px solid ${C.border}`,
+                color: loopEnabled ? "#0a0a0a" : C.muted,
+                fontSize: 14,
+                lineHeight: 1,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              ×
+            </button>
+          )}
+        </div>
       )}
       <div
         style={{
