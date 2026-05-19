@@ -1654,6 +1654,24 @@ export default function StudioClient() {
         onClearLoop={() => setLoopRegion(null)}
         resolvedBpm={resolvedBpm}
         onBpmOverride={setMixBpmOverride}
+        // R10 — global "act on selected clip" action bar. We hand
+        // down the lookup that resolves selectedClip → underlying
+        // library track + the four action callbacks; ClipActionBar
+        // disables itself when no library track is found.
+        selectedLibraryTrack={(() => {
+          if (!selectedClip) return null;
+          const lane = lanes[selectedClip.laneIndex];
+          const clip = lane?.clips.find((c) => c.id === selectedClip.clipId);
+          if (!clip?.trackId) return null;
+          return library.find((t) => t.id === clip.trackId) || null;
+        })()}
+        stemJob={stemJob}
+        voiceCleanJob={voiceCleanJob}
+        vocalsSplitJob={vocalsSplitJob}
+        onSplitStems={splitStems}
+        onSplitStemsPro={(t) => splitStems(t, "9stem")}
+        onSplitVocals={splitVocals}
+        onCleanVoice={cleanVoice}
       />
       <main style={{ display: "flex", height: "calc(100vh - 56px - 60px)", overflow: "hidden" }}>
         <LibrarySidebar
@@ -2150,7 +2168,7 @@ function VocalsSplitBanner({ job, onDismiss }) {
 }
 
 // ── Transport bar ────────────────────────────────────────────────
-function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onStop, onMasterVolume, onSeek, onExport, onExportStems, exporting, hasAudio, loopEnabled, loopRegion, onToggleLoop, onClearLoop, resolvedBpm, onBpmOverride }) {
+function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onStop, onMasterVolume, onSeek, onExport, onExportStems, exporting, hasAudio, loopEnabled, loopRegion, onToggleLoop, onClearLoop, resolvedBpm, onBpmOverride, selectedLibraryTrack, stemJob, voiceCleanJob, vocalsSplitJob, onSplitStems, onSplitStemsPro, onSplitVocals, onCleanVoice }) {
   return (
     <div
       style={{
@@ -2208,6 +2226,20 @@ function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onSt
       {(onBpmOverride !== undefined) && (
         <BpmInput resolvedBpm={resolvedBpm} onOverride={onBpmOverride} />
       )}
+      {/* R10 — global action bar. Pills act on the currently-selected
+          clip's source track (Split / Pro 9 / Vocals / Clean). Pills
+          are disabled when no clip is selected, or when the selected
+          clip is a stem/voice-clean output (no source library track). */}
+      <ClipActionBar
+        track={selectedLibraryTrack}
+        stemJob={stemJob}
+        voiceCleanJob={voiceCleanJob}
+        vocalsSplitJob={vocalsSplitJob}
+        onSplitStems={onSplitStems}
+        onSplitStemsPro={onSplitStemsPro}
+        onSplitVocals={onSplitVocals}
+        onCleanVoice={onCleanVoice}
+      />
       <div style={{ flex: 1 }} />
       {/* Keyboard hint — discoverable text so users learn the
           DAW-standard shortcuts without needing docs. */}
@@ -2267,6 +2299,110 @@ function KbdHint({ k, children }) {
       </kbd>
       <span>{children}</span>
     </span>
+  );
+}
+
+// R10 — toolbar version of the 4 library actions. Operates on the
+// currently-selected clip's source library track.
+//
+// States per pill:
+//   • no clip selected           → disabled, tooltip explains
+//   • clip selected but no track → disabled, tooltip explains (e.g.
+//     the clip is itself a stem output, no original library track)
+//   • clip + track resolved      → enabled, full color, click runs
+//   • job in flight              → "…" placeholder, color-dimmed
+function ClipActionBar({ track, stemJob, voiceCleanJob, vocalsSplitJob, onSplitStems, onSplitStemsPro, onSplitVocals, onCleanVoice }) {
+  const isSplitting6  = !!track && stemJob?.trackId === track.id && stemJob?.status === "processing" && stemJob?.mode !== "9stem";
+  const isSplitting9  = !!track && stemJob?.trackId === track.id && stemJob?.status === "processing" && stemJob?.mode === "9stem";
+  const isVocals      = !!track && vocalsSplitJob?.trackId === track.id && vocalsSplitJob?.status === "processing";
+  const isCleaning    = !!track && voiceCleanJob?.trackId === track.id && voiceCleanJob?.status === "processing";
+
+  // One unified pill renderer so all four share the same shape +
+  // disabled treatment + click guard.
+  function Pill({ label, cost, color, borderColor, busy, busyTitle, idleTitle, onClick }) {
+    const disabled = !track;
+    const hint = disabled
+      ? "Select a clip on the timeline first"
+      : busy
+        ? busyTitle
+        : `${idleTitle} · ${cost} credits`;
+    return (
+      <button
+        type="button"
+        onClick={(!disabled && !busy && onClick) ? () => onClick(track) : undefined}
+        disabled={disabled || busy}
+        title={hint}
+        style={{
+          padding: "5px 10px",
+          borderRadius: 999,
+          background: busy ? `${color}1a` : "transparent",
+          border: `1px solid ${disabled ? "rgba(255,255,255,0.10)" : borderColor}`,
+          color: disabled ? C.muted : color,
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: "0.02em",
+          cursor: disabled ? "default" : (busy ? "default" : "pointer"),
+          fontFamily: "inherit",
+          opacity: disabled ? 0.5 : (busy ? 0.75 : 1),
+          whiteSpace: "nowrap",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 5,
+          transition: "color 0.1s, border-color 0.1s, opacity 0.1s",
+        }}
+      >
+        <span>{busy ? "…" : label}</span>
+        {!busy && (
+          <span style={{ fontSize: 9, fontWeight: 600, opacity: 0.65, letterSpacing: 0 }}>{cost}c</span>
+        )}
+      </button>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        marginLeft: 4,
+        paddingLeft: 12,
+        borderLeft: `1px solid ${C.border}`,
+      }}
+    >
+      <Pill
+        label="🔬 Split" cost={30}
+        color="#D9FF00" borderColor="rgba(217,255,0,0.40)"
+        busy={isSplitting6}
+        busyTitle="Splitting in progress…"
+        idleTitle="Split into 6 stems"
+        onClick={onSplitStems}
+      />
+      <Pill
+        label="🔬+ Pro 9" cost={50}
+        color="#fbbf24" borderColor="rgba(251,191,36,0.45)"
+        busy={isSplitting9}
+        busyTitle="Pro split in progress…"
+        idleTitle="Pro 9-stem split (adds synth / strings / wind)"
+        onClick={onSplitStemsPro}
+      />
+      <Pill
+        label="🎤 Vocals" cost={10}
+        color="#c4b5fd" borderColor="rgba(196,181,253,0.55)"
+        busy={isVocals}
+        busyTitle="Splitting vocals…"
+        idleTitle="Split lead + backing vocals"
+        onClick={onSplitVocals}
+      />
+      <Pill
+        label="🧹 Clean" cost={6}
+        color="#93c5fd" borderColor="rgba(96,165,250,0.50)"
+        busy={isCleaning}
+        busyTitle="Cleaning voice…"
+        idleTitle="Strip background noise from the vocal"
+        onClick={onCleanVoice}
+      />
+    </div>
   );
 }
 
@@ -2826,9 +2962,9 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
       )}
       {!loading &&
         tracks.map((t) => {
-          const isThisSplitting = stemJob?.trackId === t.id && stemJob?.status === "processing";
-          const isThisCleaning = voiceCleanJob?.trackId === t.id && voiceCleanJob?.status === "processing";
-          const isThisVocalsSplitting = vocalsSplitJob?.trackId === t.id && vocalsSplitJob?.status === "processing";
+          // R10 — per-row action pills moved to the transport bar
+          // so they act on the currently-selected clip. Library rows
+          // are now just title + meta + draggable handle.
           return (
             <div
               key={t.id}
@@ -2850,79 +2986,9 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
                 title={t.title}
                 onRename={onRenameTrack ? (v) => onRenameTrack(t.id, v) : null}
               />
-              <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2, marginBottom: 8 }}>
+              <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>
                 {(t.genre || "—")}{t.mood ? ` · ${t.mood}` : ""}{t.tempo ? ` · ${t.tempo} BPM` : ""}
                 {t.actualDuration || t.durationReq ? ` · ${formatTime(t.actualDuration || t.durationReq)}` : ""}
-              </div>
-              {/* 2x2 pill grid — left column = stem-split actions
-                  (Split + Pro 9), right column = voice actions
-                  (Vocals + Clean). Cleaner than the 1x4 vertical
-                  stack and matches the design Arman approved. */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                {onSplitStems && (
-                  <ActionPill
-                    label="🔬 Split"
-                    cost={30}
-                    busy={isThisSplitting && stemJob?.mode !== "9stem"}
-                    title={
-                      isThisSplitting
-                        ? "Splitting in progress…"
-                        : "Split into 6 stems (vocals/drum/bass/piano/electric_guitar/acoustic_guitar)"
-                    }
-                    color="#D9FF00"
-                    borderColor="rgba(217,255,0,0.40)"
-                    activeBg="rgba(217,255,0,0.10)"
-                    onClick={(e) => { e.stopPropagation(); onSplitStems(t); }}
-                  />
-                )}
-                {onSplitVocals && (
-                  <ActionPill
-                    label="🎤 Vocals"
-                    cost={10}
-                    busy={isThisVocalsSplitting}
-                    title={
-                      isThisVocalsSplitting
-                        ? "Splitting vocals…"
-                        : "Split vocal into lead + backing harmonies"
-                    }
-                    color="#c4b5fd"
-                    borderColor="rgba(196,181,253,0.55)"
-                    activeBg="rgba(196,181,253,0.20)"
-                    onClick={(e) => { e.stopPropagation(); onSplitVocals(t); }}
-                  />
-                )}
-                {onSplitStemsPro && (
-                  <ActionPill
-                    label="🔬+ Pro 9"
-                    cost={50}
-                    busy={isThisSplitting && stemJob?.mode === "9stem"}
-                    title={
-                      isThisSplitting
-                        ? "Pro split in progress…"
-                        : "Pro 9-stem split — adds synthesizer / strings / wind via the phoenix splitter"
-                    }
-                    color="#fbbf24"
-                    borderColor="rgba(251,191,36,0.45)"
-                    activeBg="rgba(251,191,36,0.15)"
-                    onClick={(e) => { e.stopPropagation(); onSplitStemsPro(t); }}
-                  />
-                )}
-                {onCleanVoice && (
-                  <ActionPill
-                    label="🧹 Clean"
-                    cost={6}
-                    busy={isThisCleaning}
-                    title={
-                      isThisCleaning
-                        ? "Cleaning voice…"
-                        : "Strip background noise from the vocal"
-                    }
-                    color="#93c5fd"
-                    borderColor="rgba(96,165,250,0.50)"
-                    activeBg="rgba(96,165,250,0.20)"
-                    onClick={(e) => { e.stopPropagation(); onCleanVoice(t); }}
-                  />
-                )}
               </div>
             </div>
           );
