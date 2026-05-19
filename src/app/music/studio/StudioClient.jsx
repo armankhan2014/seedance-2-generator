@@ -767,6 +767,21 @@ export default function StudioClient() {
         pasteClip();
         return;
       }
+      // M (no modifier) — toggle mute on the selected clip's lane.
+      // Press again to un-mute. Lane goes visually disabled (greyed
+      // + striped) when muted. R10b polish.
+      if (!mod && (e.key === "m" || e.key === "M") && selectedClip) {
+        e.preventDefault();
+        toggleLaneMute(selectedClip.laneIndex);
+        return;
+      }
+      // S (no modifier) — toggle solo on the selected clip's lane.
+      // Same shortcut pattern as M for symmetry.
+      if (!mod && (e.key === "s" || e.key === "S") && selectedClip) {
+        e.preventDefault();
+        toggleLaneSolo(selectedClip.laneIndex);
+        return;
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -3570,8 +3585,28 @@ function TrackLane({ laneIndex, lane, timelineWidth, pixelsPerSecond, onDrop, on
           height: "100%",
           background: hasAny ? "transparent" : C.panel,
           borderLeft: `1px solid ${C.border}`,
+          // Muted lanes get visually "switched off": clips fade and
+          // desaturate, and a diagonal stripe pattern overlays the
+          // whole waveform area so it reads as disabled at a glance.
+          // Press M on the lane header to toggle. R10b polish.
+          opacity: lane.muted ? 0.35 : 1,
+          filter: lane.muted ? "grayscale(0.85)" : "none",
+          transition: "opacity 0.16s ease, filter 0.16s ease",
         }}
       >
+        {lane.muted && hasAny && (
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              inset: 0,
+              pointerEvents: "none",
+              backgroundImage:
+                "repeating-linear-gradient(135deg, transparent 0 7px, rgba(255,255,255,0.04) 7px 14px)",
+              zIndex: 1,
+            }}
+          />
+        )}
         {!hasAny && !lane.loading && (
           <div
             style={{
