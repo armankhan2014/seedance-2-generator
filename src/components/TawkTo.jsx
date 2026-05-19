@@ -1,5 +1,6 @@
 "use client";
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
 
 // Tawk.to with custom mobile positioning so the chat bubble doesn't
 // overlap the MobileBottomNav (Studio tab is bottom-right, Tawk
@@ -14,6 +15,21 @@ import { useEffect } from "react";
 //      div/iframe Tawk renders at body level.
 
 export default function TawkTo() {
+  const pathname = usePathname();
+  // /music/studio is a pro-tool surface — Tawk's chat bubble would
+  // sit in the bottom-right corner and clash with the DAW. We always
+  // mount the component (init logic still loads the Tawk script the
+  // first time), but use Tawk's hide/show API to toggle visibility
+  // when the user navigates in/out of the studio. R9 polish 2026-05-19.
+  const onStudio = !!pathname?.startsWith("/music/studio");
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    // Toggle visibility on every route change once Tawk is loaded.
+    if (window.Tawk_API?.hideWidget && window.Tawk_API?.showWidget) {
+      if (onStudio) window.Tawk_API.hideWidget();
+      else          window.Tawk_API.showWidget();
+    }
+  }, [onStudio]);
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (window.Tawk_API) return;

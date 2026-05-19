@@ -2209,13 +2209,10 @@ function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onSt
         <BpmInput resolvedBpm={resolvedBpm} onOverride={onBpmOverride} />
       )}
       <div style={{ flex: 1 }} />
-      {/* Keyboard hint — discoverable text so users learn the
-          DAW-standard shortcuts without needing docs. */}
-      <span style={{ fontSize: 10.5, color: C.muted, marginRight: 14, display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-        <KbdHint k="Space">play / pause</KbdHint>
-        <KbdHint k="Esc">stop</KbdHint>
-        <KbdHint k="Home">to start</KbdHint>
-      </span>
+      {/* Single keyboard-shortcuts icon — hover for the cheatsheet.
+          Replaces the always-on "Space play/pause · Esc stop · Home"
+          text that visually cluttered the right side of the bar. */}
+      <KbdHintMenu />
       {/* 🎧 Export — split button: main click = export the mix,
           chevron opens a dropdown with the "export individual
           stems" option. Client-side render via OfflineAudioContext,
@@ -2229,7 +2226,7 @@ function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onSt
         />
       )}
       <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 11, color: C.muted, fontWeight: 700, letterSpacing: "0.04em" }}>MASTER</span>
+        <span style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" }}>Master</span>
         <input
           type="range"
           min={0}
@@ -2237,9 +2234,12 @@ function TransportBar({ isPlaying, playhead, masterVolume, onPlay, onPause, onSt
           step={0.01}
           value={masterVolume}
           onChange={(e) => onMasterVolume(Number(e.target.value))}
-          style={{ width: 120, accentColor: C.accent }}
+          style={{ width: 110, accentColor: "rgba(255,255,255,0.55)" }}
           aria-label="Master volume"
         />
+        <span style={{ fontSize: 10, color: C.muted, fontVariantNumeric: "tabular-nums", minWidth: 28, textAlign: "right" }}>
+          {Math.round(masterVolume * 100)}%
+        </span>
       </div>
     </div>
   );
@@ -2267,6 +2267,101 @@ function KbdHint({ k, children }) {
       </kbd>
       <span>{children}</span>
     </span>
+  );
+}
+
+// Single ⌨ icon button with a hover popover that lists every
+// keyboard shortcut Studio supports. Replaces the always-on inline
+// "Space play/pause · Esc stop · Home" text that visually crowded
+// the right side of the transport bar. R9 polish 2026-05-19.
+function KbdHintMenu() {
+  const [open, setOpen] = useState(false);
+  const shortcuts = [
+    { k: "Space",   d: "Play / pause" },
+    { k: "Esc",     d: "Stop" },
+    { k: "Home",    d: "Jump to start" },
+    { k: "Del",     d: "Delete selected clip" },
+    { k: "⌘E",      d: "Split clip at playhead" },
+    { k: "⌘D",      d: "Duplicate clip" },
+    { k: "⌘C / ⌘V", d: "Copy / paste clip" },
+  ];
+  return (
+    <div
+      style={{ position: "relative", marginRight: 12 }}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        aria-label="Keyboard shortcuts"
+        title="Keyboard shortcuts"
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: 6,
+          background: "transparent",
+          border: `1px solid ${C.border}`,
+          color: C.textSoft,
+          fontSize: 14,
+          cursor: "default",
+          fontFamily: "inherit",
+          padding: 0,
+          lineHeight: 1,
+        }}
+      >
+        ⌨
+      </button>
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            top: 38,
+            right: 0,
+            minWidth: 220,
+            padding: 8,
+            background: C.panel,
+            border: `1px solid ${C.border}`,
+            borderRadius: 8,
+            boxShadow: "0 12px 32px rgba(0,0,0,0.6)",
+            zIndex: 60,
+          }}
+        >
+          <div style={{ fontSize: 10, color: C.muted, letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 700, padding: "2px 4px 6px" }}>
+            Keyboard
+          </div>
+          {shortcuts.map((s) => (
+            <div
+              key={s.k}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                padding: "5px 6px",
+                fontSize: 11.5,
+                color: C.textSoft,
+              }}
+            >
+              <span>{s.d}</span>
+              <kbd
+                style={{
+                  padding: "1px 6px",
+                  background: C.panelSoft,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 4,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: C.textSoft,
+                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                }}
+              >
+                {s.k}
+              </kbd>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2350,7 +2445,10 @@ function ExportSplitButton({ onExportMix, onExportStems, exporting, hasAudio }) 
     return () => document.removeEventListener("mousedown", onDoc);
   }, [menuOpen]);
   const disabled = exporting || !hasAudio;
-  const limeBg = `linear-gradient(135deg, ${C.accent}, ${C.accentDark})`;
+  // R9 polish — demoted from solid lime to outlined. Export is a
+  // secondary action (most of the time the user is mixing, not
+  // exporting); the play button should be the one that pops. The
+  // outline still uses the accent color so it stays discoverable.
   return (
     <div
       ref={wrapRef}
@@ -2369,13 +2467,13 @@ function ExportSplitButton({ onExportMix, onExportStems, exporting, hasAudio }) 
         style={{
           padding: "8px 14px",
           borderRadius: "8px 0 0 8px",
-          background: disabled ? C.panelSoft : limeBg,
-          border: `1px solid ${disabled ? C.border : C.accent}`,
+          background: "transparent",
+          border: `1px solid ${disabled ? C.border : "rgba(217,255,0,0.40)"}`,
           borderRight: "none",
-          color: disabled ? C.muted : "#0a0a0a",
+          color: disabled ? C.muted : C.accent,
           fontSize: 12,
-          fontWeight: 800,
-          letterSpacing: "0.04em",
+          fontWeight: 700,
+          letterSpacing: "0.02em",
           cursor: disabled ? "default" : "pointer",
           fontFamily: "inherit",
           whiteSpace: "nowrap",
@@ -2392,14 +2490,12 @@ function ExportSplitButton({ onExportMix, onExportStems, exporting, hasAudio }) 
           style={{
             padding: "0 10px",
             borderRadius: "0 8px 8px 0",
-            background: disabled ? C.panelSoft : limeBg,
-            border: `1px solid ${disabled ? C.border : C.accent}`,
-            borderLeft: disabled
-              ? `1px solid ${C.border}`
-              : "1px solid rgba(0,0,0,0.22)",
-            color: disabled ? C.muted : "#0a0a0a",
+            background: "transparent",
+            border: `1px solid ${disabled ? C.border : "rgba(217,255,0,0.40)"}`,
+            borderLeft: `1px solid ${disabled ? C.border : "rgba(217,255,0,0.20)"}`,
+            color: disabled ? C.muted : C.accent,
             fontSize: 11,
-            fontWeight: 800,
+            fontWeight: 700,
             cursor: disabled ? "default" : "pointer",
             fontFamily: "inherit",
             display: "inline-flex",
@@ -2667,22 +2763,31 @@ function transportBtnStyle() {
 // same hover treatment — and surfaces the credit cost inline so
 // users see the price before they click instead of discovering
 // it via the tooltip after.
+// R9 polish — monochrome at rest. The four library pills used to
+// each have their own color (lime / amber / purple / blue), so 14
+// rows of 4 pills = a rainbow blast down the sidebar. Now: all four
+// share the same muted outline; the action's color only appears on
+// hover or when the job is running. Cost stays visible.
 function ActionPill({ label, cost, busy, title, color, borderColor, activeBg, onClick }) {
+  const [hover, setHover] = useState(false);
+  const tinted = hover || busy;
   return (
     <button
       type="button"
       onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       disabled={busy}
       title={busy ? title : `${title} · ${cost} credits`}
       style={{
         padding: "6px 10px",
         borderRadius: 999,
         background: busy ? activeBg : "transparent",
-        border: `1px solid ${borderColor}`,
-        color,
+        border: `1px solid ${tinted ? borderColor : "rgba(255,255,255,0.10)"}`,
+        color: tinted ? color : C.textSoft,
         fontSize: 11,
-        fontWeight: 800,
-        letterSpacing: "0.04em",
+        fontWeight: 700,
+        letterSpacing: "0.02em",
         cursor: busy ? "default" : "pointer",
         fontFamily: "inherit",
         opacity: busy ? 0.7 : 1,
@@ -2692,6 +2797,7 @@ function ActionPill({ label, cost, busy, title, color, borderColor, activeBg, on
         justifyContent: "center",
         gap: 5,
         width: "100%",
+        transition: "color 0.1s, border-color 0.1s",
       }}
     >
       <span>{busy ? "…" : label}</span>
@@ -2699,7 +2805,7 @@ function ActionPill({ label, cost, busy, title, color, borderColor, activeBg, on
         <span style={{
           fontSize: 9,
           fontWeight: 600,
-          opacity: 0.7,
+          opacity: 0.6,
           letterSpacing: 0,
         }}>
           {cost}c
@@ -2786,13 +2892,41 @@ function LibraryTrackTitle({ title, onRename }) {
 
 // ── Library sidebar ──────────────────────────────────────────────
 function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onCleanVoice, onSplitVocals, stemJob, voiceCleanJob, vocalsSplitJob, onSplitStemsPro, onRenameTrack }) {
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return tracks;
+    return tracks.filter((t) =>
+      (t.title  || "").toLowerCase().includes(q)
+      || (t.prompt || "").toLowerCase().includes(q)
+      || (t.genre  || "").toLowerCase().includes(q)
+      || (t.mood   || "").toLowerCase().includes(q)
+    );
+  }, [tracks, query]);
+
+  // Bucket by age. API returns newest-first so each bucket keeps that order.
+  const grouped = useMemo(() => {
+    const buckets = { "Today": [], "This week": [], "Earlier": [] };
+    for (const t of filtered) {
+      const ageHr = (Date.now() - new Date(t.createdAt).getTime()) / 3600_000;
+      if (ageHr < 24)         buckets["Today"].push(t);
+      else if (ageHr < 24*7)  buckets["This week"].push(t);
+      else                    buckets["Earlier"].push(t);
+    }
+    return buckets;
+  }, [filtered]);
+
   return (
     <aside
       style={{
-        width: 260,
+        width: 280,
         flexShrink: 0,
-        borderRight: `1px solid ${C.border}`,
-        background: C.panel,
+        // Hairline divider (was solid 1px C.border) so the library
+        // visually merges with the timeline instead of being a hard
+        // separate panel. R9 polish.
+        borderRight: `1px solid rgba(255,255,255,0.06)`,
+        background: C.bg,
         overflowY: "auto",
         display: "flex",
         flexDirection: "column",
@@ -2800,32 +2934,84 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
     >
       <div
         style={{
-          padding: "12px 14px",
-          borderBottom: `1px solid ${C.border}`,
+          padding: "14px 14px 10px",
+          borderBottom: `1px solid rgba(255,255,255,0.06)`,
           position: "sticky",
           top: 0,
-          background: C.panel,
-          zIndex: 1,
+          background: C.bg,
+          zIndex: 2,
         }}
       >
-        <div style={{ fontSize: 10, color: C.accent, letterSpacing: "0.16em", fontWeight: 800, textTransform: "uppercase" }}>
-          Your library
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
+          <div style={{ fontSize: 10, color: C.accent, letterSpacing: "0.16em", fontWeight: 800, textTransform: "uppercase" }}>
+            Library
+          </div>
+          <div style={{ fontSize: 10, color: C.muted, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+            {filtered.length}{query ? ` / ${tracks.length}` : ""}
+          </div>
         </div>
-        <div style={{ fontSize: 11, color: C.muted, marginTop: 4, lineHeight: 1.4 }}>
-          Drag a track onto a lane, or tap to load into the next empty lane.
+        <div style={{ position: "relative" }}>
+          <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: C.muted, pointerEvents: "none" }}>🔍</span>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search title, prompt, genre…"
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "6px 8px 6px 28px",
+              fontSize: 11.5,
+              background: C.panelSoft,
+              border: `1px solid rgba(255,255,255,0.06)`,
+              borderRadius: 6,
+              color: C.text,
+              outline: "none",
+              fontFamily: "inherit",
+            }}
+            onFocus={(e) => (e.currentTarget.style.borderColor = C.borderHover)}
+            onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)")}
+          />
         </div>
       </div>
       {loading && (
-        <div style={{ padding: 16, fontSize: 12, color: C.muted }}>Loading library…</div>
+        <div style={{ padding: 18, fontSize: 12, color: C.muted }}>Loading library…</div>
       )}
       {!loading && tracks.length === 0 && (
-        <div style={{ padding: 16, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
+        <div style={{ padding: 18, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
           You don&rsquo;t have any completed tracks yet.{" "}
           <Link href="/music" style={{ color: C.accent }}>Generate one →</Link>
         </div>
       )}
-      {!loading &&
-        tracks.map((t) => {
+      {!loading && tracks.length > 0 && filtered.length === 0 && (
+        <div style={{ padding: 18, fontSize: 12, color: C.muted, lineHeight: 1.5 }}>
+          No tracks match &ldquo;<span style={{ color: C.textSoft }}>{query}</span>&rdquo;.
+        </div>
+      )}
+      {!loading && filtered.length > 0 && (
+        <>
+          {(["Today", "This week", "Earlier"]).map((bucket) => {
+            const rows = grouped[bucket];
+            if (rows.length === 0) return null;
+            return (
+              <div key={bucket}>
+                <div
+                  style={{
+                    padding: "10px 14px 4px",
+                    fontSize: 9.5,
+                    fontWeight: 800,
+                    letterSpacing: "0.16em",
+                    textTransform: "uppercase",
+                    color: C.muted,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <span>{bucket}</span>
+                  <span style={{ fontSize: 9, fontWeight: 600, opacity: 0.7 }}>{rows.length}</span>
+                </div>
+                {rows.map((t) => {
           const isThisSplitting = stemJob?.trackId === t.id && stemJob?.status === "processing";
           const isThisCleaning = voiceCleanJob?.trackId === t.id && voiceCleanJob?.status === "processing";
           const isThisVocalsSplitting = vocalsSplitJob?.trackId === t.id && vocalsSplitJob?.status === "processing";
@@ -2927,6 +3113,11 @@ function LibrarySidebar({ tracks, loading, onDragStart, onTap, onSplitStems, onC
             </div>
           );
         })}
+              </div>
+            );
+          })}
+        </>
+      )}
     </aside>
   );
 }
@@ -3071,8 +3262,8 @@ function TimeRuler({ timelineSeconds, pixelsPerSecond, timelineWidth, onSeek, lo
             bottom: 0,
             width: 1,
             borderLeft: isPhrase
-              ? "1px solid rgba(217,255,0,0.30)"
-              : "1px solid rgba(217,255,0,0.10)",
+              ? "1px solid rgba(217,255,0,0.18)"
+              : "1px solid rgba(217,255,0,0.05)",
             pointerEvents: "none",
           }}
         >
@@ -3447,12 +3638,15 @@ function LaneContextMenu({ x, y, onClose, onDelete }) {
 
 function TrackLane({ laneIndex, lane, timelineWidth, pixelsPerSecond, onDrop, onDragOver, onVolume, onToggleMute, onToggleSolo, onRename, onClear, selectedClipId, onSelectClip, onClipContextMenu, onMoveClip, onTrimClipLeft, onTrimClipRight }) {
   const hasAny = lane.clips && lane.clips.length > 0;
+  const [laneHover, setLaneHover] = useState(false);
   return (
     <div
+      onMouseEnter={() => setLaneHover(true)}
+      onMouseLeave={() => setLaneHover(false)}
       style={{
         display: "flex",
         height: 96,
-        borderBottom: `1px solid ${C.border}`,
+        borderBottom: `1px solid rgba(255,255,255,0.04)`,
       }}
     >
       <LaneHeader
@@ -3471,8 +3665,12 @@ function TrackLane({ laneIndex, lane, timelineWidth, pixelsPerSecond, onDrop, on
           position: "relative",
           width: timelineWidth,
           height: "100%",
-          background: hasAny ? "transparent" : C.panel,
-          borderLeft: `1px solid ${C.border}`,
+          // Empty lanes used to paint a gray panel background, which
+          // split the timeline into a checkerboard. Now they're the
+          // same dark as the loaded ones; only the hover hint shows
+          // they're a drop target.
+          background: "transparent",
+          borderLeft: `1px solid rgba(255,255,255,0.04)`,
         }}
       >
         {!hasAny && !lane.loading && (
@@ -3488,6 +3686,11 @@ function TrackLane({ laneIndex, lane, timelineWidth, pixelsPerSecond, onDrop, on
               fontSize: 11.5,
               fontStyle: "italic",
               pointerEvents: "none",
+              // Only show the "Drop a track here…" hint when the user
+              // is hovering this lane — keeps the resting timeline
+              // visually quiet.
+              opacity: laneHover ? 0.7 : 0,
+              transition: "opacity 0.12s",
             }}
           >
             {lane.error ? `Error: ${lane.error}` : "Drop a track here…"}
@@ -3593,9 +3796,12 @@ function ClipBox({ clip, hue, pixelsPerSecond, selected, onSelect, onContextMenu
     window.addEventListener("mouseup", onUp);
   }
 
+  const [hover, setHover] = useState(false);
   return (
     <div
       onMouseDown={startBodyDrag}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
       onContextMenu={(e) => { e.preventDefault(); onSelect?.(); onContextMenu?.(e); }}
       style={{
         position: "absolute",
@@ -3605,10 +3811,12 @@ function ClipBox({ clip, hue, pixelsPerSecond, selected, onSelect, onContextMenu
         width,
         borderRadius: 6,
         overflow: "hidden",
-        border: `1px solid hsl(${hue} 60% 35%)`,
-        background: `hsl(${hue} 60% 18%)`,
+        // Quieter border at rest; the selection ring is the louder signal.
+        border: `1px solid hsl(${hue} 50% 26%)`,
+        background: `hsl(${hue} 50% 16%)`,
         cursor: "grab",
         boxShadow: selected ? `0 0 0 2px ${C.accent}` : "none",
+        transition: "border-color 0.12s",
       }}
       title={`${clip.name || "Clip"} — drag to move, drag edges to trim, right-click for options`}
     >
@@ -3620,6 +3828,7 @@ function ClipBox({ clip, hue, pixelsPerSecond, selected, onSelect, onContextMenu
         hue={hue}
         pixelsPerSecond={pixelsPerSecond}
         name={clip.name}
+        showName={hover || selected}
       />
       {/* Edge handles — 6px wide grab strips on each side. */}
       <div
@@ -3773,22 +3982,29 @@ function LaneHeader({ laneIndex, lane, onVolume, onToggleMute, onToggleSolo, onR
           </button>
         )}
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        {/* M/S — outlined ghosts at rest, subtle fill when active.
+            The solid red/yellow they used to be looked like error
+            states. Now: white-10% outlined when off; mute = textSoft
+            outline with a "/" mark vibe (just text), solo = the
+            studio accent (lime) only when actually soloing. */}
         <button
           type="button"
           onClick={onToggleMute}
-          title="Mute"
+          title={lane.muted ? "Unmute" : "Mute"}
           style={{
-            padding: "2px 6px",
+            width: 22,
+            height: 22,
             borderRadius: 4,
-            background: lane.muted ? C.danger : C.panelSoft,
-            border: `1px solid ${lane.muted ? C.danger : C.border}`,
-            color: lane.muted ? "#fff" : C.textSoft,
-            fontSize: 9.5,
-            fontWeight: 800,
-            letterSpacing: "0.04em",
+            background: lane.muted ? "rgba(255,255,255,0.10)" : "transparent",
+            border: `1px solid ${lane.muted ? "rgba(255,255,255,0.40)" : C.border}`,
+            color: lane.muted ? C.text : C.muted,
+            fontSize: 10,
+            fontWeight: 700,
             cursor: "pointer",
             fontFamily: "inherit",
+            padding: 0,
+            lineHeight: 1,
           }}
         >
           M
@@ -3796,22 +4012,29 @@ function LaneHeader({ laneIndex, lane, onVolume, onToggleMute, onToggleSolo, onR
         <button
           type="button"
           onClick={onToggleSolo}
-          title="Solo"
+          title={lane.solo ? "Unsolo" : "Solo"}
           style={{
-            padding: "2px 6px",
+            width: 22,
+            height: 22,
             borderRadius: 4,
-            background: lane.solo ? C.accent : C.panelSoft,
+            background: lane.solo ? C.accentSoft : "transparent",
             border: `1px solid ${lane.solo ? C.accent : C.border}`,
-            color: lane.solo ? "#0a0a0a" : C.textSoft,
-            fontSize: 9.5,
-            fontWeight: 800,
-            letterSpacing: "0.04em",
+            color: lane.solo ? C.accent : C.muted,
+            fontSize: 10,
+            fontWeight: 700,
             cursor: "pointer",
             fontFamily: "inherit",
+            padding: 0,
+            lineHeight: 1,
           }}
         >
           S
         </button>
+        {/* Volume slider — no per-lane accent color anymore. The
+            rainbow of 9 different colored slider thumbs down the
+            header column was the loudest visual noise on the page.
+            Lane identity stays in the small color square (above)
+            and the colored waveform itself. */}
         <input
           type="range"
           min={0}
@@ -3821,7 +4044,7 @@ function LaneHeader({ laneIndex, lane, onVolume, onToggleMute, onToggleSolo, onR
           onChange={(e) => onVolume(Number(e.target.value))}
           aria-label="Track volume"
           title={`Volume ${Math.round(lane.volume * 100)}%`}
-          style={{ flex: 1, accentColor: `hsl(${lane.hue} 70% 55%)` }}
+          style={{ flex: 1, accentColor: "rgba(255,255,255,0.55)" }}
         />
       </div>
     </div>
@@ -3838,7 +4061,7 @@ function LaneHeader({ laneIndex, lane, onVolume, onToggleMute, onToggleSolo, onR
 // Called from inside ClipBox which sizes + positions the wrapper —
 // so this no longer needs its own position:absolute wrapper, just
 // the canvas + name label.
-function ClipCanvas({ peaks, bufferDuration, sourceStart, sourceEnd, hue, pixelsPerSecond, name }) {
+function ClipCanvas({ peaks, bufferDuration, sourceStart, sourceEnd, hue, pixelsPerSecond, name, showName = true }) {
   const canvasRef = useRef(null);
   const clipLen = Math.max(0, sourceEnd - sourceStart);
   const clipWidth = Math.max(10, clipLen * pixelsPerSecond);
@@ -3907,6 +4130,8 @@ function ClipCanvas({ peaks, bufferDuration, sourceStart, sourceEnd, hue, pixels
           overflow: "hidden",
           textOverflow: "ellipsis",
           maxWidth: clipWidth - 16,
+          opacity: showName ? 1 : 0,
+          transition: "opacity 0.12s",
         }}
       >
         {name}
