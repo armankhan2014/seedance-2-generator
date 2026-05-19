@@ -3057,11 +3057,21 @@ function PlayerPanel({ track, onReset }) {
     setPos(frac);
   }
   function onDownload() {
-    if (!src) return;
+    if (!track?.id) return;
+    // Mobile browsers (iOS Safari especially) ignore the <a download>
+    // attribute when the href is cross-origin (R2 / MuAPI URLs) AND
+    // the response is audio/*; instead they open a new tab and play
+    // it. Going through the same-origin audio proxy with ?download=1
+    // makes the server set Content-Disposition: attachment, which
+    // forces a real save on every browser.
+    const filename = `${(track.title || "track").replace(/[^a-z0-9_-]/gi, "_")}.mp3`;
+    const url = `/api/music/tracks/${track.id}/audio?download=1&filename=${encodeURIComponent(filename)}`;
     const link = document.createElement("a");
-    link.href = src;
-    link.download = `${(track.title || "track").replace(/[^a-z0-9_-]/gi, "_")}.mp3`;
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
   }
   // Web Share API on mobile (native share sheet across WhatsApp /
   // SMS / Twitter / etc.); silently falls back to clipboard-copy

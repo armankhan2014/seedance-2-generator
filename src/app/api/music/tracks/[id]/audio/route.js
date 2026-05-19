@@ -48,6 +48,13 @@ const ALLOWED_STEM_LABELS = new Set([
   "piano",
   "electric_guitar",
   "acoustic_guitar",
+  // Pro 9-stem additions (R6) — only present after a 9stem-mode
+  // split (LALAL stem_separator + phoenix splitter). For 6-stem
+  // splits these keys won't exist in studioStems → the proxy
+  // returns 404, which is correct.
+  "synthesizer",
+  "strings",
+  "wind",
 ]);
 
 const ALLOWED_VOCALS_LABELS = new Set(["lead", "backing", "no_vocals", "mix_no_lead"]);
@@ -58,7 +65,14 @@ export async function GET(req, { params }) {
     return NextResponse.json({ error: "Sign in" }, { status: 401 });
   }
   const { id } = await params;
-  const source = new URL(req.url).searchParams.get("source") || "main";
+  const url0 = new URL(req.url);
+  const source = url0.searchParams.get("source") || "main";
+  // ?download=1[&filename=foo.mp3] → set Content-Disposition so
+  // mobile browsers (iOS Safari especially) save the file instead
+  // of opening it in a new tab to play. Without this, the audio
+  // tag handler in Safari hijacks the response.
+  const wantsDownload = url0.searchParams.get("download") === "1";
+  const downloadFilename = url0.searchParams.get("filename") || "";
 
   // Pull a wide-enough column set in one query so the source switch
   // below doesn't need a second DB hit.
@@ -137,6 +151,20 @@ export async function GET(req, { params }) {
   // Belt-and-braces CORS for any future iframe/embed scenario.
   headers.set("Access-Control-Allow-Origin", "*");
   headers.set("Accept-Ranges", "bytes");
+  if (wantsDownload) {
+    // Force the browser to save instead of playing inline. iOS Safari
+    // ignores the HTML <a download> attribute for media-typed responses
+    // and opens them in a new tab; Content-Disposition: attachment
+    // overrides that. We also strip the cache so downloads always pull
+    // fresh and don't get reused as a player source.
+    const safeName = downloadFilename
+      .replace(/[^\w.\-]+/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "")
+      .slice(0, 80) || `track.mp3`;
+    headers.set("Content-Disposition", `attachment; filename="${safeName}"`);
+    headers.set("Cache-Control", "private, no-store");
+  }
 
   return new Response(upstream.body, { headers });
 }

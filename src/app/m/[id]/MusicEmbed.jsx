@@ -124,11 +124,20 @@ function PlayerCard({ track }) {
     setPos(frac);
   }
   function onDownload() {
-    if (!track.src) return;
+    if (!track?.id) return;
+    // Mobile browsers (iOS Safari especially) ignore the HTML
+    // <a download> attribute when the href is cross-origin (R2) AND
+    // the response is audio/*; they open a new tab and play it
+    // instead of saving. Go through our same-origin public download
+    // route, which sets Content-Disposition: attachment.
+    const filename = `${(track.title || "track").replace(/[^a-z0-9_-]/gi, "_")}.mp3`;
+    const url = `/api/music/tracks/${track.id}/download?filename=${encodeURIComponent(filename)}`;
     const link = document.createElement("a");
-    link.href = track.src;
-    link.download = `${(track.title || "track").replace(/[^a-z0-9_-]/gi, "_")}.mp3`;
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
   }
   async function onShare() {
     const url = typeof window !== "undefined" ? window.location.href : "";
