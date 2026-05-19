@@ -2321,22 +2321,46 @@ function ClipActionBar({ track, stemJob, voiceCleanJob, vocalsSplitJob, onSplitS
   // disabled treatment + click guard.
   function Pill({ label, cost, color, borderColor, busy, busyTitle, idleTitle, onClick }) {
     const disabled = !track;
+    const [hover, setHover] = useState(false);
+    const [pressed, setPressed] = useState(false);
     const hint = disabled
       ? "Select a clip on the timeline first"
       : busy
         ? busyTitle
         : `${idleTitle} · ${cost} credits`;
+    // Hover "wow" effect: tinted background fill, soft colored glow,
+    // and a 1px lift via translateY. Pressed state drops it back +
+    // shrinks the glow so the click feels physical. Disabled / busy
+    // pills don't react. R10 polish.
+    const interactive = !disabled && !busy;
+    const lift  = interactive && hover && !pressed;
+    const press = interactive && pressed;
+    const hexAlpha = (a) => Math.round(a * 255).toString(16).padStart(2, "0");
     return (
       <button
         type="button"
-        onClick={(!disabled && !busy && onClick) ? () => onClick(track) : undefined}
+        onClick={interactive && onClick ? () => onClick(track) : undefined}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => { setHover(false); setPressed(false); }}
+        onMouseDown={() => interactive && setPressed(true)}
+        onMouseUp={() => setPressed(false)}
         disabled={disabled || busy}
         title={hint}
         style={{
           padding: "5px 10px",
           borderRadius: 999,
-          background: busy ? `${color}1a` : "transparent",
-          border: `1px solid ${disabled ? "rgba(255,255,255,0.10)" : borderColor}`,
+          background: busy
+            ? `${color}1a`
+            : lift
+              ? `${color}${hexAlpha(0.14)}`
+              : "transparent",
+          border: `1px solid ${
+            disabled
+              ? "rgba(255,255,255,0.10)"
+              : lift
+                ? color
+                : borderColor
+          }`,
           color: disabled ? C.muted : color,
           fontSize: 11,
           fontWeight: 700,
@@ -2348,7 +2372,14 @@ function ClipActionBar({ track, stemJob, voiceCleanJob, vocalsSplitJob, onSplitS
           display: "inline-flex",
           alignItems: "center",
           gap: 5,
-          transition: "color 0.1s, border-color 0.1s, opacity 0.1s",
+          transform: press ? "translateY(0)" : lift ? "translateY(-1px)" : "translateY(0)",
+          boxShadow: lift
+            ? `0 0 0 4px ${color}1f, 0 6px 18px -4px ${color}66`
+            : press
+              ? `0 0 0 2px ${color}26`
+              : "none",
+          transition: "color 0.14s ease, border-color 0.14s ease, background 0.14s ease, transform 0.14s cubic-bezier(.2,.7,.3,1), box-shadow 0.14s ease, opacity 0.14s ease",
+          willChange: "transform, box-shadow",
         }}
       >
         <span>{busy ? "…" : label}</span>
