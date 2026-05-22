@@ -73,6 +73,7 @@ model User {
   pushSubscriptions PushSubscription[]
   musicTracks       MusicTrack[]
   creditTxns        CreditTransaction[]
+  editorProjects    EditorProject[]
 }
 
 // Append-only audit log for every credit movement on a User. Inserted in
@@ -105,6 +106,51 @@ model CreditTransaction {
   @@index([userId, createdAt(sort: Desc)])
   @@index([reason])
   @@index([refType, refId])
+}
+
+// Editor projects from edits.visualseffect.com. A project = the entire
+// timeline state (clips + tracks + filters + audio + text) the user can
+// resume editing later. Phase 1 stores everything in the `timeline` Json
+// blob — we don't query inside it, so no separate Clip table yet.
+//
+// Lifecycle:
+//   DRAFT      — being edited. Autosave keeps `timeline` fresh every ~5s.
+//   EXPORTING  — set when Export is clicked. Phase 1 finishes export
+//                client-side via FFmpeg.wasm, then PATCHes back to
+//                EXPORTED + writes exportedUrl. Phase 2 server worker
+//                will hold the row in EXPORTING longer.
+//   EXPORTED   — last export succeeded. exportedUrl points at R2.
+//   FAILED     — last export failed. Credits already refunded by the
+//                CreditTransaction ledger (reason="refund_editor_export").
+//
+// `lastEditedAt` is denormalized from `updatedAt` so the project list
+// can sort by recency without scanning the timeline blob.
+enum EditorProjectStatus {
+  DRAFT
+  EXPORTING
+  EXPORTED
+  FAILED
+}
+
+model EditorProject {
+  id            String              @id @default(cuid())
+  userId        String
+  name          String              @default("Untitled project")
+  timeline      Json
+  aspectRatio   String              @default("16:9")
+  durationSec   Float               @default(0)
+  thumbnailUrl  String?
+  status        EditorProjectStatus @default(DRAFT)
+  exportedUrl   String?
+  exportedAt    DateTime?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  lastEditedAt  DateTime            @default(now())
+
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, lastEditedAt(sort: Desc)])
+  @@index([status])
 }
 
 model Creation {
