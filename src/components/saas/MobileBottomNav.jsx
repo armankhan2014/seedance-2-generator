@@ -51,7 +51,10 @@ const TABS = [
     ),
   },
   {
-    href: "/music",
+    // Music split to its own subdomain on 2026-05-22 — cross-origin
+    // navigation, but SSO works because the session cookie is scoped
+    // to .visualseffect.com.
+    href: "https://music.visualseffect.com",
     label: "Music",
     icon: (
       // Music note + waveform — distinctive against the navigation
@@ -77,17 +80,15 @@ const TABS = [
 ];
 
 // Studio tab is the rightmost — used as the default-active state
-// for any Studio route that isn't explicitly mapped to another tab.
+// for every Studio route. Music + Community live on other subdomains
+// (cross-origin), so their pathnames are never the current path here
+// and they're never "active" on this side.
 const STUDIO_IDX = TABS.length - 1;
-const MUSIC_IDX = TABS.findIndex((t) => t.href === "/music");
 
-// Match the current pathname to one of the LOCAL tabs (same-origin
-// hrefs only — the cross-subdomain ones at COMMUNITY_URL are never
-// the current pathname on this side). Falls back to STUDIO_IDX so
-// the lime pill defaults to Studio on /, /generate, /creations etc.
-function activeIndexFor(pathname) {
-  if (!pathname) return STUDIO_IDX;
-  if (pathname === "/music" || pathname.startsWith("/music/")) return MUSIC_IDX;
+function activeIndexFor() {
+  // Every same-origin route belongs to the Studio app (/, /generate,
+  // /creations, /pricing, /profile, ...). Music split out to its own
+  // subdomain on 2026-05-22 — there's no longer a Music route here.
   return STUDIO_IDX;
 }
 

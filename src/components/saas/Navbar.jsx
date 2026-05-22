@@ -109,10 +109,12 @@ export default function Navbar() {
     { href: "/generate", label: "Generate" },
     { href: "/creations", label: "Gallery" },
     { href: "/pricing", label: "Pricing" },
-    // Music opens in a new tab so users don't lose mid-prompt /generate
-    // state when they switch over to compose a soundtrack. `newTab`
-    // is honoured by NavLink — same-origin link with target=_blank.
-    { href: "/music", label: "Music 🎵", newTab: true },
+    // Music now lives on its own subdomain (split out 2026-05-22 so
+    // the music app has its own deploy + bundle). Same .visualseffect.com
+    // cookie scope = same SSO, so signed-in users land signed-in.
+    // `external: true` opens in a new tab (NavLink behaviour) so users
+    // don't lose mid-prompt /generate state when switching to compose.
+    { href: "https://music.visualseffect.com", label: "Music 🎵", external: true },
     // Cross-subdomain link to the community site. Rendered as a
     // plain <a> by NavLink so the browser does a full navigation
     // (correct since the session cookie is shared at .visualseffect.com
