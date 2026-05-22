@@ -19,7 +19,8 @@ const nextConfig = {
           // Pin clients to HTTPS for 2 years incl. subdomains.
           { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
           // Drop unused browser features for everyone visiting the site.
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
+          // microphone=(self) so the /music voice-recorder can use getUserMedia.
+          { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=(), payment=()" },
         ],
       },
     ];
