@@ -10,9 +10,35 @@
  * (system fallbacks since email clients block webfont loading).
  */
 
+import fs from "node:fs";
+import path from "node:path";
+
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "armankhan0826@gmail.com";
-const FROM        = "Seedance Studio <noreply@visualseffect.com>";
+// FROM address uses the `send.visualseffect.com` subdomain because that's the
+// verified sending domain in Resend. The receiving mailbox at
+// hello@visualseffect.com (Google Workspace) is unchanged — replies still
+// route to Arman's Gmail. Don't change this back to @visualseffect.com
+// without re-verifying the apex domain in Resend first, otherwise every
+// transactional email silently fails (Resend rejects unverified senders).
+const FROM        = "Seedance Studio <noreply@send.visualseffect.com>";
 const SITE        = "https://seedance.visualseffect.com";
+
+// Welcome-email HTML loaded from emails/seedance_welcome_email.html at
+// module-load. Cached for the lifetime of the Lambda warm instance so we
+// don't re-read on every signup. The file ships in the Vercel bundle
+// because Next.js includes anything reachable via fs.readFileSync from
+// a server-only path inside the repo. On a cold-start read failure the
+// loader falls back to null and sendWelcomeEmail logs + bails — better
+// than crashing the signup flow.
+let WELCOME_HTML = null;
+try {
+  WELCOME_HTML = fs.readFileSync(
+    path.join(process.cwd(), "emails", "seedance_welcome_email.html"),
+    "utf8"
+  );
+} catch (e) {
+  console.error("[EMAIL] failed to load welcome template:", e.message);
+}
 
 async function send({ to, subject, html }) {
   const key = process.env.RESEND_API_KEY;
@@ -205,61 +231,44 @@ export async function sendSignupNotification({ name, email, image, isReturning =
 
 /* ─────────────────────────────────────────────────────────────────
  * 2. Welcome email — to the new user
+ *
+ * Body is the file-based template at emails/seedance_welcome_email.html
+ * (loaded into WELCOME_HTML at module load). We substitute three merge
+ * tags:
+ *   {{first_name}}      — user's first word of `name`, or "there"
+ *   {{help_url}}        — mailto:hello@visualseffect.com (no /help page exists yet)
+ *   {{unsubscribe_url}} — mailto:hello@visualseffect.com with the user's
+ *                         email prefilled in the subject so we can sweep
+ *                         opt-outs manually. Swap to a real /unsubscribe
+ *                         page + suppression list when that lands.
  * ───────────────────────────────────────────────────────────────── */
 export async function sendWelcomeEmail({ name, email }) {
+  if (!WELCOME_HTML) {
+    console.error("[EMAIL] WELCOME_HTML missing — skipping welcome email to", email);
+    return;
+  }
   const firstName = name ? name.split(" ")[0] : "there";
 
-  const inner = `
-    <tr><td style="padding:40px 36px 0">
-      ${pulseBadge({ label: "Welcome" })}
-      ${headline(`Welcome to <span style="color:${ACCENT_LT}">Seedance</span>,<br/>${firstName}.`, 30)}
-      ${subline("Your studio is ready. Write a prompt, choose your settings, and watch your idea come to life — your first 10 credits are waiting.")}
-    </td></tr>
-    <tr><td style="padding:0 36px 0">
-      ${statChip({ value: "10 credits", label: "Ready to use" })}
-    </td></tr>
-    <tr><td style="padding:0 36px 8px">
-      ${ctaButton({ url: `${SITE}/generate`, label: "Start creating" })}
-    </td></tr>
-    <tr><td style="padding:28px 36px 0">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-        <tr><td style="height:1px;background:${DIVIDER};font-size:0;line-height:0">&nbsp;</td></tr>
-      </table>
-    </td></tr>
-    <tr><td style="padding:24px 36px 36px">
-      <p style="margin:0 0 12px;font-family:${FONT};font-size:10px;color:${MUTED};letter-spacing:0.18em;text-transform:uppercase;font-weight:700">How it works</p>
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-        ${[
-          ["01", "Write your prompt", "Describe your scene, mood, and action — or let the AI builder expand a short idea."],
-          ["02", "Choose your settings", "Aspect ratio, duration, resolution. 1:1 · 16:9 · 9:16 supported."],
-          ["03", "Download &amp; share", "Your video lands in your gallery in seconds. Download or share instantly."],
-        ].map(([n, t, b], i, arr) => `
-          <tr><td style="padding:14px 0;${i === arr.length - 1 ? "" : `border-bottom:1px solid ${DIVIDER};`}vertical-align:top">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-              <tr>
-                <td style="width:46px;vertical-align:top">
-                  <span style="display:inline-block;font-family:${MONO};font-size:11px;font-weight:700;color:${ACCENT_LT};background:${ACCENT_BG};border:1px solid ${ACCENT_BORD};border-radius:6px;padding:4px 8px;letter-spacing:0.05em">${n}</span>
-                </td>
-                <td style="vertical-align:top;padding-top:1px">
-                  <p style="margin:0 0 4px;font-family:${FONT};font-size:13px;font-weight:600;color:${TEXT}">${t}</p>
-                  <p style="margin:0;font-family:${FONT};font-size:12px;color:${MUTED};line-height:1.55">${b}</p>
-                </td>
-              </tr>
-            </table>
-          </td></tr>
-        `).join("")}
-      </table>
-    </td></tr>
-  `;
+  // Escape user input before injection — name can contain HTML-significant
+  // chars (e.g. "Tom & Jerry") that would break the markup otherwise.
+  const escape = (s) =>
+    String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+  const helpUrl = `mailto:hello@visualseffect.com?subject=${encodeURIComponent("Seedance help")}`;
+  const unsubUrl =
+    `mailto:hello@visualseffect.com` +
+    `?subject=${encodeURIComponent("Unsubscribe")}` +
+    `&body=${encodeURIComponent(`Please unsubscribe ${email} from all Seedance emails.`)}`;
+
+  const html = WELCOME_HTML
+    .replace(/\{\{first_name\}\}/g, escape(firstName))
+    .replace(/\{\{help_url\}\}/g, helpUrl)
+    .replace(/\{\{unsubscribe_url\}\}/g, unsubUrl);
 
   await send({
     to: email,
-    subject: `Welcome to Seedance, ${firstName} — your 10 credits are ready`,
-    html: pageWrapper({
-      title: "Welcome to Seedance",
-      preheader: "Your studio is ready. 10 credits waiting — start creating in seconds.",
-      inner,
-    }),
+    subject: `Welcome to Seedance, ${firstName} 🎬`,
+    html,
   });
 }
 
