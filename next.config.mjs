@@ -3,6 +3,42 @@ const nextConfig = {
   // Don't advertise the framework in response headers.
   poweredByHeader: false,
 
+  // Ship the welcome-email HTML template into the serverless bundle.
+  // Without this Next.js's file-tracer skips it because the
+  // fs.readFileSync path in src/lib/email.js is built at runtime
+  // (path.join with process.cwd()) and can't be statically analyzed.
+  // The /api/auth route triggers sendWelcomeEmail → trace from there.
+  outputFileTracingIncludes: {
+    "/api/auth/**/*": ["./emails/seedance_welcome_email.html"],
+  },
+
+  async redirects() {
+    return [
+      // Music moved to its own subdomain on 2026-05-22. Permanent
+      // redirect (301) so old bookmarks, Google search hits, and any
+      // /music/studio · /music/discover deep links land on the new
+      // home. NOTE: only matches PAGE routes — /api/music/* is left
+      // alone because in-flight MuAPI callbacks were registered against
+      // this hostname and must still resolve here.
+      //
+      // Path mapping:
+      //   /music           → https://music.visualseffect.com/
+      //   /music/studio    → https://music.visualseffect.com/studio
+      //   /music/discover  → https://music.visualseffect.com/discover
+      //   /music/<rest>    → https://music.visualseffect.com/<rest>
+      {
+        source: "/music",
+        destination: "https://music.visualseffect.com/",
+        permanent: true,
+      },
+      {
+        source: "/music/:path*",
+        destination: "https://music.visualseffect.com/:path*",
+        permanent: true,
+      },
+    ];
+  },
+
   async headers() {
     return [
       {
