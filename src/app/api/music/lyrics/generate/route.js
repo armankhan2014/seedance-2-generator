@@ -107,7 +107,7 @@ export async function POST(req) {
   // Debit before the Claude call. Refund on every downstream failure
   // path below — see /api/prompt/expand for the parent pattern.
   try {
-    await UserService.deductCredits(session.user.id, LYRIC_COST);
+    await UserService.deductCredits(session.user.id, LYRIC_COST, { reason: "lyrics_generate" });
   } catch (e) {
     if (e.message === "Insufficient credits") {
       return NextResponse.json(
@@ -150,7 +150,7 @@ export async function POST(req) {
     });
     d = await r.json();
   } catch (fetchErr) {
-    await UserService.addCredits(session.user.id, LYRIC_COST).catch(() => {});
+    await UserService.addCredits(session.user.id, LYRIC_COST, { reason: "refund_lyrics_generate", note: "network_error" }).catch(() => {});
     console.error("[MUSIC_LYRICS] network error:", fetchErr);
     return NextResponse.json(
       { error: "Lyric service unreachable. Try again." },
@@ -159,7 +159,7 @@ export async function POST(req) {
   }
 
   if (!r.ok) {
-    await UserService.addCredits(session.user.id, LYRIC_COST).catch(() => {});
+    await UserService.addCredits(session.user.id, LYRIC_COST, { reason: "refund_lyrics_generate", note: "anthropic_error" }).catch(() => {});
     console.error("[MUSIC_LYRICS] Anthropic error:", JSON.stringify(d));
     return NextResponse.json(
       { error: `Lyric AI error: ${d?.error?.message || "Unknown error."}` },
@@ -169,7 +169,7 @@ export async function POST(req) {
 
   const lyrics = d?.content?.[0]?.text?.trim();
   if (!lyrics) {
-    await UserService.addCredits(session.user.id, LYRIC_COST).catch(() => {});
+    await UserService.addCredits(session.user.id, LYRIC_COST, { reason: "refund_lyrics_generate", note: "empty_response" }).catch(() => {});
     return NextResponse.json(
       { error: "AI returned no lyrics. Please try again." },
       { status: 500 }

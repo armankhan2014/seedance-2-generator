@@ -106,9 +106,17 @@ export async function POST(req) {
   }
 
   // Debit
-  const debit = await prisma.user.updateMany({
-    where: { id: userId, credits: { gte: VOICE_CLEAN_COST } },
-    data: { credits: { decrement: VOICE_CLEAN_COST } },
+  const debit = await prisma.$transaction(async (tx) => {
+    const r = await tx.user.updateMany({
+      where: { id: userId, credits: { gte: VOICE_CLEAN_COST } },
+      data: { credits: { decrement: VOICE_CLEAN_COST } },
+    });
+    if (r.count === 1) {
+      await tx.creditTransaction.create({
+        data: { userId, delta: -VOICE_CLEAN_COST, reason: "voice_clean", refType: "MusicTrack", refId: trackId },
+      });
+    }
+    return r;
   });
   if (debit.count !== 1) {
     return NextResponse.json(
@@ -117,9 +125,10 @@ export async function POST(req) {
     );
   }
   async function refund(reason) {
-    await prisma.user
-      .update({ where: { id: userId }, data: { credits: { increment: VOICE_CLEAN_COST } } })
-      .catch((e) => console.error("[VOICE_CLEAN] refund failed:", e?.message));
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { credits: { increment: VOICE_CLEAN_COST } } }),
+      prisma.creditTransaction.create({ data: { userId, delta: VOICE_CLEAN_COST, reason: "refund_voice_clean", refType: "MusicTrack", refId: trackId, note: reason.slice(0, 500) } }),
+    ]).catch((e) => console.error("[VOICE_CLEAN] refund failed:", e?.message));
     console.warn(`[VOICE_CLEAN] refund — ${reason}`);
   }
 

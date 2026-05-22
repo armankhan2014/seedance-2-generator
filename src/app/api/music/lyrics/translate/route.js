@@ -139,7 +139,7 @@ export async function POST(req) {
 
   // Debit before the call. Refund on every failure path.
   try {
-    await UserService.deductCredits(session.user.id, TRANSLATE_COST);
+    await UserService.deductCredits(session.user.id, TRANSLATE_COST, { reason: "lyrics_translate", note: `→${targetLanguage}` });
   } catch (e) {
     if (e.message === "Insufficient credits") {
       return NextResponse.json(
@@ -179,7 +179,7 @@ Output the translated lyrics in the same [Section Tag] structure. Native script 
     });
     d = await r.json();
   } catch (fetchErr) {
-    await UserService.addCredits(session.user.id, TRANSLATE_COST).catch(() => {});
+    await UserService.addCredits(session.user.id, TRANSLATE_COST, { reason: "refund_lyrics_translate", note: "network_error" }).catch(() => {});
     console.error("[LYRIC_TRANSLATE] network error:", fetchErr);
     return NextResponse.json(
       { error: "Translation service unreachable. Try again." },
@@ -188,7 +188,7 @@ Output the translated lyrics in the same [Section Tag] structure. Native script 
   }
 
   if (!r.ok) {
-    await UserService.addCredits(session.user.id, TRANSLATE_COST).catch(() => {});
+    await UserService.addCredits(session.user.id, TRANSLATE_COST, { reason: "refund_lyrics_translate", note: "anthropic_error" }).catch(() => {});
     console.error("[LYRIC_TRANSLATE] Anthropic error:", JSON.stringify(d));
     return NextResponse.json(
       { error: `Translation AI error: ${d?.error?.message || "Unknown error."}` },
@@ -198,7 +198,7 @@ Output the translated lyrics in the same [Section Tag] structure. Native script 
 
   const translated = d?.content?.[0]?.text?.trim();
   if (!translated) {
-    await UserService.addCredits(session.user.id, TRANSLATE_COST).catch(() => {});
+    await UserService.addCredits(session.user.id, TRANSLATE_COST, { reason: "refund_lyrics_translate", note: "empty_response" }).catch(() => {});
     return NextResponse.json(
       { error: "AI returned no translation. Please try again." },
       { status: 500 }

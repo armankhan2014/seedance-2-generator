@@ -139,9 +139,17 @@ export async function POST(req, { params }) {
   }
 
   // ── Debit credits atomically ──────────────────────────────────────
-  const debit = await prisma.user.updateMany({
-    where: { id: userId, credits: { gte: cost } },
-    data: { credits: { decrement: cost } },
+  const debit = await prisma.$transaction(async (tx) => {
+    const r = await tx.user.updateMany({
+      where: { id: userId, credits: { gte: cost } },
+      data: { credits: { decrement: cost } },
+    });
+    if (r.count === 1) {
+      await tx.creditTransaction.create({
+        data: { userId, delta: -cost, reason: "stem_split", refType: "MusicTrack", refId: track.id, note: mode },
+      });
+    }
+    return r;
   });
   if (debit.count !== 1) {
     return NextResponse.json(
@@ -156,10 +164,10 @@ export async function POST(req, { params }) {
     `https://${req.headers.get("host") || "seedance.visualseffect.com"}`;
   const callbackSecret = process.env.WEBHOOK_SECRET;
   if (!callbackSecret) {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { credits: { increment: cost } },
-    });
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { credits: { increment: cost } } }),
+      prisma.creditTransaction.create({ data: { userId, delta: cost, reason: "refund_stem_split", refType: "MusicTrack", refId: track.id, note: "WEBHOOK_SECRET missing" } }),
+    ]);
     console.error("[STEMS] WEBHOOK_SECRET missing — refunded + aborted");
     return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
   }
@@ -195,10 +203,10 @@ export async function POST(req, { params }) {
     stemTaskId = result.stemTaskId;
     if (!stemTaskId) throw new Error("Stem service returned no task id");
   } catch (err) {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { credits: { increment: cost } },
-    });
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { credits: { increment: cost } } }),
+      prisma.creditTransaction.create({ data: { userId, delta: cost, reason: "refund_stem_split", refType: "MusicTrack", refId: track.id, note: (err?.message || "upstream_failed").slice(0, 500) } }),
+    ]);
     // Log a rich error envelope so future "record does not exist"
     // reports have enough signal to root-cause without re-deploying
     // with logging tweaks.
@@ -257,10 +265,10 @@ export async function POST(req, { params }) {
       },
     });
   } catch (err) {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { credits: { increment: cost } },
-    });
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { credits: { increment: cost } } }),
+      prisma.creditTransaction.create({ data: { userId, delta: cost, reason: "refund_stem_split", refType: "MusicTrack", refId: track.id, note: "track_row_update_failed" } }),
+    ]);
     console.error("[STEMS] DB write failed:", err?.message);
     return NextResponse.json({ error: "Server error", refunded: true }, { status: 500 });
   }

@@ -232,7 +232,7 @@ export async function POST(req) {
     // existing /api/prompt/build route — without this guard, a user
     // with 1 credit could hammer Claude indefinitely.
     try {
-      await UserService.deductCredits(session.user.id, EXPAND_COST);
+      await UserService.deductCredits(session.user.id, EXPAND_COST, { reason: "prompt_expand" });
     } catch (e) {
       if (e.message === "Insufficient credits") {
         return NextResponse.json(
@@ -327,13 +327,13 @@ export async function POST(req) {
       d = await r.json();
     } catch (fetchErr) {
       // Network failure — refund and bail.
-      await UserService.addCredits(session.user.id, EXPAND_COST).catch(() => {});
+      await UserService.addCredits(session.user.id, EXPAND_COST, { reason: "refund_prompt_expand", note: "network_error" }).catch(() => {});
       throw fetchErr;
     }
 
     if (!r.ok) {
       console.error("Anthropic API error (expand):", JSON.stringify(d));
-      await UserService.addCredits(session.user.id, EXPAND_COST).catch(() => {});
+      await UserService.addCredits(session.user.id, EXPAND_COST, { reason: "refund_prompt_expand", note: "anthropic_error" }).catch(() => {});
       return NextResponse.json(
         { error: `AI error: ${d.error?.message || "Unknown error."}` },
         { status: 500 }
@@ -342,7 +342,7 @@ export async function POST(req) {
 
     let prompt = d.content?.[0]?.text?.trim();
     if (!prompt) {
-      await UserService.addCredits(session.user.id, EXPAND_COST).catch(() => {});
+      await UserService.addCredits(session.user.id, EXPAND_COST, { reason: "refund_prompt_expand", note: "empty_response" }).catch(() => {});
       return NextResponse.json(
         { error: "AI returned empty response. Please try again." },
         { status: 500 }

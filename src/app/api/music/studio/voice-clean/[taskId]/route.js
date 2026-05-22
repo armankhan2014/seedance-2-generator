@@ -101,9 +101,10 @@ export async function GET(req, { params }) {
       where: { id: track.id, voiceCleanStatus: "processing" },
       data: { voiceCleanStatus: "failed", voiceCleanError: msg },
     });
-    await prisma.user
-      .update({ where: { id: userId }, data: { credits: { increment: VOICE_CLEAN_COST } } })
-      .catch(() => {});
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { credits: { increment: VOICE_CLEAN_COST } } }),
+      prisma.creditTransaction.create({ data: { userId, delta: VOICE_CLEAN_COST, reason: "refund_voice_clean", refType: "MusicTrack", refId: track.id, note: msg.slice(0, 500) } }),
+    ]).catch(() => {});
     return NextResponse.json({
       ok: true,
       voiceCleanStatus: "failed",
@@ -124,9 +125,10 @@ export async function GET(req, { params }) {
         where: { id: track.id, voiceCleanStatus: "processing" },
         data: { voiceCleanStatus: "failed", voiceCleanError: "Upstream returned no voice track" },
       });
-      await prisma.user
-        .update({ where: { id: userId }, data: { credits: { increment: VOICE_CLEAN_COST } } })
-        .catch(() => {});
+      await prisma.$transaction([
+        prisma.user.update({ where: { id: userId }, data: { credits: { increment: VOICE_CLEAN_COST } } }),
+        prisma.creditTransaction.create({ data: { userId, delta: VOICE_CLEAN_COST, reason: "refund_voice_clean", refType: "MusicTrack", refId: track.id, note: "no_voice_track" } }),
+      ]).catch(() => {});
       return NextResponse.json({
         ok: true,
         voiceCleanStatus: "failed",

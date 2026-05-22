@@ -79,9 +79,17 @@ export async function POST(req, { params }) {
   }
 
   // ── Debit credits atomically ──────────────────────────────────────
-  const debit = await prisma.user.updateMany({
-    where: { id: userId, credits: { gte: EXTEND_COST } },
-    data: { credits: { decrement: EXTEND_COST } },
+  const debit = await prisma.$transaction(async (tx) => {
+    const r = await tx.user.updateMany({
+      where: { id: userId, credits: { gte: EXTEND_COST } },
+      data: { credits: { decrement: EXTEND_COST } },
+    });
+    if (r.count === 1) {
+      await tx.creditTransaction.create({
+        data: { userId, delta: -EXTEND_COST, reason: "music_extend", refType: "MusicTrack", refId: source.id },
+      });
+    }
+    return r;
   });
   if (debit.count !== 1) {
     return NextResponse.json(
@@ -99,10 +107,10 @@ export async function POST(req, { params }) {
     `https://${req.headers.get("host") || "seedance.visualseffect.com"}`;
   const callbackSecret = process.env.WEBHOOK_SECRET;
   if (!callbackSecret) {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { credits: { increment: EXTEND_COST } },
-    });
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { credits: { increment: EXTEND_COST } } }),
+      prisma.creditTransaction.create({ data: { userId, delta: EXTEND_COST, reason: "refund_music_extend", refType: "MusicTrack", refId: source.id, note: "WEBHOOK_SECRET missing" } }),
+    ]);
     console.error("[EXTEND] WEBHOOK_SECRET missing — refunded + aborted");
     return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
   }
@@ -123,10 +131,10 @@ export async function POST(req, { params }) {
     taskId = result.taskId;
     if (!taskId) throw new Error("Music service returned no task id");
   } catch (err) {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { credits: { increment: EXTEND_COST } },
-    });
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { credits: { increment: EXTEND_COST } } }),
+      prisma.creditTransaction.create({ data: { userId, delta: EXTEND_COST, reason: "refund_music_extend", refType: "MusicTrack", refId: source.id, note: (err?.message || "upstream_failed").slice(0, 500) } }),
+    ]);
     console.error("[EXTEND] Upstream failed:", err?.message);
     const status = err.status >= 400 && err.status < 600 ? err.status : 502;
     return NextResponse.json(
@@ -170,10 +178,10 @@ export async function POST(req, { params }) {
     });
     return NextResponse.json({ ok: true, track });
   } catch (err) {
-    await prisma.user.update({
-      where: { id: userId },
-      data: { credits: { increment: EXTEND_COST } },
-    });
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { credits: { increment: EXTEND_COST } } }),
+      prisma.creditTransaction.create({ data: { userId, delta: EXTEND_COST, reason: "refund_music_extend", refType: "MusicTrack", refId: source.id, note: "track_row_insert_failed" } }),
+    ]);
     console.error("[EXTEND] DB write failed:", err?.message);
     return NextResponse.json({ error: "Server error", refunded: true }, { status: 500 });
   }

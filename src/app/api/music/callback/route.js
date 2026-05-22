@@ -223,10 +223,10 @@ async function failAndRefund(track, errMsg) {
   });
   if (updated.count === 1 && track.credits > 0) {
     try {
-      await prisma.user.update({
-        where: { id: track.userId },
-        data: { credits: { increment: track.credits } },
-      });
+      await prisma.$transaction([
+        prisma.user.update({ where: { id: track.userId }, data: { credits: { increment: track.credits } } }),
+        prisma.creditTransaction.create({ data: { userId: track.userId, delta: track.credits, reason: "refund_music_generate", refType: "MusicTrack", refId: track.id, note: safeErr.slice(0, 500) } }),
+      ]);
       console.log(
         `[MUSIC_REFUND] Refunded ${track.credits} credits to ${track.userId} for failed track ${track.taskId}`
       );

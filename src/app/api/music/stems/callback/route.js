@@ -206,10 +206,10 @@ async function failAndRefund(track, errMsg) {
   if (updated.count === 1) {
     const refundAmount = track.stemMode === "split" ? STEM_SPLIT_COST : STEM_COST;
     try {
-      await prisma.user.update({
-        where: { id: track.userId },
-        data: { credits: { increment: refundAmount } },
-      });
+      await prisma.$transaction([
+        prisma.user.update({ where: { id: track.userId }, data: { credits: { increment: refundAmount } } }),
+        prisma.creditTransaction.create({ data: { userId: track.userId, delta: refundAmount, reason: "refund_stem_split", refType: "MusicTrack", refId: track.id, note: safeErr.slice(0, 500) } }),
+      ]);
       console.log(
         `[STEMS_REFUND] Refunded ${refundAmount} credits to ${track.userId} for failed ${track.stemMode || "vocal"} stem ${track.id}`
       );

@@ -50,8 +50,13 @@ export const AIService = {
   async generate(userId, { mode, prompt, aspect_ratio = "16:9", resolution = "720p", duration = 5, quality = "basic", images_list = [], video_files = [], audio_files = [], musicTrackId = null }) {
     const cost = this.getCreditCost(mode, duration, quality, resolution);
 
-    // Deduct credits upfront — will be refunded automatically if the API call fails
-    await UserService.deductCredits(userId, cost);
+    // Deduct credits upfront — will be refunded automatically if the API call
+    // fails with a 5xx/network error. NOT refunded on 4xx userFault — see the
+    // catch block below for that rule.
+    await UserService.deductCredits(userId, cost, {
+      reason: "video_generate",
+      note: `${mode} · ${resolution} · ${quality} · ${duration}s`,
+    });
 
     try {
       const apiKey = config.ai.seedance.apiKey;
@@ -208,12 +213,49 @@ export const AIService = {
       // 4xx where the user's payload was the problem. Otherwise any logged-in
       // user could repeatedly submit garbage prompts and have their credits
       // returned each time, costing nothing to abuse.
+      //
+      // In BOTH branches we now persist a Creation row with status="failed"
+      // and the error message so the user (and admin) can see why the credits
+      // moved — previously the userFault path left no record anywhere, which
+      // is what caused the dinesharans99 missing-credits ticket.
+      const errMsg = error.message || "Generation failed";
+      try {
+        await prisma.creation.create({
+          data: {
+            userId,
+            prompt,
+            aspectRatio: aspect_ratio,
+            resolution,
+            duration: parseInt(duration),
+            quality,
+            videoFiles: video_files,
+            audioFiles: audio_files,
+            inputImages: images_list,
+            status: "failed",
+            error: errMsg.slice(0, 1000),
+            musicTrackId: musicTrackId || undefined,
+          },
+        });
+      } catch (logErr) {
+        console.error("[AI_FAILED_ROW_INSERT_FAILED]", logErr.message);
+      }
+
       if (error.userFault) {
-        console.error("[AI_NO_REFUND] User-fault failure — keeping", cost, "credits | reason:", error.message);
-      } else {
-        console.error("[AI_REFUND] Generation failed — refunding", cost, "credits to user", userId, "| reason:", error.message);
+        console.error("[AI_NO_REFUND] User-fault failure — keeping", cost, "credits | reason:", errMsg);
+        // Log the kept charge to the ledger so audits can see the
+        // userfault charge tied to the same Creation reason.
         try {
-          await UserService.addCredits(userId, cost);
+          await prisma.creditTransaction.create({
+            data: { userId, delta: 0, reason: "userfault_charge", note: errMsg.slice(0, 500) },
+          });
+        } catch {}
+      } else {
+        console.error("[AI_REFUND] Generation failed — refunding", cost, "credits to user", userId, "| reason:", errMsg);
+        try {
+          await UserService.addCredits(userId, cost, {
+            reason: "refund_video",
+            note: errMsg.slice(0, 500),
+          });
         } catch (refundErr) {
           console.error("[AI_REFUND_FAILED] Could not refund credits for user", userId, refundErr.message);
         }
@@ -296,7 +338,12 @@ export const AIService = {
     try {
       const cost = this.estimateCostFromCreation(creation);
       if (cost > 0) {
-        await UserService.addCredits(creation.userId, cost);
+        await UserService.addCredits(creation.userId, cost, {
+          reason: "refund_video",
+          refType: "Creation",
+          refId: creation.id,
+          note: safeErr.slice(0, 500),
+        });
         console.log(
           "[AI_REFUND_ASYNC] Refunded", cost,
           "credits to user", creation.userId,

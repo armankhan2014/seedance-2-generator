@@ -116,9 +116,17 @@ export async function POST(req) {
 
   // ── Cost + credit debit (atomic CAS) ────────────────────────────────
   const cost = creditsForTrack({ duration, isVocal });
-  const debit = await prisma.user.updateMany({
-    where: { id: userId, credits: { gte: cost } },
-    data: { credits: { decrement: cost } },
+  const debit = await prisma.$transaction(async (tx) => {
+    const r = await tx.user.updateMany({
+      where: { id: userId, credits: { gte: cost } },
+      data: { credits: { decrement: cost } },
+    });
+    if (r.count === 1) {
+      await tx.creditTransaction.create({
+        data: { userId, delta: -cost, reason: "music_generate", note: `${duration}s · ${isVocal ? "vocal" : "instrumental"}` },
+      });
+    }
+    return r;
   });
   if (debit.count !== 1) {
     return NextResponse.json(
@@ -136,7 +144,10 @@ export async function POST(req) {
   const callbackSecret = process.env.WEBHOOK_SECRET;
   if (!callbackSecret) {
     // Refund + fail closed if config is missing.
-    await prisma.user.update({ where: { id: userId }, data: { credits: { increment: cost } } });
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { credits: { increment: cost } } }),
+      prisma.creditTransaction.create({ data: { userId, delta: cost, reason: "refund_music_generate", note: "WEBHOOK_SECRET missing" } }),
+    ]);
     console.error("[MUSIC_GENERATE] WEBHOOK_SECRET missing — refunded and aborted");
     return NextResponse.json({ error: "Server misconfigured" }, { status: 500 });
   }
@@ -221,7 +232,10 @@ export async function POST(req) {
     if (!taskId) throw new Error("Music service returned no task id");
   } catch (err) {
     // Refund + bail. Surface a friendly error to the client.
-    await prisma.user.update({ where: { id: userId }, data: { credits: { increment: cost } } });
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { credits: { increment: cost } } }),
+      prisma.creditTransaction.create({ data: { userId, delta: cost, reason: "refund_music_generate", note: (err?.message || "upstream_failed").slice(0, 500) } }),
+    ]);
     console.error("[MUSIC_GENERATE] Upstream call failed:", err?.message);
     const status = err.status >= 400 && err.status < 600 ? err.status : 502;
     return NextResponse.json(
@@ -256,7 +270,10 @@ export async function POST(req) {
   } catch (err) {
     // Race: music engine fired but DB write failed. The callback will fail to
     // find the row → the user wasted credits. Refund here to be safe.
-    await prisma.user.update({ where: { id: userId }, data: { credits: { increment: cost } } });
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { credits: { increment: cost } } }),
+      prisma.creditTransaction.create({ data: { userId, delta: cost, reason: "refund_music_generate", note: "track_row_insert_failed" } }),
+    ]);
     console.error("[MUSIC_GENERATE] DB write failed:", err?.message);
     return NextResponse.json({ error: "Server error", refunded: true }, { status: 500 });
   }

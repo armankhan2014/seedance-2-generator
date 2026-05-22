@@ -21,11 +21,17 @@ export async function POST(req) {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-  const updated = await prisma.user.update({
-    where: { email },
-    data: { credits: { increment: parseInt(credits) } },
-  });
+  const amount = parseInt(credits);
+  const [, updated] = await prisma.$transaction([
+    prisma.creditTransaction.create({
+      data: { userId: user.id, delta: amount, reason: "admin_grant", note: `granted by ${session.user.email}` },
+    }),
+    prisma.user.update({
+      where: { email },
+      data: { credits: { increment: amount } },
+    }),
+  ]);
 
   revalidateTag(`user-${user.id}`);
-  return NextResponse.json({ success: true, email, creditsAdded: parseInt(credits), newTotal: updated.credits });
+  return NextResponse.json({ success: true, email, creditsAdded: amount, newTotal: updated.credits });
 }

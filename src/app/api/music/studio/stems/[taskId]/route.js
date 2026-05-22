@@ -130,9 +130,10 @@ export async function GET(req, { params }) {
       where: { id: track.id, studioStemStatus: "processing" },
       data: { studioStemStatus: "failed", studioStemError: msg },
     });
-    await prisma.user
-      .update({ where: { id: userId }, data: { credits: { increment: refundAmount } } })
-      .catch(() => {});
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { credits: { increment: refundAmount } } }),
+      prisma.creditTransaction.create({ data: { userId, delta: refundAmount, reason: "refund_studio_stem_split", refType: "MusicTrack", refId: track.id, note: msg.slice(0, 500) } }),
+    ]).catch(() => {});
     return NextResponse.json({
       ok: true,
       studioStemStatus: "failed",
@@ -177,9 +178,10 @@ export async function GET(req, { params }) {
         where: { id: track.id, studioStemStatus: "processing" },
         data: { studioStemStatus: "failed", studioStemError: "Upstream returned no stems" },
       });
-      await prisma.user
-        .update({ where: { id: userId }, data: { credits: { increment: refundAmount } } })
-        .catch(() => {});
+      await prisma.$transaction([
+        prisma.user.update({ where: { id: userId }, data: { credits: { increment: refundAmount } } }),
+        prisma.creditTransaction.create({ data: { userId, delta: refundAmount, reason: "refund_studio_stem_split", refType: "MusicTrack", refId: track.id, note: "no_stems_returned" } }),
+      ]).catch(() => {});
       return NextResponse.json({
         ok: true,
         studioStemStatus: "failed",

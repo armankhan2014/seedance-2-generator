@@ -72,6 +72,39 @@ model User {
   reactions         Reaction[]
   pushSubscriptions PushSubscription[]
   musicTracks       MusicTrack[]
+  creditTxns        CreditTransaction[]
+}
+
+// Append-only audit log for every credit movement on a User. Inserted in
+// the same Prisma transaction as the User.credits update so the ledger
+// can never drift from the balance. Use the SUM(delta) over this table
+// to reconcile a user's expected balance against User.credits — any
+// mismatch indicates a deduction site that forgot to log.
+//
+// reason: short snake_case tag (e.g. "video_generate", "prompt_expand",
+//   "image_build", "music_generate", "stem_split", "voice_clean",
+//   "stripe_purchase", "admin_grant", "signup_grant", "refund_video",
+//   "refund_music", "userfault_charge").
+// refType / refId: optional pointer to the row that caused this delta
+//   (Creation.id, MusicTrack.id, Payment.stripeSessionId, etc.). Lets
+//   us trace a single creation's debit + any later refund.
+// note: free-text — error message for userfault rows, admin name for
+//   admin grants, etc.
+model CreditTransaction {
+  id        String   @id @default(cuid())
+  userId    String
+  delta     Int
+  reason    String
+  refType   String?
+  refId     String?
+  note      String?  @db.Text
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([reason])
+  @@index([refType, refId])
 }
 
 model Creation {

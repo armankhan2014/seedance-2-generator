@@ -53,6 +53,9 @@ export async function GET(req) {
         data: { credits: { increment: credits }, verified: true },
         select: { credits: true },
       }),
+      prisma.creditTransaction.create({
+        data: { userId: session.user.id, delta: credits, reason: "stripe_purchase", refType: "Payment", refId: stripeSessionId, note: `${plan} · ${amountCents}c` },
+      }),
     ]);
 
     console.log("[VERIFY] Credits awarded:", credits, "to user", session.user.id, "(", email, ") | new total:", updatedUser.credits);

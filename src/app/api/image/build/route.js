@@ -114,7 +114,7 @@ export async function POST(req) {
 
   // Debit credits first
   try {
-    await UserService.deductCredits(session.user.id, CREDIT_COST);
+    await UserService.deductCredits(session.user.id, CREDIT_COST, { reason: "image_build" });
   } catch (err) {
     if (err.message === "Insufficient credits") {
       return NextResponse.json({ error: "Not enough credits. Buy a credit pack to continue." }, { status: 402 });
@@ -132,7 +132,7 @@ export async function POST(req) {
   } catch (err) {
     const status = err.status ?? 500;
     if (status >= 500 || err.code === "NOT_CONFIGURED") {
-      try { await UserService.addCredits(session.user.id, CREDIT_COST); } catch {}
+      try { await UserService.addCredits(session.user.id, CREDIT_COST, { reason: "refund_image_build", note: (err.message || "").slice(0, 500) }); } catch {}
     }
     console.error("[IMAGE_BUILD]", err.status, err.message);
     if (err.code === "NOT_CONFIGURED") {
@@ -150,7 +150,7 @@ export async function POST(req) {
     url = await uploadToR2(buffer, session.user.id);
   } catch (err) {
     // Refund — we charged but couldn't deliver
-    try { await UserService.addCredits(session.user.id, CREDIT_COST); } catch {}
+    try { await UserService.addCredits(session.user.id, CREDIT_COST, { reason: "refund_image_build", note: "r2_upload_failed" }); } catch {}
     console.error("[IMAGE_BUILD] R2 upload failed:", err.message);
     return NextResponse.json({ error: "Could not save the generated image. Your credits have been refunded." }, { status: 500 });
   }

@@ -37,6 +37,7 @@ export async function POST(req) {
           await prisma.$transaction([
             prisma.payment.create({ data: { stripeSessionId, userId: user.id, credits } }),
             prisma.user.update({ where: { email }, data: { credits: { increment: credits }, verified: true } }),
+            prisma.creditTransaction.create({ data: { userId: user.id, delta: credits, reason: "stripe_purchase", refType: "Payment", refId: stripeSessionId, note: `${plan} · ${amountCents}c` } }),
           ]);
 
           console.log("[WEBHOOK] Credits awarded:", credits, "to", email);

@@ -102,9 +102,10 @@ export async function GET(req, { params }) {
       where: { id: track.id, vocalsSplitStatus: "processing" },
       data: { vocalsSplitStatus: "failed", vocalsSplitError: msg },
     });
-    await prisma.user
-      .update({ where: { id: userId }, data: { credits: { increment: VOCALS_SPLIT_COST } } })
-      .catch(() => {});
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { credits: { increment: VOCALS_SPLIT_COST } } }),
+      prisma.creditTransaction.create({ data: { userId, delta: VOCALS_SPLIT_COST, reason: "refund_vocals_split", refType: "MusicTrack", refId: track.id, note: msg.slice(0, 500) } }),
+    ]).catch(() => {});
     return NextResponse.json({
       ok: true,
       vocalsSplitStatus: "failed",
@@ -129,9 +130,10 @@ export async function GET(req, { params }) {
         where: { id: track.id, vocalsSplitStatus: "processing" },
         data: { vocalsSplitStatus: "failed", vocalsSplitError: "Upstream returned no lead vocal" },
       });
-      await prisma.user
-        .update({ where: { id: userId }, data: { credits: { increment: VOCALS_SPLIT_COST } } })
-        .catch(() => {});
+      await prisma.$transaction([
+        prisma.user.update({ where: { id: userId }, data: { credits: { increment: VOCALS_SPLIT_COST } } }),
+        prisma.creditTransaction.create({ data: { userId, delta: VOCALS_SPLIT_COST, reason: "refund_vocals_split", refType: "MusicTrack", refId: track.id, note: "no_lead_vocal" } }),
+      ]).catch(() => {});
       return NextResponse.json({
         ok: true,
         vocalsSplitStatus: "failed",

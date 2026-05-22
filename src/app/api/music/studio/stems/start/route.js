@@ -146,9 +146,17 @@ export async function POST(req) {
   // ── Debit credits ──────────────────────────────────────────────
   // Mode-aware: 6stem charges STUDIO_STEM_COST (30), 9stem charges
   // STUDIO_PRO_STEM_COST (50) for the extra 3 stem_separator calls.
-  const debit = await prisma.user.updateMany({
-    where: { id: userId, credits: { gte: cost } },
-    data: { credits: { decrement: cost } },
+  const debit = await prisma.$transaction(async (tx) => {
+    const r = await tx.user.updateMany({
+      where: { id: userId, credits: { gte: cost } },
+      data: { credits: { decrement: cost } },
+    });
+    if (r.count === 1) {
+      await tx.creditTransaction.create({
+        data: { userId, delta: -cost, reason: "studio_stem_split", refType: "MusicTrack", refId: trackId, note: mode },
+      });
+    }
+    return r;
   });
   if (debit.count !== 1) {
     return NextResponse.json(
@@ -158,9 +166,10 @@ export async function POST(req) {
   }
 
   async function refund(reason) {
-    await prisma.user
-      .update({ where: { id: userId }, data: { credits: { increment: cost } } })
-      .catch((e) => console.error("[STUDIO_STEMS] refund failed:", e?.message));
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { credits: { increment: cost } } }),
+      prisma.creditTransaction.create({ data: { userId, delta: cost, reason: "refund_studio_stem_split", refType: "MusicTrack", refId: trackId, note: reason.slice(0, 500) } }),
+    ]).catch((e) => console.error("[STUDIO_STEMS] refund failed:", e?.message));
     console.warn(`[STUDIO_STEMS] refund — ${reason}`);
   }
 

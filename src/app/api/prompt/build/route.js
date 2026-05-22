@@ -107,7 +107,7 @@ export async function POST(req) {
     // 1 credit could call Anthropic forever — the old code only checked
     // the balance, never decremented it.
     try {
-      await UserService.deductCredits(session.user.id, PROMPT_BUILD_COST);
+      await UserService.deductCredits(session.user.id, PROMPT_BUILD_COST, { reason: "prompt_build" });
     } catch (e) {
       if (e.message === "Insufficient credits") {
         return NextResponse.json(
@@ -138,14 +138,14 @@ export async function POST(req) {
       d = await r.json();
     } catch (fetchErr) {
       // Network failure — refund and bail.
-      await UserService.addCredits(session.user.id, PROMPT_BUILD_COST).catch(() => {});
+      await UserService.addCredits(session.user.id, PROMPT_BUILD_COST, { reason: "refund_prompt_build", note: "network_error" }).catch(() => {});
       throw fetchErr;
     }
 
     if (!r.ok) {
       console.error("Anthropic API error:", JSON.stringify(d));
       // Anthropic infrastructure rejected us — refund.
-      await UserService.addCredits(session.user.id, PROMPT_BUILD_COST).catch(() => {});
+      await UserService.addCredits(session.user.id, PROMPT_BUILD_COST, { reason: "refund_prompt_build", note: "anthropic_error" }).catch(() => {});
       return NextResponse.json(
         { error: `AI error: ${d.error?.message || "Unknown error."}` },
         { status: 500 }
@@ -154,7 +154,7 @@ export async function POST(req) {
 
     const prompt = d.content?.[0]?.text?.trim();
     if (!prompt) {
-      await UserService.addCredits(session.user.id, PROMPT_BUILD_COST).catch(() => {});
+      await UserService.addCredits(session.user.id, PROMPT_BUILD_COST, { reason: "refund_prompt_build", note: "empty_response" }).catch(() => {});
       return NextResponse.json({ error: "AI returned empty response. Please try again." }, { status: 500 });
     }
 

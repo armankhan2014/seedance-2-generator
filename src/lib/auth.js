@@ -112,6 +112,13 @@ export const authOptions = {
       await Promise.allSettled([
         sendSignupNotification({ name: user.name, email: user.email, image: user.image }),
         sendWelcomeEmail({ name: user.name, email: user.email }),
+        // Log the 10-credit signup grant to the ledger so SUM(delta)
+        // == User.credits at all times. The NextAuth adapter sets the
+        // initial 10 via schema default — without this log, every new
+        // user starts with a +10 phantom delta in reconciliation.
+        prisma.creditTransaction.create({
+          data: { userId: user.id, delta: 10, reason: "signup_grant" },
+        }).catch((e) => console.error("[SIGNUP_GRANT_LOG_FAILED]", e?.message)),
       ]);
     },
   },
