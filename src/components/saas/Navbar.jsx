@@ -109,6 +109,11 @@ export default function Navbar() {
     { href: "/generate", label: "Generate" },
     { href: "/creations", label: "Gallery" },
     { href: "/pricing", label: "Pricing" },
+    // Edits — in-browser video editor on the edits subdomain. Same
+    // .visualseffect.com cookie scope = SSO, so signed-in seedance users
+    // land signed-in there. external:true matches the Music/Community
+    // pattern so users don't lose mid-prompt /generate state.
+    { href: "https://edits.visualseffect.com", label: "Edits ✂️", external: true },
     // Music now lives on its own subdomain (split out 2026-05-22 so
     // the music app has its own deploy + bundle). Same .visualseffect.com
     // cookie scope = same SSO, so signed-in users land signed-in.

@@ -51,6 +51,22 @@ const TABS = [
     ),
   },
   {
+    // Edits — cross-origin to edits.visualseffect.com. SSO via the
+    // shared .visualseffect.com cookie. Scissors icon = universal
+    // "edit" affordance, matches the Edits ✂️ wordmark in the top nav.
+    href: "https://edits.visualseffect.com",
+    label: "Edits",
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="6" cy="6" r="3" />
+        <circle cx="6" cy="18" r="3" />
+        <line x1="20" y1="4" x2="8.12" y2="15.88" />
+        <line x1="14.47" y1="14.48" x2="20" y2="20" />
+        <line x1="8.12" y1="8.12" x2="12" y2="12" />
+      </svg>
+    ),
+  },
+  {
     // Music split to its own subdomain on 2026-05-22 — cross-origin
     // navigation, but SSO works because the session cookie is scoped
     // to .visualseffect.com.
