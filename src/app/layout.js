@@ -7,7 +7,11 @@ import { Providers } from "@/components/Providers";
 import Navbar from "@/components/saas/Navbar";
 import SignInModal from "@/components/saas/SignInModal";
 import MobileBottomNav from "@/components/saas/MobileBottomNav";
-import TawkTo from "@/components/TawkTo";
+// Tawk.to disabled 2026-05-22 — Arman no longer wants the live chat widget
+// on seedance.visualseffect.com. Component file at src/components/TawkTo.jsx
+// kept for now in case it's re-enabled later; remove that file too if you
+// want it gone permanently.
+// import TawkTo from "@/components/TawkTo";
 import VisitorTracker from "@/components/VisitorTracker";
 import PWARegister from "@/components/PWARegister";
 import CapacitorBridge from "@/components/CapacitorBridge";
@@ -94,8 +98,7 @@ export default async function RootLayout({ children }) {
           <MobileBottomNav />
           {/* Global sign-in modal — triggered via window.dispatchEvent(new CustomEvent("openSignIn")) */}
           <SignInModal />
-          {/* Tawk.to live chat */}
-          <TawkTo />
+          {/* Tawk.to live chat — disabled 2026-05-22, see import block above */}
           <VisitorTracker />
           {/* Service-worker registration for the PWA. No-op in dev. */}
           <PWARegister />
