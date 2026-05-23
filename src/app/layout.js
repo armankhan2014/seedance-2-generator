@@ -71,6 +71,17 @@ export default async function RootLayout({ children }) {
 
   return (
     <html lang="en" className="h-dvh w-full" style={{ colorScheme: "dark" }}>
+      <head>
+        {/* Warm cross-subdomain TLS so Edits/Music/Community nav from
+            the Studio doesn't pay the handshake on every click. Saves
+            ~150–300 ms per cross-origin link tap on mobile. */}
+        <link rel="preconnect" href="https://edits.visualseffect.com" crossOrigin="use-credentials" />
+        <link rel="preconnect" href="https://music.visualseffect.com" crossOrigin="use-credentials" />
+        <link rel="preconnect" href="https://community.visualseffect.com" crossOrigin="use-credentials" />
+        <link rel="dns-prefetch" href="https://edits.visualseffect.com" />
+        <link rel="dns-prefetch" href="https://music.visualseffect.com" />
+        <link rel="dns-prefetch" href="https://community.visualseffect.com" />
+      </head>
       <body className={inter.className} style={{ background: "#0a0a0a", color: "#FFFFFF" }}>
         <Providers session={session}>
           <Suspense fallback={null}>
