@@ -474,6 +474,23 @@ model MusicTrack {
   vocalsSplitStatus String?
   vocalsSplit       Json?
   vocalsSplitError  String?  @db.Text
+
+  // Mix & Master (Phase 1 — Dolby.io Media Mastering API).
+  // One mastered output per track at a time; re-mastering overwrites
+  // the previous masterUrl + bumps masterTaskId. masterFormat captures
+  // the output container/bitrate the user picked at start so the
+  // download route can serve with the right Content-Type + extension.
+  // masterLufs is the announced target (-14, -13, -9, -23 etc.) — the
+  // achieved LUFS lands in masterMeta as Dolby measures it.
+  masterTaskId   String?
+  masterStatus   String?
+  masterUrl      String?
+  masterError    String?  @db.Text
+  masterLufs     Int?
+  masterGenre    String?
+  masterFormat   String?
+  masterMeta     Json?
+
   deletedAt      DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -490,6 +507,7 @@ model MusicTrack {
   @@index([studioStemTaskId])
   @@index([voiceCleanTaskId])
   @@index([vocalsSplitTaskId])
+  @@index([masterTaskId])
 }
 
 // Web Push subscription for browser notifications. Mirrors the model
