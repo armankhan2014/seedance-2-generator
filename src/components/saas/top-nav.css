@@ -30,12 +30,24 @@
   font-family: inherit;
   cursor: pointer;
   transition: none;
+  /* iOS Safari: plain :hover on a cross-origin <a> triggers the
+     deferred-navigation gesture — first tap "hovers" the link, second
+     tap navigates. touch-action: manipulation kills the double-tap
+     zoom heuristic that activates that behaviour. tap-highlight is
+     turned off to match the active style (no flash on first tap). */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.sd-nav-link:hover {
-  color: #D9FF00;
-  background: rgba(217, 255, 0, 0.06);
-  box-shadow: 0 4px 14px -6px rgba(217, 255, 0, 0.35);
+/* Hover styles only on devices with real pointer-hover capability.
+   iOS Safari reports `hover: none`, so the rule below stops applying
+   on phones — no more first-tap-hovers-then-second-tap-navigates. */
+@media (hover: hover) {
+  .sd-nav-link:hover {
+    color: #D9FF00;
+    background: rgba(217, 255, 0, 0.06);
+    box-shadow: 0 4px 14px -6px rgba(217, 255, 0, 0.35);
+  }
 }
 
 /* Active link (current route) — persistent lime tint + glow.
