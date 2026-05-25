@@ -1091,9 +1091,13 @@ export default function Home() {
   }, [loading, mode, prompt, imagesList]);
 
   const creditCost = (() => {
-    const BASE = { 5: 120, 10: 200, 15: 320 };
-    const base = BASE[duration] ?? Math.ceil((duration / 15) * 320);
-    // 1080p + high = 450cr for 15s, scale for other durations
+    // Mirror of AIService.getCreditCost in src/lib/services/ai.js —
+    // MUST match server cost or users see a different price preview
+    // than what they actually get charged. 15s base bumped 320 → 420
+    // on 2026-05-25 per Arman; 5s + 10s unchanged.
+    const BASE = { 5: 120, 10: 200, 15: 420 };
+    const base = BASE[duration] ?? Math.ceil((duration / 15) * 420);
+    // 1080p + high = 591cr for 15s post-bump, scales for other durations
     let mult = 1.0;
     if (resolution === "480p") mult = 0.7;
     else if (resolution === "1080p" && quality === "high") mult = 1.40625;

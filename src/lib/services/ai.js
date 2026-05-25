@@ -32,11 +32,16 @@ export const AIService = {
     // Base credits for 720p basic quality (at 80 credits per $1):
     //   5s  = 120 credits = $1.50
     //   10s = 200 credits = $2.50
-    //   15s = 320 credits = $4.00
-    const BASE = { 5: 120, 10: 200, 15: 320 };
-    const base = BASE[duration] ?? Math.ceil((duration / 15) * 320);
+    //   15s = 420 credits = $5.25  ← bumped 2026-05-25 from 320 ($4.00)
+    //
+    // 15s base bumped per Arman's repricing — 480p/1080p propagate via
+    // the multipliers below, so 15s/1080p/high lands at 591 (was 450)
+    // and 15s/480p/basic at 294 (was 224). 5s + 10s unaffected.
+    const BASE = { 5: 120, 10: 200, 15: 420 };
+    const base = BASE[duration] ?? Math.ceil((duration / 15) * 420);
 
-    // 1080p + high = 450cr for 15s, scales proportionally for other durations
+    // 1080p + high = 591cr for 15s post-bump, scales proportionally
+    // for other durations. Was 450cr pre-2026-05-25.
     let mult = 1.0;
     if (resolution === "480p") mult = 0.7;
     else if (resolution === "1080p" && quality === "high") mult = 1.40625;

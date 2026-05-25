@@ -22,8 +22,11 @@ export function letterFor(i) {
 }
 
 export function estimateCreditsPerShot(duration, resolution, quality) {
-  const BASE = { 5: 120, 10: 200, 15: 320 };
-  const base = BASE[duration] ?? Math.ceil((duration / 15) * 320);
+  // Mirror of AIService.getCreditCost in src/lib/services/ai.js — keep
+  // BASE in lockstep. 15s bumped from 320 → 420 on 2026-05-25 per
+  // Arman; 5s + 10s unchanged.
+  const BASE = { 5: 120, 10: 200, 15: 420 };
+  const base = BASE[duration] ?? Math.ceil((duration / 15) * 420);
   let mult = 1.0;
   if (resolution === "480p") mult = 0.7;
   else if (resolution === "1080p" && quality === "high") mult = 1.40625;
