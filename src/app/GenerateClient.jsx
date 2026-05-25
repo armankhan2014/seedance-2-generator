@@ -249,10 +249,19 @@ const ASPECT_RATIOS = [
   { label: "3:4", value: "3:4" },
 ];
 
+// 480p + 1080p temporarily frozen on 2026-05-25 per Arman — only 720p
+// is exposed in the picker until the higher/lower-res pipelines are
+// validated end-to-end (cost math, output quality, MuAPI endpoint
+// stability). Restore by uncommenting the two entries below.
+//
+// Server-side: the existing AIService.getCreditCost still understands
+// "480p" and "1080p" inputs (different multipliers per quality tier),
+// so re-enabling here is purely a frontend toggle — no schema or
+// backend coordination required.
 const RESOLUTIONS = [
-  { value: "480p", label: "480p" },
+  // { value: "480p",  label: "480p"  },
   { value: "720p", label: "720p" },
-  { value: "1080p", label: "1080p" },
+  // { value: "1080p", label: "1080p" },
 ];
 
 const DURATIONS = [
@@ -345,7 +354,10 @@ export default function Home() {
   const [showBuilder, setShowBuilder] = useState(false);
   const [showImageBuilder, setShowImageBuilder] = useState(false);
   const [aspectRatio, setAspectRatio] = useState(ASPECT_RATIOS[0].value);
-  const [resolution, setResolution] = useState(RESOLUTIONS[1].value); // 720p default
+  // Hardcoded to "720p" rather than RESOLUTIONS[0].value so the
+  // default survives any future re-ordering of the picker options
+  // when 480p / 1080p are re-enabled.
+  const [resolution, setResolution] = useState("720p");
   const [duration, setDuration] = useState(DURATIONS[0].value);
   const [quality, setQuality] = useState(QUALITIES[0].value);
   const [imagesList, setImagesList] = useState([]); // Max 9 URLs for I2V/Reference
