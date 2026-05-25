@@ -4,8 +4,20 @@ import FacebookProvider from "next-auth/providers/facebook";
 import AppleProvider    from "next-auth/providers/apple";
 import GitHubProvider   from "next-auth/providers/github";
 import EmailProvider    from "next-auth/providers/email";
+import { cookies } from "next/headers";
 import { prisma } from "./prisma";
 import { sendSignupNotification, sendWelcomeEmail, sendMagicLinkEmail } from "./email";
+
+// Referral-attribution cookie. Set by community.visualseffect.com's
+// /api/referral/track on `?ref=<userId>` click. Cookie is scoped to
+// `.visualseffect.com` so it's readable here on seedance as well. We
+// honour it in createUser because the Prisma adapter creates the User
+// row exactly once per email — and most referred users sign up here
+// (paid product) before they ever touch community, so without this
+// block referredById would stay null forever (which is what was
+// happening — 1/71 captured pre-2026-05-25).
+const REFERRAL_COOKIE = "tfc_ref";
+const isProdEnv = process.env.NODE_ENV === "production";
 
 // ── Providers — only add when env vars are present ─────────────────────────────
 const providers = [
@@ -120,6 +132,68 @@ export const authOptions = {
           data: { userId: user.id, delta: 10, reason: "signup_grant" },
         }).catch((e) => console.error("[SIGNUP_GRANT_LOG_FAILED]", e?.message)),
       ]);
+
+      // ── Referral attribution ─────────────────────────────────────────────
+      // Mirror of community.visualseffect.com's createUser referral block.
+      // Most signups happen here (paid product), so this is where the
+      // attribution actually fires for the vast majority of users. The
+      // tfc_ref cookie was set by community's /api/referral/track route
+      // when the visitor clicked a `?ref=<userId>` stamped share link;
+      // it's scoped to .visualseffect.com so the browser includes it on
+      // requests to seedance.visualseffect.com.
+      //
+      // Best-effort: never throw out of here, and never block signup
+      // on a referral-side-effect failure.
+      try {
+        const jar = await cookies();
+        const refId = jar.get(REFERRAL_COOKIE)?.value;
+        if (!refId || refId === user.id) return;
+
+        const referrer = await prisma.user.findUnique({
+          where: { id: refId },
+          select: { id: true, isDummy: true },
+        });
+        if (!referrer || referrer.isDummy) return;
+
+        // Set referredById + auto-follow the referrer + notify them in
+        // one transaction so partial failures don't leave half-applied
+        // state. skipDuplicates on Follow in case the visitor somehow
+        // already followed the referrer (e.g., reused account).
+        await prisma.$transaction([
+          prisma.user.update({
+            where: { id: user.id },
+            data: { referredById: referrer.id },
+          }),
+          prisma.follow.createMany({
+            data: [{ followerId: user.id, followingId: referrer.id }],
+            skipDuplicates: true,
+          }),
+          prisma.notification.create({
+            data: {
+              userId: referrer.id,
+              actorId: user.id,
+              type: "referral_signup",
+            },
+          }),
+        ]);
+
+        // Clear the cookie — single-use attribution. Same flags as
+        // when /api/referral/track set it so the browser actually
+        // removes it (otherwise it would just be overwritten with
+        // an empty value but stay alive).
+        jar.set({
+          name: REFERRAL_COOKIE,
+          value: "",
+          httpOnly: true,
+          sameSite: "lax",
+          secure: isProdEnv,
+          path: "/",
+          maxAge: 0,
+          domain: isProdEnv ? ".visualseffect.com" : undefined,
+        });
+      } catch (err) {
+        console.warn("[auth/referral]", err?.message || err);
+      }
     },
   },
 
