@@ -23,10 +23,10 @@ export function letterFor(i) {
 
 export function estimateCreditsPerShot(duration, resolution, quality) {
   // Mirror of AIService.getCreditCost in src/lib/services/ai.js — keep
-  // BASE in lockstep. 15s bumped from 320 → 420 on 2026-05-25 per
-  // Arman; 5s + 10s unchanged.
-  const BASE = { 5: 120, 10: 200, 15: 420 };
-  const base = BASE[duration] ?? Math.ceil((duration / 15) * 420);
+  // in lockstep. The 720p 15s override at the bottom comes from the
+  // same 2026-05-25 pricing change.
+  const BASE = { 5: 120, 10: 200, 15: 320 };
+  const base = BASE[duration] ?? Math.ceil((duration / 15) * 320);
   let mult = 1.0;
   if (resolution === "480p") mult = 0.7;
   else if (resolution === "1080p" && quality === "high") mult = 1.40625;
@@ -34,7 +34,17 @@ export function estimateCreditsPerShot(duration, resolution, quality) {
   else if (quality === "high") mult = 1.15;
   // Story shots always use the reference-to-video model (face lock via cast).
   mult *= 1.1;
-  return Math.ceil(base * mult);
+  let cost = Math.ceil(base * mult);
+
+  // 720p 15s manual override — see comment in ai.js. Story shots
+  // always carry the reference-mode +10% so we apply it inside the
+  // override too. Other resolutions fall through unchanged.
+  if (resolution === "720p" && duration === 15) {
+    const cost720 = quality === "high" ? 483 : 420;
+    cost = Math.ceil(cost720 * 1.1);
+  }
+
+  return cost;
 }
 
 // ─────────────────────────────────────────────────────────────────────────

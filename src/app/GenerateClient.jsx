@@ -1093,18 +1093,29 @@ export default function Home() {
   const creditCost = (() => {
     // Mirror of AIService.getCreditCost in src/lib/services/ai.js —
     // MUST match server cost or users see a different price preview
-    // than what they actually get charged. 15s base bumped 320 → 420
-    // on 2026-05-25 per Arman; 5s + 10s unchanged.
-    const BASE = { 5: 120, 10: 200, 15: 420 };
-    const base = BASE[duration] ?? Math.ceil((duration / 15) * 420);
-    // 1080p + high = 591cr for 15s post-bump, scales for other durations
+    // than what they actually get charged. 720p 15s override at the
+    // bottom matches the server's 2026-05-25 pricing change.
+    const BASE = { 5: 120, 10: 200, 15: 320 };
+    const base = BASE[duration] ?? Math.ceil((duration / 15) * 320);
+    // 1080p + high = 450cr for 15s, scale for other durations
     let mult = 1.0;
     if (resolution === "480p") mult = 0.7;
     else if (resolution === "1080p" && quality === "high") mult = 1.40625;
     else if (resolution === "1080p") mult = 1.2;
     else if (quality === "high") mult = 1.15;
     if (mode === "reference-to-video") mult *= 1.1;
-    return Math.ceil(base * mult);
+    let cost = Math.ceil(base * mult);
+
+    // 720p 15s manual override — see comment in ai.js for the full
+    // rationale. Applied as a hard override so 1080p/480p prices stay
+    // anchored at their original values.
+    if (resolution === "720p" && duration === 15) {
+      let cost720 = quality === "high" ? 483 : 420;
+      if (mode === "reference-to-video") cost720 = Math.ceil(cost720 * 1.1);
+      cost = cost720;
+    }
+
+    return cost;
   })();
 
   // Sum the per-shot cost for the Story-mode "Generate all" button.

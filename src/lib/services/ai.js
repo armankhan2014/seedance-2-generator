@@ -32,16 +32,13 @@ export const AIService = {
     // Base credits for 720p basic quality (at 80 credits per $1):
     //   5s  = 120 credits = $1.50
     //   10s = 200 credits = $2.50
-    //   15s = 420 credits = $5.25  ← bumped 2026-05-25 from 320 ($4.00)
-    //
-    // 15s base bumped per Arman's repricing — 480p/1080p propagate via
-    // the multipliers below, so 15s/1080p/high lands at 591 (was 450)
-    // and 15s/480p/basic at 294 (was 224). 5s + 10s unaffected.
-    const BASE = { 5: 120, 10: 200, 15: 420 };
-    const base = BASE[duration] ?? Math.ceil((duration / 15) * 420);
+    //   15s = 320 credits = $4.00  (legacy anchor — see override below)
+    const BASE = { 5: 120, 10: 200, 15: 320 };
+    const base = BASE[duration] ?? Math.ceil((duration / 15) * 320);
 
-    // 1080p + high = 591cr for 15s post-bump, scales proportionally
-    // for other durations. Was 450cr pre-2026-05-25.
+    // 1080p + high = 450cr for 15s, scales proportionally for other
+    // durations. Quality bump is +15% for everything except 1080p
+    // which gets a steeper +40.625% (Seedance Pro tier).
     let mult = 1.0;
     if (resolution === "480p") mult = 0.7;
     else if (resolution === "1080p" && quality === "high") mult = 1.40625;
@@ -49,7 +46,25 @@ export const AIService = {
     else if (quality === "high") mult = 1.15;
     if (mode === "reference-to-video") mult *= 1.1;
 
-    return Math.ceil(base * mult);
+    let cost = Math.ceil(base * mult);
+
+    // ── 2026-05-25 manual 720p-only repricing ────────────────────
+    // Arman pinned 720p 15s at 420 credits (was 320). Applied as a
+    // hard override AFTER the standard formula so 1080p and 480p
+    // prices stay at their original anchors (1080p high 15s = 450,
+    // 480p basic 15s = 224, etc.). The +15% high-quality bump still
+    // composes on top of the new 420 base, and the reference-mode
+    // +10% composes on top of that.
+    //
+    // To revert: delete this block (the standard formula above already
+    // computes the legacy 720p prices correctly).
+    if (resolution === "720p" && duration === 15) {
+      let cost720 = quality === "high" ? 483 : 420;
+      if (mode === "reference-to-video") cost720 = Math.ceil(cost720 * 1.1);
+      cost = cost720;
+    }
+
+    return cost;
   },
 
   async generate(userId, { mode, prompt, aspect_ratio = "16:9", resolution = "720p", duration = 5, quality = "basic", images_list = [], video_files = [], audio_files = [], musicTrackId = null }) {
