@@ -1,5 +1,11 @@
 {
   "buildCommand": "npx prisma generate && npx next build",
   "installCommand": "npm install",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/cron/sweep-stuck-creations",
+      "schedule": "0 * * * *"
+    }
+  ]
 }
