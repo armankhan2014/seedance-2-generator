@@ -57,16 +57,31 @@ export async function POST(req) {
         console.warn("[MUAPI_WEBHOOK] push failed (failed-gen):", e?.message)
       );
     } else {
-      await prisma.creation.update({
-        where: { id: creation.id },
+      // Conditional flip: only update if the row is STILL processing.
+      // Guards against double-pay when the hourly stuck-creation cron
+      // (see /api/cron/sweep-stuck-creations) has already auto-failed
+      // + refunded a long-stuck row and MuAPI delivers a late success
+      // afterwards. Without this filter the late success would
+      // overwrite status: "failed" → "completed" and the user would
+      // end up with BOTH the refund AND a working video.
+      //
+      // updateMany.count === 0 here = the cron (or the poll path)
+      // already terminated the row; we silently drop the late delivery
+      // and don't fire the ready-push.
+      const result = await prisma.creation.updateMany({
+        where: { id: creation.id, status: "processing" },
         data: { status: "completed", imageUrl },
       });
-      // "🎬 Your video is ready" push — fanout to all Studio-origin
-      // subscriptions for this user. Same fire-and-forget pattern;
-      // we don't block the webhook ACK on the push send.
-      sendCreationReadyPush(creation.userId, creation).catch((e) =>
-        console.warn("[MUAPI_WEBHOOK] push failed (ready):", e?.message)
-      );
+      if (result.count === 0) {
+        console.log(`[MUAPI_WEBHOOK] late success for already-terminated creation ${creation.id} — ignored`);
+      } else {
+        // "🎬 Your video is ready" push — fanout to all Studio-origin
+        // subscriptions for this user. Same fire-and-forget pattern;
+        // we don't block the webhook ACK on the push send.
+        sendCreationReadyPush(creation.userId, creation).catch((e) =>
+          console.warn("[MUAPI_WEBHOOK] push failed (ready):", e?.message)
+        );
+      }
     }
 
     return NextResponse.json({ success: true });

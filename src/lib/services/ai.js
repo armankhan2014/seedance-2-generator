@@ -435,10 +435,33 @@ export const AIService = {
           finalUrl = imageUrl;
         }
       }
-      await prisma.creation.update({
-        where: { requestId },
+      // Conditional flip: only update if STILL processing. Matches
+      // the guard in /api/webhook/muapi — prevents double-pay if the
+      // hourly stuck-creation cron has already auto-failed +
+      // refunded this row before the poll observed success. Without
+      // this filter the poll would overwrite status: "failed" →
+      // "completed" and the user would keep both the refund AND
+      // get a working video.
+      const swapped = await prisma.creation.updateMany({
+        where: { requestId, status: "processing" },
         data: { status: "completed", imageUrl: finalUrl },
       });
+      if (swapped.count === 0) {
+        // Cron / failAndRefund got here first. Don't fight it — read
+        // back the current state so the caller sees consistent data.
+        const current = await prisma.creation.findUnique({
+          where: { requestId },
+          select: { status: true, imageUrl: true, error: true },
+        });
+        if (current?.status === "failed") {
+          throw new Error(current.error || "Generation failed.");
+        }
+        if (current?.status === "completed") {
+          return { status: "completed", imageUrl: current.imageUrl };
+        }
+        // Unknown state — fall through to processing.
+        return { status: "processing" };
+      }
       return { status: "completed", imageUrl: finalUrl };
     }
 
