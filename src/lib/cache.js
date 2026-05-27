@@ -54,11 +54,32 @@ export const getCachedPublicGallery = () =>
   )();
 
 
-/** User creations — cached 30s per user, tag: creations-{id} */
+/** User creations — cached 30s per user, tag: creations-{id}.
+ *
+ * Filters OUT status="failed" rows so the /creations gallery only
+ * surfaces successful generations + in-flight "processing" jobs
+ * (those still render the spinner tile until the webhook resolves
+ * them). Failed rows stay in the DB for credit-ledger reconciliation
+ * + admin debugging — they just don't pollute the user's gallery.
+ *
+ * Arman 2026-05-26: previously every userFault rejection (content
+ * policy, prompt block) produced a red "Failed" card the user had
+ * to manually delete. That card existed by design (visibility into
+ * why credits moved) but Arman preferred a cleaner gallery — the
+ * /credits page + CreditTransaction ledger is the canonical place
+ * to see those charges now.
+ */
 export const getCachedUserCreations = (userId) =>
   unstable_cache(
     () => prisma.creation.findMany({
-      where: { userId },
+      where: {
+        userId,
+        // Hide failed rows from the gallery surface. Keep "processing"
+        // visible so the user sees in-flight work (spinner card +
+        // manual "Check status" button render correctly when status
+        // is "processing").
+        status: { not: "failed" },
+      },
       orderBy: { createdAt: "desc" },
       // Phase 3 — eagerly include the paired music track so the
       // creations viewer can render synced audio under the video
