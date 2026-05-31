@@ -113,7 +113,22 @@ export default function SeedanceHeroCard({
           // `key` forces a fresh element if the URL ever changes, which
           // is the only reliable way to make Chrome re-fire autoplay.
           key={videoUrl}
-          ref={videoRef}
+          // Callback ref fires SYNCHRONOUSLY the moment the DOM
+          // element is attached, before useEffect, before paint. We
+          // lock muted-as-DOM-property + kick play() immediately so
+          // iOS Safari can't slip in its play overlay during the gap
+          // between mount and useEffect.
+          ref={(el) => {
+            videoRef.current = el;
+            if (!el) return;
+            el.muted = true;
+            el.defaultMuted = true;
+            el.setAttribute("muted", "");
+            el.setAttribute("playsinline", "");
+            el.setAttribute("webkit-playsinline", "");
+            const p = el.play();
+            if (p && typeof p.catch === "function") p.catch(() => {});
+          }}
           src={videoUrl}
           autoPlay
           muted
