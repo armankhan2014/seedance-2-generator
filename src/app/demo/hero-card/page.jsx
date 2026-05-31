@@ -57,7 +57,7 @@ export default function HeroCardDemoPage() {
           providerLabel="SEEDANCE"
           modelName="Seedance 2 Pro"
           subline="Minimal Video Engine"
-          videoUrl="https://visualseffect.com/hero-videos/seedance.mp4"
+          videoUrl="/hero-videos/seedance.mp4"
           onChange={() => alert("Change-model handler fires here.")}
         />
 
@@ -109,7 +109,7 @@ export default function HeroCardDemoPage() {
               providerLabel="SEEDANCE"
               modelName="Seedance 2 Pro"
               subline="Minimal Video Engine"
-              videoUrl="https://visualseffect.com/hero-videos/seedance.mp4"
+              videoUrl="/hero-videos/seedance.mp4"
               onChange={() => alert("Change-model handler fires here.")}
             />
           </div>

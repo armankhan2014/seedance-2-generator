@@ -1157,14 +1157,15 @@ export default function Home() {
         <div className="bg-glass-bg border border-glass-border rounded-lg p-6 flex flex-col gap-6">
           {/* Playing-video hero card — replaces the plain
               "Seedance Generator / Minimal Video Engine" header.
-              Same card pattern as visualseffect.com/studio/video
-              so the two pages feel like the same family of product.
-              Video is hotlinked from the main domain. */}
+              Same card pattern as visualseffect.com/studio/video.
+              Video is SAME-ORIGIN (/hero-videos/seedance.mp4 served
+              from /public) so iOS Safari's cross-origin autoplay
+              block doesn't show the play overlay on iPhone. */}
           <SeedanceHeroCard
             providerLabel="SEEDANCE"
             modelName="Seedance 2 Pro"
             subline="Minimal Video Engine"
-            videoUrl="https://visualseffect.com/hero-videos/seedance.mp4"
+            videoUrl="/hero-videos/seedance.mp4"
           />
 
           {/* Phase 3 music pairing pill — visible only when the user
