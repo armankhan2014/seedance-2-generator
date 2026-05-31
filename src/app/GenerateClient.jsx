@@ -22,6 +22,7 @@ import ArmanGallery from "@/components/saas/ArmanGallery";
 import toast from "@/lib/toast";
 import PromptBuilder from "@/components/saas/PromptBuilder";
 import ImageBuilder from "@/components/saas/ImageBuilder";
+import SeedanceHeroCard from "@/components/saas/SeedanceHeroCard";
 import SmartPrompt from "@/components/saas/SmartPrompt";
 import {
   StoryBuilder,
@@ -1154,17 +1155,17 @@ export default function Home() {
       <div className="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         {/* Left: Controls */}
         <div className="bg-glass-bg border border-glass-border rounded-lg p-6 flex flex-col gap-6">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-md bg-primary-500/10 flex items-center justify-center text-primary-500">
-              <FaMagic />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">
-                Seedance Generator
-              </h2>
-              <p className="text-[10px] text-muted">Minimal Video Engine</p>
-            </div>
-          </div>
+          {/* Playing-video hero card — replaces the plain
+              "Seedance Generator / Minimal Video Engine" header.
+              Same card pattern as visualseffect.com/studio/video
+              so the two pages feel like the same family of product.
+              Video is hotlinked from the main domain. */}
+          <SeedanceHeroCard
+            providerLabel="SEEDANCE"
+            modelName="Seedance 2 Pro"
+            subline="Minimal Video Engine"
+            videoUrl="https://visualseffect.com/hero-videos/seedance.mp4"
+          />
 
           {/* Phase 3 music pairing pill — visible only when the user
               arrived from /music or /m/<id> via the "Use in video"
