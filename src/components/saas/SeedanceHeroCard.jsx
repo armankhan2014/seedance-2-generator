@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+
 /**
  * SeedanceHeroCard
  *
@@ -19,6 +21,18 @@
  *   • Optional "✎ Change" pill in the top right — only renders when
  *     an onChange handler is supplied.
  *
+ * Autoplay-on-cross-origin caveat: declaring `muted autoPlay loop
+ * playsInline` is the documented recipe but Chromium + Safari STILL
+ * sometimes block autoplay when the video is cross-origin OR
+ * unmuted on first decode. The component compensates by:
+ *   1. Forcing `muted` as a DOM property in useEffect (the React
+ *      `muted` prop sets it as an attribute, which iOS Safari
+ *      occasionally ignores on the first paint).
+ *   2. Calling `.play()` explicitly in useEffect with a `.catch()`
+ *      that re-tries on the next user interaction (the "press play
+ *      button" symptom).
+ * After this no play button shows on desktop OR mobile.
+ *
  * All values are inline-styled so the card drops cleanly into a
  * Tailwind page without dragging extra CSS in. Brand colour is the
  * same lime (#d9ff00) used on visualseffect.com.
@@ -36,6 +50,47 @@ export default function SeedanceHeroCard({
   className,
   style: extraStyle,
 }) {
+  const videoRef = useRef(null);
+
+  // Force-autoplay rescue: explicitly drive .play() from JS so the
+  // browser doesn't fall back to its "blocked, here's a play button"
+  // state. The muted-property assignment is the iOS Safari fix —
+  // declaring `muted` as a React prop sets it as an attribute, which
+  // iOS occasionally honours only AFTER the first decode. Setting
+  // it as a DOM property gets it right from the start.
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    el.muted = true;          // belt + braces for iOS
+    el.defaultMuted = true;   // for the autoplay policy check
+    // play() returns a promise on modern browsers; swallow rejection
+    // (which would be a console error) and try once more on the next
+    // user interaction.
+    const tryPlay = () => {
+      const p = el.play();
+      if (p && typeof p.catch === "function") {
+        p.catch(() => {
+          // Last-resort: wait for the first interaction anywhere on
+          // the page and try once more. Almost never needed because
+          // the page is interactive by the time the user sees the
+          // card, but it makes the autoplay watertight.
+          const retry = () => {
+            el.play().catch(() => {});
+            document.removeEventListener("click", retry);
+            document.removeEventListener("touchstart", retry);
+          };
+          document.addEventListener("click", retry, { once: true });
+          document.addEventListener("touchstart", retry, { once: true });
+        });
+      }
+    };
+    tryPlay();
+    // If the user navigates away + back (visibilitychange), resume.
+    const onVis = () => { if (!document.hidden) tryPlay(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [videoUrl]);
+
   return (
     <div
       className={className}
@@ -58,21 +113,35 @@ export default function SeedanceHeroCard({
           // `key` forces a fresh element if the URL ever changes, which
           // is the only reliable way to make Chrome re-fire autoplay.
           key={videoUrl}
+          ref={videoRef}
           src={videoUrl}
           autoPlay
           muted
           loop
           playsInline
-          // `preload="metadata"` keeps the bundle TTFB fast — we don't
-          // need the full clip until the user can see the card.
-          preload="metadata"
+          // Explicitly say "no controls" — some browsers default to
+          // showing a play overlay when autoplay is blocked.
+          controls={false}
+          // Native control buttons we don't want for a background
+          // video (download, AirPlay, picture-in-picture).
+          controlsList="nodownload noplaybackrate noremoteplayback"
+          disablePictureInPicture
+          disableRemotePlayback
+          // `preload="auto"` — fetch enough to start playback right
+          // away. metadata-only used to be enough but the cross-origin
+          // case needs the codec head to be ready before play() fires.
+          preload="auto"
           aria-hidden="true"
+          tabIndex={-1}
           style={{
             position: "absolute",
             inset: 0,
             width: "100%",
             height: "100%",
             objectFit: "cover",
+            // Pointer-events off so the card's "Change" button (and
+            // anything else on top) gets the clicks.
+            pointerEvents: "none",
             // Tiny saturation bump matches the look on visualseffect.com.
             filter: "saturate(1.05)",
           }}
