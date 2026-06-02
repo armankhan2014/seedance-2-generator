@@ -124,7 +124,34 @@ function Header() {
             </div>
           </div>
         </div>
-        <BackupNowButton />
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {/* Quick link to the new Daily Signups tracker. Opens the
+              /demo/admin-signups route in the same tab so the back
+              button returns to /admin. Styled to match BackupNowButton
+              so the two read as a pair of admin shortcuts. */}
+          <a
+            href="/demo/admin-signups"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "8px 14px",
+              borderRadius: 999,
+              background: C.accent,
+              color: "#0a0a0a",
+              border: `1px solid ${C.accent}`,
+              fontSize: 12,
+              fontWeight: 800,
+              letterSpacing: "0.02em",
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+            title="Daily signups tracker (location, source, IP)"
+          >
+            <span aria-hidden="true">📊</span> Today's Signups
+          </a>
+          <BackupNowButton />
+        </div>
       </div>
     </header>
   );
