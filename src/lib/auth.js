@@ -4,7 +4,7 @@ import FacebookProvider from "next-auth/providers/facebook";
 import AppleProvider    from "next-auth/providers/apple";
 import GitHubProvider   from "next-auth/providers/github";
 import EmailProvider    from "next-auth/providers/email";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { prisma } from "./prisma";
 import { sendSignupNotification, sendWelcomeEmail, sendMagicLinkEmail } from "./email";
 
@@ -120,6 +120,58 @@ export const authOptions = {
       }
     },
     async createUser({ user }) {
+      // ── Admin Signups Tracker: capture geo + source on the new User ────
+      // Vercel's edge sets x-vercel-ip-* headers on every request before
+      // the route handler runs. We read them via next/headers headers()
+      // and patch the freshly-inserted User row. Best-effort: missing
+      // headers (local dev, non-Vercel deploy) → fields stay NULL.
+      try {
+        const hdrs = await headers();
+        const country = hdrs.get("x-vercel-ip-country") ?? null;
+        const region  = hdrs.get("x-vercel-ip-country-region") ?? null;
+        const cityRaw = hdrs.get("x-vercel-ip-city") ?? null;
+        // Vercel URL-encodes city names with special chars (e.g.
+        // "S%C3%A3o+Paulo" → "São Paulo"). Decode + trim.
+        const city = cityRaw ? decodeURIComponent(cityRaw.replace(/\+/g, " ")) : null;
+        const lat  = parseFloat(hdrs.get("x-vercel-ip-latitude") ?? "");
+        const lng  = parseFloat(hdrs.get("x-vercel-ip-longitude") ?? "");
+        // IP: Vercel forwards the real client IP via x-real-ip OR
+        // x-forwarded-for (first hop is the real client when behind a
+        // single trusted proxy, which Vercel is).
+        const ip =
+          hdrs.get("x-real-ip") ??
+          (hdrs.get("x-forwarded-for") ?? "").split(",")[0].trim() ?? null;
+        // Signup source — minimal v1 detection from Referer + UTM in
+        // the OAuth callback URL. Cookies the front-end may set later
+        // (utm_source, etc.) would land here too. For now we trust the
+        // referer and OAuth provider as the source.
+        const referer = hdrs.get("referer") ?? "";
+        let signupSource = "direct";
+        if (referer.includes("instagram.com"))      signupSource = "instagram";
+        else if (referer.includes("facebook.com"))  signupSource = "facebook";
+        else if (referer.includes("twitter.com")
+              || referer.includes("x.com"))         signupSource = "twitter";
+        else if (referer.includes("tiktok.com"))    signupSource = "tiktok";
+        else if (referer.includes("youtube.com"))   signupSource = "youtube";
+        else if (referer.includes("visualseffect.com")) signupSource = "internal";
+        // Update the freshly-created user with what we captured.
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            country,
+            region,
+            city,
+            latitude:  Number.isFinite(lat) ? lat : null,
+            longitude: Number.isFinite(lng) ? lng : null,
+            ipAddress: ip || null,
+            signupSource,
+          },
+        });
+      } catch (err) {
+        // Never let geo capture block signup; admin dashboard tolerates NULLs.
+        console.warn("[auth/geo-capture]", err?.message || err);
+      }
+
       // Fire welcome + admin notification for every new sign-up (any provider)
       await Promise.allSettled([
         sendSignupNotification({ name: user.name, email: user.email, image: user.image }),

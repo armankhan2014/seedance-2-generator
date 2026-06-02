@@ -59,6 +59,34 @@ model User {
   pushVideoReady  Boolean @default(true)
   pushVideoFailed Boolean @default(true)
   pushFeatured    Boolean @default(true)
+  // ── Admin Signups Tracker fields (added 2026-06-02) ────────────────
+  // createdAt is the source-of-truth signup date. Nullable so existing
+  // rows that don't have one yet don't break the migration — those
+  // accounts can be backfilled from Account.createdAt in a follow-up
+  // script. New signups get @default(now()) automatically.
+  createdAt   DateTime? @default(now())
+  // Vercel edge geolocation captured in NextAuth's createUser event by
+  // reading x-vercel-ip-* headers via next/headers headers(). All
+  // optional because (a) users may opt out of location tracking later
+  // and (b) non-Vercel deploys (local dev) don't get these headers.
+  country     String?   @db.VarChar(2) // ISO-3166-1 alpha-2 (e.g. "GB")
+  region      String?
+  city        String?
+  latitude    Float?
+  longitude   Float?
+  // First request IP for fraud detection. Stored as text; encryption at
+  // rest is handled by Neon/Postgres TDE. Never displayed outside admin.
+  ipAddress   String?
+  // Where the signup came from: "direct", "oauth_google", "oauth_apple",
+  // "referral", or "utm_<source>" stamped on /api/auth/signin call.
+  signupSource String?
+  // Referrer attribution — the existing createUser() block in auth.js
+  // already writes to this column (line ~165) but the schema never had
+  // it declared, so the write was silently swallowed. Self-relation
+  // with onDelete: SetNull so deleting a referrer doesn't cascade.
+  referredById String?
+  referredBy   User?     @relation("UserReferrals", fields: [referredById], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  referrals    User[]    @relation("UserReferrals")
   accounts      Account[]
   creations     Creation[]
   sessions      Session[]
@@ -74,6 +102,14 @@ model User {
   musicTracks       MusicTrack[]
   creditTxns        CreditTransaction[]
   editorProjects    EditorProject[]
+
+  // Daily-signups dashboard query is the hot read path
+  // (SELECT WHERE createdAt >= NOW() - INTERVAL '24 hours' ORDER BY createdAt DESC)
+  // so put a descending index on it.
+  @@index([createdAt(sort: Desc)])
+  @@index([country])
+  @@index([signupSource])
+  @@index([referredById])
 }
 
 // Append-only audit log for every credit movement on a User. Inserted in
