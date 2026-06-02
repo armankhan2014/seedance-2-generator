@@ -149,10 +149,70 @@ async function getSignupsData() {
 }
 
 export default async function AdminSignupsDemoPage() {
-  const session = await getServerSession(authOptions);
-  if (session?.user?.email !== OWNER_EMAIL) redirect("/");
+  // ── Debug-friendly auth gate ────────────────────────────────────────
+  // Bare bones version that surfaces the actual failure cause instead
+  // of silently redirecting. Once we confirm the route is hitting cleanly
+  // for Arman, this can be tightened back to a plain redirect("/").
+  let session = null;
+  let authError = null;
+  try {
+    session = await getServerSession(authOptions);
+  } catch (err) {
+    authError = err?.message || String(err);
+  }
+  const currentEmail = session?.user?.email ?? null;
 
-  const data = await getSignupsData();
+  if (!session || currentEmail !== OWNER_EMAIL) {
+    return (
+      <main style={{ minHeight: "100vh", background: "#0a0a0a", color: "#f5f5f5", padding: "60px 24px", fontFamily: "ui-sans-serif, system-ui" }}>
+        <div style={{ maxWidth: 560, margin: "0 auto" }}>
+          <h1 style={{ fontSize: 22, marginBottom: 12 }}>/demo/admin-signups · access debug</h1>
+          <pre style={{ background: "#111", padding: 16, borderRadius: 8, fontSize: 12, whiteSpace: "pre-wrap", color: "#ccc" }}>
+{JSON.stringify({
+  authError,
+  hasSession: !!session,
+  currentEmail,
+  expectedEmail: OWNER_EMAIL,
+  match: currentEmail === OWNER_EMAIL,
+}, null, 2)}
+          </pre>
+          <p style={{ marginTop: 20, color: "#888", fontSize: 13 }}>
+            If <code>hasSession</code> is false → not signed in.
+            If <code>currentEmail</code> is a different address → signed in with the wrong account.
+            If both look right but you still see this → tell Claude.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  // Auth passed. Run the data fetch with try/catch so any Prisma /
+  // schema-drift error surfaces visibly instead of falling through to
+  // the app's not-found page.
+  let data = null;
+  let fetchError = null;
+  try {
+    data = await getSignupsData();
+  } catch (err) {
+    fetchError = err?.message || String(err);
+    console.error("[admin-signups] data fetch failed:", err);
+  }
+
+  if (fetchError) {
+    return (
+      <main style={{ minHeight: "100vh", background: "#0a0a0a", color: "#f5f5f5", padding: "60px 24px", fontFamily: "ui-sans-serif, system-ui" }}>
+        <div style={{ maxWidth: 720, margin: "0 auto" }}>
+          <h1 style={{ fontSize: 22, marginBottom: 12, color: "#ff6b6b" }}>Data fetch failed</h1>
+          <pre style={{ background: "#111", padding: 16, borderRadius: 8, fontSize: 12, whiteSpace: "pre-wrap", color: "#ff9b9b" }}>
+{fetchError}
+          </pre>
+          <p style={{ marginTop: 20, color: "#888", fontSize: 13 }}>
+            This is usually a schema/Prisma drift error. Share the exact text above with Claude.
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   return <SignupsDashboard {...data} />;
 }

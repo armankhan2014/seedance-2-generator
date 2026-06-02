@@ -36,6 +36,16 @@ const nextConfig = {
         destination: "https://music.visualseffect.com/:path*",
         permanent: true,
       },
+      // Track-share permalinks (/m/<cuid>) also moved with the split
+      // — same redirect pattern. WhatsApp / Twitter / community-feed
+      // links generated before 2026-05-22 still point at seedance and
+      // need to find the track on the new home. The MusicTrack row
+      // lives in the shared DB so the destination resolves cleanly.
+      {
+        source: "/m/:id",
+        destination: "https://music.visualseffect.com/m/:id",
+        permanent: true,
+      },
     ];
   },
 
