@@ -37,6 +37,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
+import { detectSocialFromUrl } from "@/lib/socialLinkDetect";
 
 // ════════════════════════════════════════════════════════════════
 // BRAND TOKENS  (matches the live /profile palette exactly)
@@ -307,6 +308,15 @@ export default function ProfilePage() {
   // aspect lands gracefully via object-fit: cover.
   const [coverUploading, setCoverUploading] = useState(false);
   const handleCoverChange = async (file) => {
+    // Sentinel: drawer's "Remove" button calls onCoverChange(null) to
+    // signal the DELETE has already landed and we should just refresh
+    // the hero state.
+    if (file === null) {
+      await refetchProfile();
+      setToast({ kind: "ok", text: "Cover removed · brand gradient restored" });
+      setTimeout(() => setToast(null), 2200);
+      return;
+    }
     if (!file || coverUploading) return;
     setCoverUploading(true);
     try {
@@ -972,6 +982,7 @@ function SocialChips({ links }) {
     ? links
         .filter((l) => l && l.platform && (l.url || l.handle))
         .map((l) => ({
+          id:       l.id || null,        // present when from /api/me; needed for click tracking
           platform: l.platform,
           // Prefer the server-computed url; fall back to client-side
           // normalize for the (rare) case where someone passes raw
@@ -981,8 +992,9 @@ function SocialChips({ links }) {
     : Object.entries(links || {})
         .filter(([, v]) => v)
         .map(([platform, handle]) => ({
+          id:       null,
           platform,
-          href: normalizeLink(platform, handle),
+          href:     normalizeLink(platform, handle),
         }));
 
   if (rows.length === 0) {
@@ -1000,6 +1012,29 @@ function SocialChips({ links }) {
           href={r.href}
           target="_blank"
           rel="noreferrer noopener"
+          onClick={() => {
+            // Phase 3c.5 — fire-and-forget click ping. sendBeacon
+            // doesn't block the navigation and tolerates the tab
+            // closing mid-flight; fall back to fetch on browsers
+            // that don't ship Beacon (very old Safari).
+            if (!r.id) return;
+            try {
+              const blob = new Blob(
+                [JSON.stringify({ linkId: r.id })],
+                { type: "application/json" }
+              );
+              if (typeof navigator !== "undefined" && navigator.sendBeacon) {
+                navigator.sendBeacon("/api/social-link/click", blob);
+              } else {
+                fetch("/api/social-link/click", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ linkId: r.id }),
+                  keepalive: true,
+                }).catch(() => {});
+              }
+            } catch { /* never block the outbound click */ }
+          }}
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -1343,16 +1378,47 @@ function EditProfileDrawer({
                 flexShrink: 0,
               }} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <button
-                  type="button"
-                  style={smallBtn}
-                  disabled={coverUploading}
-                  onClick={() => coverInputRef.current?.click()}
-                >
-                  {coverUploading
-                    ? "Uploading…"
-                    : currentCoverUrl ? "Change cover banner" : "Add cover banner"}
-                </button>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    style={smallBtn}
+                    disabled={coverUploading}
+                    onClick={() => coverInputRef.current?.click()}
+                  >
+                    {coverUploading
+                      ? "Uploading…"
+                      : currentCoverUrl ? "Change cover" : "Add cover banner"}
+                  </button>
+                  {/* Remove cover — only when one is actually set.
+                      Confirmation prompt is plain native confirm() so it
+                      works on iOS Safari without dragging in a modal lib. */}
+                  {currentCoverUrl && (
+                    <button
+                      type="button"
+                      style={dangerBtn}
+                      disabled={coverUploading}
+                      onClick={async () => {
+                        if (!confirm("Remove your cover banner? The brand gradient will show instead.")) return;
+                        try {
+                          const r = await fetch("/api/me/cover", {
+                            method: "DELETE",
+                            credentials: "include",
+                          });
+                          if (r.ok && typeof onCoverChange === "function") {
+                            // Reuse the refetch trigger on the parent —
+                            // calling onCoverChange(null) is the signal
+                            // to refresh the profile + show the toast.
+                            onCoverChange(null);
+                          }
+                        } catch (err) {
+                          console.error("[profile] cover delete error:", err);
+                        }
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
                 <input
                   ref={coverInputRef}
                   type="file"
@@ -1432,7 +1498,23 @@ function EditProfileDrawer({
                 key={k}
                 label={LABEL_FOR_SOCIAL[k] || k}
                 value={draft.socialLinks[k]}
-                onChange={(v) => set(`socialLinks.${k}`, v)}
+                onChange={(v) => {
+                  // Phase 3c.5 — auto-detect when the user pastes a
+                  // full URL. If the URL belongs to a different
+                  // platform we route it there; if it belongs to
+                  // this one we strip the URL chrome and keep just
+                  // the handle. Typing plain text never triggers
+                  // detection (the regex only matches valid URLs).
+                  const detected = detectSocialFromUrl(v);
+                  if (detected && detected.platform !== k && detected.platform in draft.socialLinks) {
+                    set(`socialLinks.${k}`, "");
+                    set(`socialLinks.${detected.platform}`, detected.handle);
+                  } else if (detected && detected.platform === k) {
+                    set(`socialLinks.${k}`, detected.handle);
+                  } else {
+                    set(`socialLinks.${k}`, v);
+                  }
+                }}
                 prefix={SOCIAL_ICON[k]}
                 placeholder={
                   k === "website" ? "yoursite.com" :
@@ -1442,7 +1524,7 @@ function EditProfileDrawer({
               />
             ))}
             <p style={fineHint}>
-              Drag-to-reorder lands in Phase 2 once these persist.
+              Tip · paste a full profile URL into any field and we&rsquo;ll route it to the right platform.
             </p>
           </Section>
 

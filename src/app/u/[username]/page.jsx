@@ -26,6 +26,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import SocialChipsPublic from "@/components/saas/SocialChipsPublic";
 
 export const revalidate = 300;
 
@@ -64,7 +65,8 @@ async function findByHandle(handle) {
       socialLinks: {
         orderBy: { position: "asc" },
         where:   { hidden: false },
-        select:  { platform: true, handle: true, url: true },
+        // id is required for click-tracking sendBeacon on chips
+        select:  { id: true, platform: true, handle: true, url: true },
       },
       // Aggregate stats — Creation has no shape-of-data leak risk
       // because we only count the row, never select content.
@@ -262,35 +264,9 @@ export default async function PublicProfilePage({ params }) {
               <p style={{ margin: 0, color: SUB, fontSize: ".92rem", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
                 {user.bio || <em style={{ color: MUTED }}>This creator hasn&rsquo;t added a bio yet.</em>}
               </p>
-              {/* Social chips */}
-              {user.socialLinks.length > 0 && (
-                <div style={{ marginTop: 16, display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {user.socialLinks.map((l) => (
-                    <a
-                      key={l.platform}
-                      href={l.url}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                        padding: "5px 10px",
-                        background: CARD_2,
-                        border: `1px solid ${HAIR}`,
-                        borderRadius: 999,
-                        color: TEXT,
-                        fontSize: 11.5,
-                        fontWeight: 700,
-                        textDecoration: "none",
-                      }}
-                    >
-                      <span aria-hidden="true">{SOCIAL_ICON[l.platform] || "🔗"}</span>
-                      <span style={{ color: SUB }}>{LABEL_FOR_SOCIAL[l.platform] || l.platform}</span>
-                    </a>
-                  ))}
-                </div>
-              )}
+              {/* Social chips — client component so sendBeacon click
+                  tracking can fire from this server-rendered page. */}
+              <SocialChipsPublic links={user.socialLinks} />
             </section>
 
             <aside style={{ display: "flex", flexDirection: "column", gap: 16 }}>
