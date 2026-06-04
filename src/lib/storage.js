@@ -109,3 +109,51 @@ export async function uploadAudioBuffer(buffer, key, contentType = "audio/mpeg")
   const baseUrl = process.env.R2_PUBLIC_URL?.replace(/\/$/, "");
   return `${baseUrl}/${key}`;
 }
+
+/**
+ * Upload a raw image buffer (avatar / cover banner / generic) to R2
+ * and return the public CDN URL.
+ *
+ * Used by the Phase 3a profile redesign:
+ *   • POST /api/me/avatar  → users/{userId}/avatar-{ts}.jpg (512px)
+ *   • POST /api/me/cover   → users/{userId}/cover-{ts}.jpg  (1920×1080)
+ *
+ * Long Cache-Control because the URL embeds a timestamp — every
+ * upload creates a NEW key, so old keys are immutable forever. The
+ * caller is expected to delete the previous key via deleteR2Object()
+ * when overwriting (otherwise the bucket grows unbounded).
+ */
+export async function uploadImageBuffer(buffer, key, contentType = "image/jpeg") {
+  const client = getClient();
+  await client.send(new PutObjectCommand({
+    Bucket: process.env.R2_BUCKET_NAME,
+    Key: key,
+    Body: buffer,
+    ContentType: contentType,
+    CacheControl: "public, max-age=31536000, immutable",
+  }));
+  const baseUrl = process.env.R2_PUBLIC_URL?.replace(/\/$/, "");
+  return `${baseUrl}/${key}`;
+}
+
+/**
+ * Generic delete-by-key. Same shape as deleteVideo() but named so it
+ * reads honestly when the caller is removing an avatar or cover.
+ * Swallows "key not found" silently — by the time we're cleaning up
+ * an old key, the user has already seen the new one render, so a
+ * miss isn't worth surfacing.
+ */
+export async function deleteR2Object(key) {
+  if (!key) return;
+  try {
+    const client = getClient();
+    await client.send(new DeleteObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: key,
+    }));
+  } catch (err) {
+    // 404s + permission misses are non-fatal; the new key already
+    // landed before we got here.
+    console.warn(`[storage] deleteR2Object(${key}) ignored:`, err?.message);
+  }
+}

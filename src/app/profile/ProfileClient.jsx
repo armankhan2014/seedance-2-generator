@@ -21,10 +21,17 @@
  *   └──────────────────────────────────┴───────────────────────┘
  *
  * Edit Profile drawer: right-side on desktop, full-screen on mobile.
+ *
  * Phase 2: real PATCH /api/me for editable text fields (name, bio,
- * tagline, location, pronouns, isPrivate). Avatar upload still uses
- * the legacy base64-in-DB endpoint (/api/user/update-image) until
- * Phase 3a migrates to R2.
+ * tagline, location, pronouns, isPrivate).
+ *
+ * Phase 3a: avatar + cover both upload to Cloudflare R2 via
+ * /api/me/avatar and /api/me/cover. Client-side resizes (avatar
+ * 512×512, cover 1920×1080) keep payloads small; server stores
+ * public CDN URLs in User.image and User.coverImageUrl. Old R2
+ * objects are deleted on overwrite to keep the bucket flat. Legacy
+ * base64 avatars in User.image continue to render via the same
+ * <img src> until their owner re-uploads.
  */
 
 import { useEffect, useId, useRef, useState } from "react";
@@ -189,51 +196,61 @@ export default function ProfilePage() {
     }));
   }, [profile, session, derivedFirst, derivedLast, realName, realEmail, realImage]);
 
-  // Avatar upload — legacy 250×250 JPEG → /api/user/update-image.
-  // Phase 3a migrates to R2 with multi-size + crop UI; for now this
-  // keeps users able to change their photo today without waiting.
+  // Client-side resize helper. Reads the file, draws into a canvas
+  // capped at MAX on the long edge, encodes as JPEG, and returns the
+  // resulting Blob. Keeps the network payload small without forcing
+  // server-side image processing.
+  const resizeToBlob = async (file, MAX, quality = 0.85) => {
+    const rawDataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("Could not read file"));
+      reader.onload  = (ev) => resolve(ev.target.result);
+      reader.readAsDataURL(file);
+    });
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Could not decode image"));
+      img.onload = () => {
+        try {
+          let { width, height } = img;
+          if (width > MAX || height > MAX) {
+            if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
+            else                { width  = Math.round(width  * MAX / height); height = MAX; }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, width, height);
+          canvas.toBlob(
+            (blob) => blob ? resolve(blob) : reject(new Error("Canvas blob conversion failed")),
+            "image/jpeg",
+            quality
+          );
+        } catch (e) { reject(e); }
+      };
+      img.src = rawDataUrl;
+    });
+  };
+
+  // Avatar upload → Cloudflare R2 via /api/me/avatar.
+  // Client-resizes to 512×512 (retina-friendly for the 128 px hero
+  // circle), uploads as multipart, server returns the public URL,
+  // hero updates immediately + /api/me re-fetches for canonical state.
   const [avatarUploading, setAvatarUploading] = useState(false);
+  // Hidden file input for the in-hero "Edit cover" button (lets the
+  // user replace the banner in one tap without opening the drawer).
+  const heroCoverInputRef = useRef(null);
   const handleAvatarChange = async (file) => {
     if (!file || avatarUploading) return;
     setAvatarUploading(true);
     try {
-      // 1) Read file as data URL
-      const rawDataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onerror = () => reject(new Error("Could not read file"));
-        reader.onload  = (ev) => resolve(ev.target.result);
-        reader.readAsDataURL(file);
-      });
-      // 2) Resize to max 250×250 + recompress to JPEG 0.72 so the
-      //    base64 payload stays under the route's 200 KB cap.
-      const compressed = await new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onerror = () => reject(new Error("Could not decode image"));
-        img.onload = () => {
-          try {
-            const MAX = 250;
-            let { width, height } = img;
-            if (width > MAX || height > MAX) {
-              if (width > height) { height = Math.round(height * MAX / width); width = MAX; }
-              else                { width  = Math.round(width  * MAX / height); height = MAX; }
-            }
-            const canvas = document.createElement("canvas");
-            canvas.width = width; canvas.height = height;
-            const ctx = canvas.getContext("2d");
-            ctx.drawImage(img, 0, 0, width, height);
-            const out = canvas.toDataURL("image/jpeg", 0.72);
-            if (!out || out === "data:,") throw new Error("Canvas output is empty");
-            resolve(out);
-          } catch (e) { reject(e); }
-        };
-        img.src = rawDataUrl;
-      });
-      // 3) POST to the legacy avatar endpoint
-      const res = await fetch("/api/user/update-image", {
+      const blob = await resizeToBlob(file, 512, 0.85);
+      const form = new FormData();
+      form.append("file", blob, "avatar.jpg");
+      const res = await fetch("/api/me/avatar", {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: compressed }),
+        body: form,
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -241,18 +258,55 @@ export default function ProfilePage() {
         setTimeout(() => setToast(null), 3600);
         return;
       }
-      // 4) Update local hero immediately + refresh /api/me so other
-      //    fields stay canonical.
-      setDraft((d) => ({ ...d, avatar: compressed }));
+      const data = await res.json();
+      setDraft((d) => ({ ...d, avatar: data.image }));
       await refetchProfile();
-      setToast({ kind: "ok", text: "Avatar updated · visible everywhere" });
-      setTimeout(() => setToast(null), 2400);
+      setToast({ kind: "ok", text: "Avatar updated · live on community, music, edits too" });
+      setTimeout(() => setToast(null), 2600);
     } catch (err) {
       console.error("[profile] avatar upload error:", err);
       setToast({ kind: "err", text: err?.message || "Upload failed — try a smaller image." });
       setTimeout(() => setToast(null), 3600);
     } finally {
       setAvatarUploading(false);
+    }
+  };
+
+  // Cover banner upload → /api/me/cover. Resizes to 1920×1080 max
+  // (16:9 cinematic) at 0.85 quality. We don't enforce 16:9 — any
+  // aspect lands gracefully via object-fit: cover.
+  const [coverUploading, setCoverUploading] = useState(false);
+  const handleCoverChange = async (file) => {
+    if (!file || coverUploading) return;
+    setCoverUploading(true);
+    try {
+      const blob = await resizeToBlob(file, 1920, 0.85);
+      const form = new FormData();
+      form.append("file", blob, "cover.jpg");
+      const res = await fetch("/api/me/cover", {
+        method: "POST",
+        credentials: "include",
+        body: form,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast({ kind: "err", text: data.error || `Cover upload failed (HTTP ${res.status})` });
+        setTimeout(() => setToast(null), 3600);
+        return;
+      }
+      const data = await res.json();
+      // Refresh /api/me so profile.coverImageUrl propagates into the
+      // hero banner render path.
+      await refetchProfile();
+      setToast({ kind: "ok", text: "Cover banner updated · live everywhere" });
+      setTimeout(() => setToast(null), 2600);
+      return data.coverImageUrl;
+    } catch (err) {
+      console.error("[profile] cover upload error:", err);
+      setToast({ kind: "err", text: err?.message || "Cover upload failed — try a smaller image." });
+      setTimeout(() => setToast(null), 3600);
+    } finally {
+      setCoverUploading(false);
     }
   };
 
@@ -348,44 +402,67 @@ export default function ProfilePage() {
           borderRadius: 20,
           overflow: "hidden",
         }}>
-          {/* Cover banner */}
-          <div style={{
-            position: "relative",
-            width: "100%",
-            aspectRatio: "16 / 5",
-            // Brand-aligned aurora: lime → deep navy → black, with a
-            // subtle radial sun in the top-left so the surface has
-            // depth without an upload yet.
-            background: `
-              radial-gradient(120% 80% at 12% 18%, rgba(217,255,0,0.34) 0%, rgba(217,255,0,0) 55%),
-              radial-gradient(80% 100% at 85% 110%, rgba(76,29,149,0.55) 0%, rgba(76,29,149,0) 60%),
-              linear-gradient(135deg, #0c0c12 0%, #16141f 60%, #050507 100%)
-            `,
-          }}>
-            {/* Edit-cover affordance (visual stub) */}
-            <button
-              type="button"
-              onClick={() => setEditOpen(true)}
-              style={{
-                position: "absolute",
-                right: 12,
-                bottom: 12,
-                background: "rgba(0,0,0,0.55)",
-                border: `1px solid ${HAIR_STRONG}`,
-                color: TEXT,
-                padding: "8px 14px",
-                borderRadius: 8,
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: "pointer",
-                fontFamily: "inherit",
-                backdropFilter: "blur(6px)",
-                WebkitBackdropFilter: "blur(6px)",
-              }}
-            >
-              📷 Edit cover
-            </button>
-          </div>
+          {/* Cover banner — uses the user's uploaded image if set,
+              otherwise falls back to the brand-aligned aurora gradient
+              so a fresh account still feels polished. The hidden file
+              input under the button lets the user replace it in one
+              tap without opening the Edit drawer. */}
+          {(() => {
+            const coverUrl = profile?.coverImageUrl;
+            return (
+              <div style={{
+                position: "relative",
+                width: "100%",
+                aspectRatio: "16 / 5",
+                background: coverUrl
+                  ? `#000 url(${coverUrl}) center/cover no-repeat`
+                  : `
+                      radial-gradient(120% 80% at 12% 18%, rgba(217,255,0,0.34) 0%, rgba(217,255,0,0) 55%),
+                      radial-gradient(80% 100% at 85% 110%, rgba(76,29,149,0.55) 0%, rgba(76,29,149,0) 60%),
+                      linear-gradient(135deg, #0c0c12 0%, #16141f 60%, #050507 100%)
+                    `,
+              }}>
+                {/* Edit-cover — opens the file picker inline */}
+                <button
+                  type="button"
+                  onClick={() => heroCoverInputRef.current?.click()}
+                  disabled={coverUploading}
+                  style={{
+                    position: "absolute",
+                    right: 12,
+                    bottom: 12,
+                    background: "rgba(0,0,0,0.55)",
+                    border: `1px solid ${HAIR_STRONG}`,
+                    color: TEXT,
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: coverUploading ? "wait" : "pointer",
+                    fontFamily: "inherit",
+                    backdropFilter: "blur(6px)",
+                    WebkitBackdropFilter: "blur(6px)",
+                    opacity: coverUploading ? 0.7 : 1,
+                  }}
+                >
+                  {coverUploading
+                    ? "Uploading…"
+                    : coverUrl ? "📷 Change cover" : "📷 Add cover"}
+                </button>
+                <input
+                  ref={heroCoverInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleCoverChange(f);
+                    if (e.target) e.target.value = "";
+                  }}
+                />
+              </div>
+            );
+          })()}
 
           {/* Identity block — sits below cover, avatar overlaps */}
           <div style={{ position: "relative", padding: "0 28px 28px" }}>
@@ -697,6 +774,9 @@ export default function ProfilePage() {
           onSave={handleSave}
           onAvatarChange={handleAvatarChange}
           avatarUploading={avatarUploading}
+          onCoverChange={handleCoverChange}
+          coverUploading={coverUploading}
+          currentCoverUrl={profile?.coverImageUrl || null}
         />
       )}
 
@@ -1001,9 +1081,20 @@ function summarizePrivacy(p) {
 // ════════════════════════════════════════════════════════════════
 // EDIT PROFILE DRAWER
 // ════════════════════════════════════════════════════════════════
-function EditProfileDrawer({ draft, setDraft, onClose, onSave, onAvatarChange, avatarUploading }) {
+function EditProfileDrawer({
+  draft,
+  setDraft,
+  onClose,
+  onSave,
+  onAvatarChange,
+  avatarUploading,
+  onCoverChange,
+  coverUploading,
+  currentCoverUrl,
+}) {
   const titleId = useId();
   const fileInputRef = useRef(null);
+  const coverInputRef = useRef(null);
 
   // iOS Safari-safe scroll lock (same recipe as the ref-guide modal).
   useEffect(() => {
@@ -1154,15 +1245,42 @@ function EditProfileDrawer({ draft, setDraft, onClose, onSave, onAvatarChange, a
                 <p style={fineHint}>JPG, PNG or WebP · resized to 250×250 · saves instantly.</p>
               </div>
             </div>
-            <div style={{ marginTop: 14 }}>
-              <button
-                type="button"
-                style={smallBtn}
-                onClick={() => alert("Cover banner upload — coming with Phase 3 (R2 storage + 16:9 crop)")}
-              >
-                Change cover banner
-              </button>
-              <p style={fineHint}>16:9 cinematic. Brand gradient for now — uploads land in Phase 3.</p>
+            <div style={{ marginTop: 14, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+              {/* Cover thumbnail — shows current cover or gradient placeholder */}
+              <div style={{
+                width: 96,
+                aspectRatio: "16 / 9",
+                borderRadius: 8,
+                background: currentCoverUrl
+                  ? `#000 url(${currentCoverUrl}) center/cover no-repeat`
+                  : `linear-gradient(135deg, rgba(217,255,0,0.3), rgba(76,29,149,0.55))`,
+                border: `1px solid ${HAIR_STRONG}`,
+                flexShrink: 0,
+              }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <button
+                  type="button"
+                  style={smallBtn}
+                  disabled={coverUploading}
+                  onClick={() => coverInputRef.current?.click()}
+                >
+                  {coverUploading
+                    ? "Uploading…"
+                    : currentCoverUrl ? "Change cover banner" : "Add cover banner"}
+                </button>
+                <input
+                  ref={coverInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) onCoverChange?.(f);
+                    if (e.target) e.target.value = "";
+                  }}
+                />
+                <p style={fineHint}>16:9 cinematic · resized to 1920×1080 · saves instantly.</p>
+              </div>
             </div>
           </Section>
 
