@@ -74,6 +74,20 @@ model User {
   location      String?
   coverImageUrl String?
   isPrivate     Boolean  @default(false)
+  // ── Public @handle (Phase 3b.1, added 2026-06-04) ──────────────────
+  // username is stored verbatim (preserves user-chosen casing for
+  // display) but uniqueness is enforced by a functional UNIQUE INDEX
+  // on LOWER(username) in the DB (see
+  // prisma/manual-migrations/2026-06-04-add-username-and-cooldown.sql).
+  // The @unique on the Prisma side is the *literal* index, not the
+  // case-insensitive one — Prisma 7 + Neon + Postgres-style functional
+  // indexes require us to drive uniqueness checks through our own
+  // case-insensitive query (lookup-by-lower) before insert.
+  username           String?   @db.VarChar(30)
+  // Last time the user changed their @handle. NULL on signup → first
+  // change is free. Subsequent changes blocked for 30 days from this
+  // timestamp by /api/me PATCH.
+  usernameChangedAt  DateTime? @db.Timestamptz
   // Per-user social-link rows (Instagram, TikTok, YouTube, etc.).
   // Lives in its own UserSocialLink table so we can keep ordered
   // positions, hidden flags, and per-link click counts without a

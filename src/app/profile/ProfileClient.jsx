@@ -207,7 +207,10 @@ export default function ProfilePage() {
       firstName:   derivedFirst   || d.firstName,
       lastName:    derivedLast    || d.lastName,
       displayName: realName       || d.displayName,
-      username:    deriveHandle(realName, realEmail) || d.username,
+      // Prefer the user's CLAIMED handle if they've ever set one;
+      // fall back to a derivation only for the first-time-setting
+      // UX (so the field isn't empty on first open).
+      username:    profile?.username || deriveHandle(realName, realEmail) || d.username,
       avatar:      realImage      || d.avatar,
       // Real DB-backed values when present, else keep the demo
       // placeholders so the surface still looks alive on first view.
@@ -351,6 +354,10 @@ export default function ProfilePage() {
         credentials: "include",
         body: JSON.stringify({
           name:              draft.displayName,
+          // Public @handle — server enforces 30-day cooldown +
+          // uniqueness. Re-sending the same value is a no-op (the
+          // server short-circuits when nothing actually changed).
+          username:          draft.username,
           bio:               draft.bio,
           tagline:           draft.tagline,
           location:          draft.location,
@@ -818,6 +825,8 @@ export default function ProfilePage() {
           onCoverChange={handleCoverChange}
           coverUploading={coverUploading}
           currentCoverUrl={profile?.coverImageUrl || null}
+          currentUsername={profile?.username || null}
+          usernameChangedAt={profile?.usernameChangedAt || null}
         />
       )}
 
@@ -1153,6 +1162,8 @@ function EditProfileDrawer({
   onCoverChange,
   coverUploading,
   currentCoverUrl,
+  currentUsername,
+  usernameChangedAt,
 }) {
   const titleId = useId();
   const fileInputRef = useRef(null);
@@ -1363,12 +1374,11 @@ function EditProfileDrawer({
             </Row>
             <Field label="Display name" value={draft.displayName} onChange={(v) => set("displayName", v)}
                    hint="How your name appears on posts + videos." />
-            <Field
-              label="Username (@handle)"
+            <UsernameField
               value={draft.username}
-              onChange={(v) => set("username", v.replace(/[^a-z0-9_]/gi, "").toLowerCase())}
-              prefix="@"
-              hint="3-18 chars · letters, numbers, underscores. Can be changed once every 30 days."
+              onChange={(v) => set("username", v.replace(/[^a-z0-9_.]/gi, "").toLowerCase().slice(0, 30))}
+              currentUsername={currentUsername}
+              usernameChangedAt={usernameChangedAt}
             />
             <SelectField
               label="Pronouns"
@@ -1530,6 +1540,162 @@ function Row({ children }) {
   return <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{
     Array.isArray(children) ? children.map((c, i) => <div key={i} style={{ flex: "1 1 0", minWidth: 140 }}>{c}</div>) : children
   }</div>;
+}
+
+// ════════════════════════════════════════════════════════════════
+// UsernameField — debounced /api/me/username/availability check
+// with inline status + 30-day cooldown copy.
+// ════════════════════════════════════════════════════════════════
+function UsernameField({ value, onChange, currentUsername, usernameChangedAt }) {
+  const [status, setStatus] = useState({ kind: "idle" });
+
+  // React 19 forbids reading Date.now() in render — so we snapshot
+  // it on mount and refresh once a minute. The cooldown label is
+  // an estimate anyway; sub-minute precision doesn't matter.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Cooldown calculation — derived from usernameChangedAt prop. NULL
+  // means the user has never set one, so changes are free.
+  const COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
+  const lastChange  = usernameChangedAt ? new Date(usernameChangedAt).getTime() : 0;
+  const cooldownEnd = lastChange + COOLDOWN_MS;
+  const cooldownMs  = Math.max(0, cooldownEnd - now);
+  const inCooldown  = cooldownMs > 0 && currentUsername;
+
+  // Friendly cooldown label
+  let cooldownText = "";
+  if (inCooldown) {
+    const days  = Math.floor(cooldownMs / (24 * 60 * 60 * 1000));
+    const hours = Math.floor((cooldownMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+    if (days > 1)        cooldownText = `${days} days`;
+    else if (days === 1) cooldownText = hours > 0 ? `1 day, ${hours} h` : "1 day";
+    else                 cooldownText = `${hours} h`;
+  }
+
+  // Derive the SYNCHRONOUS branches from props/value at render time
+  // (React 19's purity rule forbids setState in render or effect-
+  // sync-branches). Only the async availability check actually
+  // calls setStatus, and only inside its setTimeout callback.
+  const matchesCurrent = !!currentUsername &&
+    !!value && value.toLowerCase() === String(currentUsername).toLowerCase();
+  const shouldCheck = !!value && !inCooldown && !matchesCurrent;
+
+  // Debounced availability check — fires 400 ms after the user
+  // stops typing. Only runs when (a) the value differs from the
+  // current saved handle, (b) the user isn't in cooldown, and
+  // (c) the value is non-empty.
+  useEffect(() => {
+    if (!shouldCheck) return;
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      if (cancelled) return;
+      // Stamp checking BEFORE the network round-trip so the UI shows
+      // a working state. Inside a setTimeout callback the React 19
+      // purity rule is satisfied (this isn't a sync-render path).
+      setStatus({ kind: "checking" });
+      try {
+        const r = await fetch(`/api/me/username/availability?username=${encodeURIComponent(value)}`, {
+          cache: "no-store",
+          credentials: "include",
+        });
+        if (cancelled) return;
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          setStatus({ kind: "err", message: data.error || "Couldn't check availability." });
+          return;
+        }
+        if (data.current) { setStatus({ kind: "current" }); return; }
+        if (data.available) { setStatus({ kind: "ok" });   return; }
+        setStatus({ kind: "err", message: data.message || "Not available." });
+      } catch {
+        if (!cancelled) setStatus({ kind: "err", message: "Network error — try again." });
+      }
+    }, 400);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [value, shouldCheck]);
+
+  // ── Render ──
+  const colorByKind = {
+    idle:     MUTED,
+    checking: SUB,
+    ok:       GREEN,
+    current:  LIME,
+    err:      RED,
+  };
+  // Resolve the rendered status: synchronous branches win over the
+  // (possibly stale) async result so the inline text is always
+  // consistent with the current value.
+  const renderedKind =
+    !value      ? "idle"      :
+    matchesCurrent ? "current" :
+    inCooldown  ? "idle"      :
+    status.kind;
+  const inlineText = {
+    idle:     "",
+    checking: "Checking…",
+    ok:       "✓ Available",
+    current:  "✓ Your current handle",
+    err:      status.message,
+  }[renderedKind] || "";
+
+  return (
+    <div>
+      <label style={{ display: "block" }}>
+        <span style={{ color: SUB, fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".08em" }}>
+          Username (@handle)
+        </span>
+        <div style={{
+          marginTop: 6,
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          background: CARD_2,
+          border: `1px solid ${status.kind === "err" ? "rgba(248,113,113,0.6)" : status.kind === "ok" ? "rgba(74,222,128,0.45)" : HAIR}`,
+          borderRadius: 8,
+          padding: "0 10px",
+          opacity: inCooldown ? 0.55 : 1,
+        }}>
+          <span style={{ color: MUTED, fontSize: 13, fontWeight: 700 }}>@</span>
+          <input
+            type="text"
+            value={value}
+            disabled={inCooldown}
+            placeholder="armankhan"
+            onChange={(e) => onChange(e.target.value)}
+            style={{
+              flex: 1,
+              background: "transparent",
+              border: "none",
+              color: TEXT,
+              padding: "10px 0",
+              fontSize: 13,
+              fontFamily: "inherit",
+              outline: "none",
+            }}
+          />
+          {inlineText && (
+            <span style={{
+              fontSize: 11.5,
+              fontWeight: 700,
+              color: colorByKind[status.kind],
+              whiteSpace: "nowrap",
+            }}>
+              {inlineText}
+            </span>
+          )}
+        </div>
+      </label>
+      <div style={{ ...fineHint, color: inCooldown ? "#fb923c" : MUTED }}>
+        {inCooldown
+          ? `Locked for ${cooldownText} · @handle can be changed once every 30 days.`
+          : "3-30 chars · letters, numbers, underscore, period · can be changed once every 30 days."}
+      </div>
+    </div>
+  );
 }
 
 function Field({ label, value, onChange, hint, prefix, placeholder }) {

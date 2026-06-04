@@ -36,6 +36,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import {
+  formatProblem as usernameFormatProblem,
+  cooldownRemainingMs,
+  cooldownLabel,
+} from "@/lib/username";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -223,6 +228,71 @@ export async function PATCH(req) {
       }
       updates.isPrivate = body.isPrivate;
     }
+    // Username (@handle) change — special-cased because of the
+    // 30-day cooldown + uniqueness check + casing rules. The client
+    // can call /api/me/username/availability for live feedback, but
+    // the server validates everything again here on submit (defence
+    // in depth).
+    let usernameUpdate = undefined;
+    let usernameChangedNow = false;
+    if ("username" in body) {
+      const raw = String(body.username || "").trim().toLowerCase();
+      if (raw === "") {
+        // Treat empty as "clear my handle" — rare, but supported.
+        usernameUpdate = null;
+      } else {
+        const fp = usernameFormatProblem(raw);
+        if (fp) {
+          return NextResponse.json({ error: fp.message, reason: fp.reason }, { status: 400 });
+        }
+        // Look up current user's existing handle + last-changed time
+        // so we can answer the cooldown + same-value cases.
+        const current = await prisma.user.findUnique({
+          where:  { email: session.user.email },
+          select: { id: true, username: true, usernameChangedAt: true },
+        });
+        if (!current) {
+          return NextResponse.json({ error: "User not found" }, { status: 404 });
+        }
+        const same = current.username && current.username.toLowerCase() === raw;
+        if (!same) {
+          // Cooldown only applies when actually changing the value —
+          // re-saving the same handle (e.g. when the user edits bio
+          // and the handle field round-trips unchanged) is always fine.
+          const remaining = cooldownRemainingMs(current.usernameChangedAt);
+          if (remaining > 0) {
+            return NextResponse.json(
+              {
+                error:  `You can change your @handle again in ${cooldownLabel(remaining)}.`,
+                reason: "cooldown",
+                cooldownRemainingMs: remaining,
+              },
+              { status: 429 }
+            );
+          }
+          // Uniqueness — race-condition-safe via the LOWER(username)
+          // unique index, but we check up-front for a polite error.
+          const other = await prisma.user.findFirst({
+            where: {
+              username: { equals: raw, mode: "insensitive" },
+              NOT: { id: current.id },
+            },
+            select: { id: true },
+          });
+          if (other) {
+            return NextResponse.json(
+              { error: "That handle is taken.", reason: "taken" },
+              { status: 409 }
+            );
+          }
+          usernameUpdate = raw;
+          usernameChangedNow = true;
+        }
+        // If `same`, we silently keep the existing value — no
+        // cooldown reset, no DB write.
+      }
+    }
+
     if ("profileVisibility" in body) {
       const vis = String(body.profileVisibility);
       if (!VALID_VISIBILITY.includes(vis)) {
@@ -236,6 +306,14 @@ export async function PATCH(req) {
       // displays the user's selection because the response echoes it
       // back through `_pendingProfileVisibility` (see below).
       updates.isPrivate = vis === "private";
+    }
+
+    // Land the username change resolved above. usernameChangedAt
+    // stamps NOW only when the value actually changed (so re-saving
+    // the same handle doesn't reset the cooldown clock).
+    if (usernameUpdate !== undefined) {
+      updates.username = usernameUpdate;
+      if (usernameChangedNow) updates.usernameChangedAt = new Date();
     }
 
     // Social links — full-replace semantics. The client always sends
@@ -354,6 +432,11 @@ const BASE_SELECT = {
   location:      true,
   coverImageUrl: true,
   isPrivate:     true,
+  // Public @handle + last-change timestamp (Phase 3b.1). The
+  // client uses usernameChangedAt to render the "X days until you
+  // can change again" hint in the Edit-drawer field.
+  username:          true,
+  usernameChangedAt: true,
   socialLinks: {
     orderBy: { position: "asc" },
     where:   { hidden: false },
