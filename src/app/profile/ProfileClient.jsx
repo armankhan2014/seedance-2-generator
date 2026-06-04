@@ -82,6 +82,20 @@ function deriveHandle(name, email) {
   return base.slice(0, 18);
 }
 
+// Canonical default shape for the form's social-link object. Keyed
+// by platform so the 7 inputs always render in the same order.
+function d_socialLinksDefault() {
+  return {
+    instagram: "",
+    tiktok:    "",
+    youtube:   "",
+    x:         "",
+    vimeo:     "",
+    behance:   "",
+    website:   "",
+  };
+}
+
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
@@ -176,6 +190,18 @@ export default function ProfilePage() {
     if (seededRef.current) return;
     if (!profile && !session) return;
     seededRef.current = true;
+    // Convert profile.socialLinks (array of UserSocialLink rows from
+    // /api/me) → flat object the form is keyed on. Unknown platforms
+    // are silently dropped so the form always renders the same 7
+    // fields regardless of what's in the DB.
+    const seededLinks = { ...d_socialLinksDefault() };
+    if (Array.isArray(profile?.socialLinks)) {
+      for (const row of profile.socialLinks) {
+        if (row?.platform && row.platform in seededLinks) {
+          seededLinks[row.platform] = row.handle || "";
+        }
+      }
+    }
     setDraft((d) => ({
       ...d,
       firstName:   derivedFirst   || d.firstName,
@@ -189,6 +215,7 @@ export default function ProfilePage() {
       tagline:     profile?.tagline    ?? d.tagline,
       location:    profile?.location   ?? d.location,
       pronouns:    profile?.pronouns   ?? d.pronouns,
+      socialLinks: seededLinks,
       privacy: {
         ...d.privacy,
         profile: profile?.isPrivate ? "private" : "public",
@@ -329,6 +356,17 @@ export default function ProfilePage() {
           location:          draft.location,
           pronouns:          draft.pronouns,
           profileVisibility: draft.privacy.profile,
+          // Flatten { instagram: "armankhan", tiktok: "", ... } →
+          // [{ platform: "instagram", handle: "armankhan" }, ...].
+          // Empty handles are dropped server-side; sending the full
+          // set including empties signals "this is the COMPLETE
+          // desired state" (full-replace semantics).
+          socialLinks: Object.entries(draft.socialLinks)
+            .map(([platform, handle]) => ({
+              platform,
+              handle: String(handle || "").trim(),
+            }))
+            .filter((l) => l.handle.length > 0),
         }),
       });
       if (!res.ok) {
@@ -611,7 +649,10 @@ export default function ProfilePage() {
               </p>
 
               {/* Social link chips */}
-              <SocialChips links={draft.socialLinks} />
+              {/* Reads from the SAVED profile (array of UserSocialLink
+                  rows), not the in-progress drawer edits — so chips
+                  always reflect what's actually in the DB. */}
+              <SocialChips links={profile?.socialLinks || []} />
             </Card>
 
             {/* Tabs */}
@@ -900,9 +941,30 @@ function VerifiedBadge() {
   );
 }
 
+// SocialChips renders the SAVED social-link rows from /api/me. It
+// accepts either the array shape returned by /api/me (preferred —
+// rows include the server-computed canonical URL) or the flat
+// { platform: handle } object the Edit-drawer form uses (back-
+// compat). Empty handles + unknown platforms are filtered out.
 function SocialChips({ links }) {
-  const entries = Object.entries(links).filter(([, v]) => v);
-  if (entries.length === 0) {
+  const rows = Array.isArray(links)
+    ? links
+        .filter((l) => l && l.platform && (l.url || l.handle))
+        .map((l) => ({
+          platform: l.platform,
+          // Prefer the server-computed url; fall back to client-side
+          // normalize for the (rare) case where someone passes raw
+          // draft state.
+          href: l.url || normalizeLink(l.platform, l.handle),
+        }))
+    : Object.entries(links || {})
+        .filter(([, v]) => v)
+        .map(([platform, handle]) => ({
+          platform,
+          href: normalizeLink(platform, handle),
+        }));
+
+  if (rows.length === 0) {
     return (
       <div style={{ marginTop: 14, fontSize: 12, color: MUTED, fontStyle: "italic" }}>
         No social links added yet.
@@ -911,10 +973,10 @@ function SocialChips({ links }) {
   }
   return (
     <div style={{ marginTop: 14, display: "flex", flexWrap: "wrap", gap: 6 }}>
-      {entries.map(([key, value]) => (
+      {rows.map((r) => (
         <a
-          key={key}
-          href={normalizeLink(key, value)}
+          key={r.platform}
+          href={r.href}
           target="_blank"
           rel="noreferrer noopener"
           style={{
@@ -931,8 +993,8 @@ function SocialChips({ links }) {
             textDecoration: "none",
           }}
         >
-          <span aria-hidden="true">{SOCIAL_ICON[key]}</span>
-          <span style={{ color: SUB }}>{LABEL_FOR_SOCIAL[key] || key}</span>
+          <span aria-hidden="true">{SOCIAL_ICON[r.platform]}</span>
+          <span style={{ color: SUB }}>{LABEL_FOR_SOCIAL[r.platform] || r.platform}</span>
         </a>
       ))}
     </div>

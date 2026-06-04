@@ -52,6 +52,50 @@ const LIMITS = {
 
 const VALID_VISIBILITY = ["public", "followers", "private"];
 
+// ── Social link platforms — whitelist + URL templates ─────────────
+// The community canonical schema accepts arbitrary platform strings,
+// but seedance's UI ships a fixed set of 7. Cap at 12 to leave headroom
+// for future additions (Threads, Bluesky, etc.) without forcing a
+// client-side coordination.
+const VALID_PLATFORMS = new Set([
+  "instagram", "tiktok", "youtube", "x",
+  "vimeo", "behance", "imdb", "website",
+  "threads", "bluesky", "facebook", "twitter",
+]);
+const MAX_SOCIAL_LINKS = 12;
+
+// Build the canonical public URL for a given platform + handle. The
+// client may pass either a raw handle ("armankhan") or a full URL
+// ("https://instagram.com/armankhan"); we accept both and emit a
+// single canonical form so the database holds clean data.
+function buildSocialUrl(platform, raw) {
+  if (!raw) return null;
+  const cleaned = String(raw).trim();
+  if (!cleaned) return null;
+  // Already a full URL — accept verbatim (Instagram permalinks,
+  // YouTube channel IDs, etc.).
+  if (/^https?:\/\//i.test(cleaned)) return cleaned;
+  // Strip leading @ then build per-platform.
+  const slug = cleaned.replace(/^@+/, "");
+  switch (platform) {
+    case "instagram": return `https://instagram.com/${slug}`;
+    case "tiktok":    return `https://tiktok.com/@${slug}`;
+    case "youtube":   return slug.startsWith("UC")
+                          ? `https://youtube.com/channel/${slug}`
+                          : `https://youtube.com/@${slug}`;
+    case "x":         return `https://x.com/${slug}`;
+    case "twitter":   return `https://twitter.com/${slug}`;
+    case "vimeo":     return `https://vimeo.com/${slug}`;
+    case "behance":   return `https://behance.net/${slug}`;
+    case "imdb":      return `https://imdb.com/name/${slug}`;
+    case "threads":   return `https://threads.net/@${slug}`;
+    case "bluesky":   return `https://bsky.app/profile/${slug}`;
+    case "facebook":  return `https://facebook.com/${slug}`;
+    case "website":   return /^https?:\/\//.test(cleaned) ? cleaned : `https://${slug}`;
+    default:          return null;
+  }
+}
+
 // Helper: trim + cap + collapse empty-string → null. The DB columns
 // are nullable; we don't want to litter them with "" values.
 function clean(value, max) {
@@ -194,9 +238,59 @@ export async function PATCH(req) {
       updates.isPrivate = vis === "private";
     }
 
+    // Social links — full-replace semantics. The client always sends
+    // the COMPLETE desired set (or an empty array to clear all);
+    // server diffs against current and lands the new state in one
+    // transaction so the UI is never inconsistent mid-save.
+    //
+    // Accepted shape:
+    //   socialLinks: [
+    //     { platform: "instagram", handle: "armankhan" },
+    //     { platform: "website",   handle: "arman.com" },
+    //   ]
+    //
+    // Stored shape (UserSocialLink rows): platform, handle, url,
+    // position (0-based, mirrors array index), hidden (default false).
+    let socialLinksPlan = null;
+    if ("socialLinks" in body) {
+      if (!Array.isArray(body.socialLinks)) {
+        return NextResponse.json({ error: "socialLinks must be an array" }, { status: 400 });
+      }
+      if (body.socialLinks.length > MAX_SOCIAL_LINKS) {
+        return NextResponse.json(
+          { error: `Too many links (max ${MAX_SOCIAL_LINKS})` },
+          { status: 400 }
+        );
+      }
+      const seen = new Set();
+      const cleanedLinks = [];
+      for (const raw of body.socialLinks) {
+        if (!raw || typeof raw !== "object") continue;
+        const platform = String(raw.platform || "").toLowerCase().trim();
+        if (!VALID_PLATFORMS.has(platform)) continue;
+        // One link per platform — first one wins, dupes are silently
+        // dropped. The UI form is keyed by platform so this is a
+        // safety belt rather than a user-visible rule.
+        if (seen.has(platform)) continue;
+        const handle = String(raw.handle || "").trim();
+        if (!handle) continue; // Empty handle → user is clearing this row.
+        const url = buildSocialUrl(platform, handle);
+        if (!url) continue;
+        seen.add(platform);
+        cleanedLinks.push({
+          platform,
+          handle: handle.slice(0, 120),
+          url:    url.slice(0, 400),
+          position: cleanedLinks.length,
+          hidden: false,
+        });
+      }
+      socialLinksPlan = cleanedLinks;
+    }
+
     // No-op safety: if nothing valid was supplied, just return the
     // current profile so the client save flow stays simple.
-    if (Object.keys(updates).length === 0) {
+    if (Object.keys(updates).length === 0 && socialLinksPlan === null) {
       // Re-read + return current state.
       const me = await prisma.user.findUnique({
         where: { email: session.user.email },
@@ -205,9 +299,36 @@ export async function PATCH(req) {
       return NextResponse.json(me);
     }
 
-    const updated = await prisma.user.update({
+    // Look up the user id once so the social-link reset can scope
+    // by id (the relation key) rather than by email.
+    const me = await prisma.user.findUnique({
       where: { email: session.user.email },
-      data:  updates,
+      select: { id: true },
+    });
+    if (!me) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+    // One transaction: text fields + social-links full-replace land
+    // atomically. Failure on either step rolls the other back, so
+    // we never half-save.
+    const ops = [];
+    if (Object.keys(updates).length > 0) {
+      ops.push(prisma.user.update({
+        where: { id: me.id },
+        data:  updates,
+      }));
+    }
+    if (socialLinksPlan !== null) {
+      ops.push(prisma.userSocialLink.deleteMany({ where: { userId: me.id } }));
+      if (socialLinksPlan.length > 0) {
+        ops.push(prisma.userSocialLink.createMany({
+          data: socialLinksPlan.map((l) => ({ ...l, userId: me.id })),
+        }));
+      }
+    }
+    await prisma.$transaction(ops);
+
+    const updated = await prisma.user.findUnique({
+      where: { id: me.id },
       select: BASE_SELECT,
     });
 
