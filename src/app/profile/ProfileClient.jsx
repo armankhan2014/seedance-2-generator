@@ -36,7 +36,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { detectSocialFromUrl } from "@/lib/socialLinkDetect";
 
 // ════════════════════════════════════════════════════════════════
@@ -307,6 +307,49 @@ export default function ProfilePage() {
   // (16:9 cinematic) at 0.85 quality. We don't enforce 16:9 — any
   // aspect lands gracefully via object-fit: cover.
   const [coverUploading, setCoverUploading] = useState(false);
+  // Phase 3d — delete-account modal + deletion in-flight state.
+  const [deleteOpen, setDeleteOpen]   = useState(false);
+  const [deleting, setDeleting]       = useState(false);
+
+  // Connected OAuth providers from /api/me — surfaced read-only in
+  // the Account section (we never let users add/remove OAuth links
+  // from inside Seedance; that happens at the provider's settings).
+  const connectedProviders = Array.isArray(profile?.accounts)
+    ? Array.from(new Set(profile.accounts.map((a) => a.provider).filter(Boolean)))
+    : [];
+  const primaryProvider = connectedProviders[0] || null;
+  const currentEmail    = profile?.email || session?.user?.email || "";
+
+  // Hard-delete with handle-confirmation. Calls DELETE /api/me/account,
+  // signs out, redirects to the public landing.
+  const handleDeleteAccount = async (typedConfirm) => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      const r = await fetch("/api/me/account", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ confirmHandle: typedConfirm }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setToast({ kind: "err", text: data.error || `Delete failed (HTTP ${r.status})` });
+        setTimeout(() => setToast(null), 3600);
+        return;
+      }
+      // Sign out + go home. signOut() with redirect: true handles the
+      // session cookie clearing across the .visualseffect.com domain,
+      // so community / music / edits all see the user as signed out.
+      await signOut({ callbackUrl: "/", redirect: true });
+    } catch (err) {
+      console.error("[profile] delete account error:", err);
+      setToast({ kind: "err", text: err?.message || "Delete failed — try again." });
+      setTimeout(() => setToast(null), 3600);
+    } finally {
+      setDeleting(false);
+    }
+  };
   const handleCoverChange = async (file) => {
     // Sentinel: drawer's "Remove" button calls onCoverChange(null) to
     // signal the DELETE has already landed and we should just refresh
@@ -849,6 +892,23 @@ export default function ProfilePage() {
           currentCoverUrl={profile?.coverImageUrl || null}
           currentUsername={profile?.username || null}
           usernameChangedAt={profile?.usernameChangedAt || null}
+          connectedProviders={connectedProviders}
+          primaryProvider={primaryProvider}
+          currentEmail={currentEmail}
+          setDeleteOpen={setDeleteOpen}
+        />
+      )}
+
+      {/* Delete-account modal — separate from the Edit drawer so it
+          can sit above (z-index 90 > drawer's 85). */}
+      {deleteOpen && (
+        <DeleteAccountModal
+          expectedHandle={
+            (profile?.username || (currentEmail || "").split("@")[0] || "").toLowerCase()
+          }
+          deleting={deleting}
+          onClose={() => setDeleteOpen(false)}
+          onConfirm={handleDeleteAccount}
         />
       )}
 
@@ -1211,6 +1271,10 @@ function EditProfileDrawer({
   currentCoverUrl,
   currentUsername,
   usernameChangedAt,
+  connectedProviders,
+  primaryProvider,
+  currentEmail,
+  setDeleteOpen,
 }) {
   const titleId = useId();
   const fileInputRef = useRef(null);
@@ -1581,14 +1645,57 @@ function EditProfileDrawer({
             />
           </Section>
 
-          {/* Account */}
+          {/* Account — honest copy reflecting the OAuth-only auth.
+              Email / password / 2FA are managed by Google or Apple,
+              not us; sending users to the wrong place would be
+              worse than telling them clearly. */}
           <Section title="Account">
-            <SettingsRow icon="✉" label="Email"        hint="Change email (requires verification)" onClick={() => alert("Phase 2") } />
-            <SettingsRow icon="🔑" label="Password"     hint="Set or change your password"          onClick={() => alert("Phase 2") } />
-            <SettingsRow icon="🛡" label="Two-factor"    hint="Add an extra security layer"          onClick={() => alert("Phase 2") } />
-            <SettingsRow icon="🔗" label="Connected accounts" hint="Google · Apple" onClick={() => alert("Phase 2") } />
+            <ConnectedAccountsRow providers={connectedProviders} />
+            <SettingsRow
+              icon="✉"
+              label="Email"
+              hint={`${currentEmail || "—"} · managed by ${primaryProvider || "your sign-in provider"}`}
+              onClick={() => {
+                const href = primaryProvider === "google"
+                  ? "https://myaccount.google.com/personal-info"
+                  : primaryProvider === "apple"
+                    ? "https://account.apple.com"
+                    : null;
+                if (href) window.open(href, "_blank", "noreferrer");
+              }}
+            />
+            <SettingsRow
+              icon="🔑"
+              label="Password"
+              hint={`Change at ${primaryProvider === "google" ? "Google" : primaryProvider === "apple" ? "Apple" : "your sign-in provider"} — Seedance doesn't store one`}
+              onClick={() => {
+                const href = primaryProvider === "google"
+                  ? "https://myaccount.google.com/security"
+                  : primaryProvider === "apple"
+                    ? "https://account.apple.com/account/manage"
+                    : null;
+                if (href) window.open(href, "_blank", "noreferrer");
+              }}
+            />
+            <SettingsRow
+              icon="🛡"
+              label="Two-factor auth"
+              hint={`Enable at ${primaryProvider === "google" ? "Google · myaccount.google.com" : primaryProvider === "apple" ? "Apple · iCloud settings" : "your sign-in provider"}`}
+              onClick={() => {
+                const href = primaryProvider === "google"
+                  ? "https://myaccount.google.com/signinoptions/two-step-verification"
+                  : primaryProvider === "apple"
+                    ? "https://support.apple.com/en-us/HT204915"
+                    : null;
+                if (href) window.open(href, "_blank", "noreferrer");
+              }}
+            />
             <div style={{ marginTop: 10 }}>
-              <button type="button" style={dangerBtn} onClick={() => alert("Delete account — Phase 2 with 7-day grace + safeguards")}>
+              <button
+                type="button"
+                style={dangerBtn}
+                onClick={() => setDeleteOpen(true)}
+              >
                 Delete account…
               </button>
             </div>
@@ -1919,6 +2026,187 @@ function CheckboxField({ label, checked, onChange }) {
 // ════════════════════════════════════════════════════════════════
 // SHARED INLINE STYLES
 // ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+// ConnectedAccountsRow — shows the OAuth provider(s) the user
+// signed in with. Read-only by design: managing OAuth links
+// happens at the provider's settings, never inside Seedance.
+// ════════════════════════════════════════════════════════════════
+const PROVIDER_LABELS = {
+  google: "Google",
+  apple:  "Apple",
+  github: "GitHub",
+};
+const PROVIDER_ICONS = {
+  google: "G",
+  apple:  "",
+  github: "",
+};
+
+function ConnectedAccountsRow({ providers }) {
+  const list = (providers || []).map((p) => PROVIDER_LABELS[p] || p).join(" · ");
+  return (
+    <div style={{
+      background: CARD_2,
+      border: `1px solid ${HAIR}`,
+      borderRadius: 10,
+      padding: "10px 12px",
+      display: "flex",
+      alignItems: "center",
+      gap: 12,
+    }}>
+      <span style={{ fontSize: 16, width: 22, textAlign: "center" }}>🔗</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: TEXT }}>Connected accounts</div>
+        <div style={{ fontSize: 11, color: MUTED, marginTop: 1 }}>
+          {list ? `${list} · linked` : "No connected accounts"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// DeleteAccountModal — handle-confirmation hard delete.
+// Centered, iOS-safe (position-fixed scroll lock + safe-area pad).
+// ════════════════════════════════════════════════════════════════
+function DeleteAccountModal({ expectedHandle, deleting, onClose, onConfirm }) {
+  const [typed, setTyped] = useState("");
+  const matches = typed.trim().toLowerCase() === expectedHandle;
+
+  // Same iOS scroll-lock recipe used by the Edit drawer + ref-guide
+  // modal — keeps the page underneath stable while the modal sits
+  // on top.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const scrollY = window.scrollY;
+    const prev = {
+      position: document.body.style.position,
+      top:      document.body.style.top,
+      width:    document.body.style.width,
+      overflow: document.body.style.overflow,
+    };
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = "100%";
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.position = prev.position;
+      document.body.style.top      = prev.top;
+      document.body.style.width    = prev.width;
+      document.body.style.overflow = prev.overflow;
+      window.scrollTo({ top: scrollY, left: 0, behavior: "instant" });
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape" && !deleting) onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, deleting]);
+
+  return (
+    <div
+      onClick={() => { if (!deleting) onClose(); }}
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.7)",
+        backdropFilter: "blur(2px)",
+        WebkitBackdropFilter: "blur(2px)",
+        zIndex: 90,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 16,
+        animation: "fadeIn 200ms ease-out",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        style={{
+          width: "min(440px, 100%)",
+          background: CARD,
+          border: `1px solid rgba(248,113,113,0.4)`,
+          borderRadius: 16,
+          padding: "22px 22px max(22px, env(safe-area-inset-bottom, 22px))",
+          boxShadow: "0 24px 60px rgba(0,0,0,0.55)",
+        }}
+      >
+        <div style={{ fontSize: 28, marginBottom: 6 }}>⚠️</div>
+        <h2 style={{ margin: "0 0 6px", fontSize: 18, fontWeight: 800, color: TEXT }}>
+          Delete your account?
+        </h2>
+        <p style={{ margin: 0, color: SUB, fontSize: 13, lineHeight: 1.55 }}>
+          This permanently removes your account from <strong style={{ color: TEXT }}>seedance</strong>,{" "}
+          <strong style={{ color: TEXT }}>community</strong>,{" "}
+          <strong style={{ color: TEXT }}>music</strong>, and{" "}
+          <strong style={{ color: TEXT }}>edits</strong>. Your generations, posts, comments, and
+          @handle will be released and cannot be recovered.
+        </p>
+
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: MUTED, marginBottom: 6, textTransform: "uppercase", letterSpacing: ".08em" }}>
+            Type <code style={{ background: "rgba(255,255,255,0.06)", padding: "1px 5px", borderRadius: 4, color: TEXT, fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>
+              {expectedHandle || "your-handle"}
+            </code> to confirm
+          </div>
+          <input
+            type="text"
+            autoFocus
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            disabled={deleting}
+            placeholder={expectedHandle || "your handle"}
+            style={{
+              width: "100%",
+              background: CARD_2,
+              border: `1px solid ${matches ? "rgba(248,113,113,0.6)" : HAIR}`,
+              borderRadius: 8,
+              padding: "10px 12px",
+              color: TEXT,
+              fontSize: 13,
+              fontFamily: "inherit",
+              outline: "none",
+            }}
+          />
+        </div>
+
+        <div style={{ marginTop: 18, display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={deleting}
+            style={ghostBtn}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => onConfirm(typed.trim().toLowerCase())}
+            disabled={!matches || deleting}
+            style={{
+              background: matches ? "#dc2626" : "rgba(248,113,113,0.15)",
+              border: `1px solid ${matches ? "#dc2626" : "rgba(248,113,113,0.4)"}`,
+              color: matches ? "#fff" : "#fca5a5",
+              padding: "10px 18px",
+              borderRadius: 10,
+              fontSize: 13,
+              fontWeight: 800,
+              cursor: matches && !deleting ? "pointer" : "not-allowed",
+              fontFamily: "inherit",
+              opacity: matches && !deleting ? 1 : 0.7,
+            }}
+          >
+            {deleting ? "Deleting…" : "Delete account permanently"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const primaryBtn = {
   background: `linear-gradient(135deg, ${LIME}, ${LIME_DARK})`,
   border: "none",

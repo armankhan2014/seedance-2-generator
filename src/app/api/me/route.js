@@ -437,6 +437,11 @@ const BASE_SELECT = {
   // can change again" hint in the Edit-drawer field.
   username:          true,
   usernameChangedAt: true,
+  // Linked OAuth providers (Phase 3d). Names only — never expose
+  // access_token, refresh_token, id_token, or oauth_token_secret.
+  accounts: {
+    select: { provider: true },
+  },
   socialLinks: {
     orderBy: { position: "asc" },
     where:   { hidden: false },
