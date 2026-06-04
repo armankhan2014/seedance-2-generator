@@ -606,9 +606,21 @@ export default function ProfilePage() {
                   type="button"
                   onClick={() => {
                     if (typeof navigator !== "undefined" && navigator.clipboard) {
-                      navigator.clipboard.writeText(`https://seedance.visualseffect.com/@${draft.username}`);
-                      setToast({ kind: "ok", text: "Profile link copied" });
-                      setTimeout(() => setToast(null), 1600);
+                      // Prefer the saved username (live, persistent),
+                      // fall back to the in-progress draft only if the
+                      // user hasn't saved yet.
+                      const handle = profile?.username || draft.username;
+                      const url = handle
+                        ? `https://seedance.visualseffect.com/u/${handle}`
+                        : `https://seedance.visualseffect.com/?ref=${draft.username}`;
+                      navigator.clipboard.writeText(url);
+                      setToast({
+                        kind: "ok",
+                        text: profile?.username
+                          ? "Public profile link copied"
+                          : "Save your @handle first so the link is shareable",
+                      });
+                      setTimeout(() => setToast(null), 2000);
                     }
                   }}
                   style={ghostBtn}
