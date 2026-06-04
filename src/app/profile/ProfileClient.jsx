@@ -523,9 +523,9 @@ export default function ProfilePage() {
                 background: coverUrl
                   ? `#000 url(${coverUrl}) center/cover no-repeat`
                   : `
-                      radial-gradient(120% 80% at 12% 18%, rgba(217,255,0,0.34) 0%, rgba(217,255,0,0) 55%),
-                      radial-gradient(80% 100% at 85% 110%, rgba(76,29,149,0.55) 0%, rgba(76,29,149,0) 60%),
-                      linear-gradient(135deg, #0c0c12 0%, #16141f 60%, #050507 100%)
+                      radial-gradient(120% 80% at 12% 18%, rgba(217,255,0,0.32) 0%, rgba(217,255,0,0) 55%),
+                      radial-gradient(80% 100% at 85% 110%, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 60%),
+                      linear-gradient(135deg, #0d0d0d 0%, #161616 60%, #050505 100%)
                     `,
               }}>
                 {/* Edit-cover — opens the file picker inline */}
@@ -1189,7 +1189,9 @@ function PlaceholderGrid({ count, label }) {
           <div key={i} style={{
             aspectRatio: "16/9",
             borderRadius: 10,
-            background: `linear-gradient(135deg, rgba(217,255,0,${0.06 + (i % 3) * 0.04}), rgba(76,29,149,${0.18 + (i % 3) * 0.05}))`,
+            // Brand-only gradient — lime tint varying in intensity
+            // per tile, no off-palette purple secondary anymore.
+            background: `linear-gradient(135deg, rgba(217,255,0,${0.06 + (i % 3) * 0.04}), rgba(255,255,255,${0.04 + (i % 3) * 0.025}))`,
             border: `1px solid ${HAIR}`,
             display: "flex",
             alignItems: "center",
@@ -1449,7 +1451,7 @@ function EditProfileDrawer({
                 borderRadius: 8,
                 background: currentCoverUrl
                   ? `#000 url(${currentCoverUrl}) center/cover no-repeat`
-                  : `linear-gradient(135deg, rgba(217,255,0,0.3), rgba(76,29,149,0.55))`,
+                  : `linear-gradient(135deg, rgba(217,255,0,0.32), rgba(255,255,255,0.08))`,
                 border: `1px solid ${HAIR_STRONG}`,
                 flexShrink: 0,
               }} />

@@ -162,9 +162,9 @@ export default async function PublicProfilePage({ params }) {
             background: user.coverImageUrl
               ? `#000 url(${user.coverImageUrl}) center/cover no-repeat`
               : `
-                  radial-gradient(120% 80% at 12% 18%, rgba(217,255,0,0.34) 0%, rgba(217,255,0,0) 55%),
-                  radial-gradient(80% 100% at 85% 110%, rgba(76,29,149,0.55) 0%, rgba(76,29,149,0) 60%),
-                  linear-gradient(135deg, #0c0c12 0%, #16141f 60%, #050507 100%)
+                  radial-gradient(120% 80% at 12% 18%, rgba(217,255,0,0.32) 0%, rgba(217,255,0,0) 55%),
+                  radial-gradient(80% 100% at 85% 110%, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 60%),
+                  linear-gradient(135deg, #0d0d0d 0%, #161616 60%, #050505 100%)
                 `,
           }} />
 
