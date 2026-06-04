@@ -84,16 +84,27 @@ export default function ProfileV2Client() {
   const [editOpen, setEditOpen] = useState(false);
   const [toast, setToast]       = useState(null);
 
-  // Pull the real /api/user/profile payload so the demo reads alive.
+  // Pull the editable profile from /api/me (Phase 2 endpoint that
+  // returns bio + tagline + location + pronouns + coverImageUrl +
+  // isPrivate + socialLinks). Separate from /api/user/profile which
+  // is read-only and computes generation stats.
+  const refetchProfile = async () => {
+    try {
+      const res = await fetch("/api/me", { cache: "no-store" });
+      if (res.ok) setProfile(await res.json());
+    } catch (e) {
+      console.error("[profile-v2] /api/me fetch error:", e);
+    }
+  };
   useEffect(() => {
     if (!session) return;
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/user/profile", { cache: "no-store" });
+        const res = await fetch("/api/me", { cache: "no-store" });
         if (!cancelled && res.ok) setProfile(await res.json());
       } catch (e) {
-        console.error("[profile-v2] fetch error:", e);
+        console.error("[profile-v2] /api/me fetch error:", e);
       }
     })();
     return () => { cancelled = true; };
@@ -149,19 +160,14 @@ export default function ProfileV2Client() {
 
   // Sync derived fields back into the draft once profile loads
   // (only the first time so a user editing them isn't overridden).
-  //
-  // This is the canonical "seed local state from async props" case
-  // that `react-hooks/set-state-in-effect` flags as a soft warning
-  // — the React docs themselves call out the seededRef sentinel as
-  // a valid escape hatch (see "When you don't need an Effect").
-  // The setDraft only fires once per profile load thanks to the
-  // ref guard, so there's no cascading-render risk here.
+  // Phase 2: also seed bio / tagline / location / pronouns / privacy
+  // from /api/me so the edit drawer starts pre-populated with the
+  // user's already-saved values.
   const seededRef = useRef(false);
   useEffect(() => {
     if (seededRef.current) return;
     if (!profile && !session) return;
     seededRef.current = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDraft((d) => ({
       ...d,
       firstName:   derivedFirst   || d.firstName,
@@ -169,15 +175,59 @@ export default function ProfileV2Client() {
       displayName: realName       || d.displayName,
       username:    deriveHandle(realName, realEmail) || d.username,
       avatar:      realImage      || d.avatar,
+      // Real DB-backed values when present, else keep the demo
+      // placeholders so the surface still looks alive on first view.
+      bio:         profile?.bio        ?? d.bio,
+      tagline:     profile?.tagline    ?? d.tagline,
+      location:    profile?.location   ?? d.location,
+      pronouns:    profile?.pronouns   ?? d.pronouns,
+      privacy: {
+        ...d.privacy,
+        profile: profile?.isPrivate ? "private" : "public",
+      },
     }));
   }, [profile, session, derivedFirst, derivedLast, realName, realEmail, realImage]);
 
-  const handleSave = () => {
-    // Local-state-only in this demo. The toast is a stand-in for
-    // the real PATCH response.
-    setToast({ kind: "ok", text: "Saved to demo state — DB write lands in Phase 2." });
-    setEditOpen(false);
-    setTimeout(() => setToast(null), 3200);
+  // PATCH /api/me with the editable subset, then re-fetch so the
+  // hero updates without a page reload. Shows a real toast — green
+  // on success, red on validation/server error.
+  const [saving, setSaving] = useState(false);
+  const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          name:              draft.displayName,
+          bio:               draft.bio,
+          tagline:           draft.tagline,
+          location:          draft.location,
+          pronouns:          draft.pronouns,
+          profileVisibility: draft.privacy.profile,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setToast({ kind: "err", text: data.error || `Save failed (HTTP ${res.status})` });
+        setTimeout(() => setToast(null), 3600);
+        return;
+      }
+      // Refresh from the server so the hero card picks up the
+      // canonical values (server-side trim + length caps applied).
+      await refetchProfile();
+      setToast({ kind: "ok", text: "Profile saved · community + music + edits see it on next render" });
+      setEditOpen(false);
+      setTimeout(() => setToast(null), 3200);
+    } catch (err) {
+      console.error("[profile-v2] save error:", err);
+      setToast({ kind: "err", text: "Save failed — check your connection and try again." });
+      setTimeout(() => setToast(null), 3600);
+    } finally {
+      setSaving(false);
+    }
   };
 
   // ── Loading + signed-out shells ──────────────────────────────

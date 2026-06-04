@@ -59,6 +59,29 @@ model User {
   pushVideoReady  Boolean @default(true)
   pushVideoFailed Boolean @default(true)
   pushFeatured    Boolean @default(true)
+  // ── Profile v2 fields (added 2026-06-04) ───────────────────────────
+  // The shared Neon User row already had `bio`, `location`,
+  // `coverImageUrl`, and `isPrivate` (community owns those columns).
+  // Declaring them on the seedance Prisma client too so /api/me + the
+  // /profile redesign can read/write them. `tagline` + `pronouns` are
+  // genuinely new — created by
+  //   prisma/manual-migrations/2026-06-04-add-profile-tagline-pronouns.sql.
+  // No defaults: NULL means "not set yet", which the UI surfaces as
+  // a placeholder. Length caps mirror the Edit-profile UX limits.
+  bio           String?
+  tagline       String?  @db.VarChar(120)
+  pronouns      String?  @db.VarChar(40)
+  location      String?
+  coverImageUrl String?
+  isPrivate     Boolean  @default(false)
+  // Per-user social-link rows (Instagram, TikTok, YouTube, etc.).
+  // Lives in its own UserSocialLink table so we can keep ordered
+  // positions, hidden flags, and per-link click counts without a
+  // JSON blob. The full table model is declared in the community
+  // canonical schema; this side just needs the relation arrow so
+  // /api/me can include them in the user-fetch.
+  socialLinks   UserSocialLink[]
+
   // ── Admin Signups Tracker fields (added 2026-06-02) ────────────────
   // createdAt is the source-of-truth signup date. Nullable so existing
   // rows that don't have one yet don't break the migration — those
@@ -110,6 +133,35 @@ model User {
   @@index([country])
   @@index([signupSource])
   @@index([referredById])
+}
+
+// Per-user social-link row. Mirrors the canonical definition that
+// lives in seedance-community/prisma/schema.prisma — community owns
+// the table; seedance just declares the SAME shape so its Prisma
+// client can read + write to the SHARED Neon row without drift.
+//
+// platform: short slug — "instagram", "tiktok", "youtube", "x",
+//           "vimeo", "behance", "imdb", "website".
+// handle:   raw user-entered text (e.g. "@armankhan" or "arman.k").
+// url:      computed full URL we redirect to. Stored alongside the
+//           handle so we don't re-derive it on every read.
+// position: 0-based stable ordering for drag-to-reorder UX.
+// hidden:   user-toggled hide from public view without deleting.
+// clicks:   bumped on outbound-redirect endpoint (Phase 3 analytics).
+model UserSocialLink {
+  id        String   @id @default(cuid())
+  userId    String
+  platform  String
+  handle    String
+  url       String
+  position  Int      @default(0)
+  hidden    Boolean  @default(false)
+  clicks    Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, position])
 }
 
 // Append-only audit log for every credit movement on a User. Inserted in
