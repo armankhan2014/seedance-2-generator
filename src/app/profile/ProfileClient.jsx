@@ -40,20 +40,26 @@ import { useSession, signOut } from "next-auth/react";
 import { detectSocialFromUrl } from "@/lib/socialLinkDetect";
 
 // ════════════════════════════════════════════════════════════════
-// BRAND TOKENS  (matches the live /profile palette exactly)
+// BRAND TOKENS — matched to seedance.visualseffect.com homepage:
+//   • Same #0a0a0a app background (--background in globals.css)
+//   • Same primary-500 lime (--primary-500: #D9FF00)
+//   • Glass card surfaces (bg-glass-bg + backdrop-blur-3xl) instead
+//     of the old purple-tinted #111118 solid — keeps /profile
+//     visually consistent with the homepage cards on hover.
 // ════════════════════════════════════════════════════════════════
 const BG          = "#0a0a0a";
-const CARD        = "#111118";
-const CARD_2      = "#0f0f15";
+const CARD        = "rgba(255,255,255,0.04)";  // bg-glass-bg
+const CARD_2      = "rgba(255,255,255,0.06)";  // bg-glass-bg, +1 step for inset rows
+const GLASS_BLUR  = "blur(64px)";              // backdrop-blur-3xl
 const LIME        = "#D9FF00";
 const LIME_DARK   = "#A6CC00";
 const TEXT        = "#FFFFFF";
 const SUB         = "#94a3b8";
 const MUTED       = "#64748b";
 const VERIFIED    = "#e91e8c";
-const HAIR        = "rgba(255,255,255,0.08)";
-const HAIR_STRONG = "rgba(255,255,255,0.14)";
-const LIME_TINT   = "rgba(217,255,0,0.10)";
+const HAIR        = "rgba(255,255,255,0.08)";  // border-glass-border
+const HAIR_STRONG = "rgba(255,255,255,0.12)";
+const LIME_TINT   = "rgba(217,255,0,0.10)";    // bg-primary-500/10
 const LIME_RING   = "rgba(217,255,0,0.40)";
 const RED         = "#f87171";
 const GREEN       = "#4ade80";
@@ -496,6 +502,8 @@ export default function ProfilePage() {
         {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
         <section style={{
           background: CARD,
+          backdropFilter: GLASS_BLUR,
+          WebkitBackdropFilter: GLASS_BLUR,
           border: `1px solid ${HAIR}`,
           borderRadius: 20,
           overflow: "hidden",
@@ -987,6 +995,8 @@ function Card({ title, children, noPadding = false }) {
   return (
     <section style={{
       background: CARD,
+      backdropFilter: GLASS_BLUR,
+      WebkitBackdropFilter: GLASS_BLUR,
       border: `1px solid ${HAIR}`,
       borderRadius: 16,
       padding: noPadding ? 0 : 18,
@@ -1355,7 +1365,9 @@ function EditProfileDrawer({
         style={{
           width: "min(540px, 100%)",
           height: "100%",
-          background: CARD,
+          // Drawer sits OVER a blurred backdrop; using the solid
+          // surface colour here so form inputs stay legible.
+          background: "#0d0d12",
           borderLeft: `1px solid ${HAIR}`,
           display: "flex",
           flexDirection: "column",
@@ -2127,7 +2139,10 @@ function DeleteAccountModal({ expectedHandle, deleting, onClose, onConfirm }) {
         aria-modal="true"
         style={{
           width: "min(440px, 100%)",
-          background: CARD,
+          // Modal needs solid surface so the danger-state form
+          // input stays high-contrast against the type-to-confirm
+          // backdrop blur.
+          background: "#0d0d12",
           border: `1px solid rgba(248,113,113,0.4)`,
           borderRadius: 16,
           padding: "22px 22px max(22px, env(safe-area-inset-bottom, 22px))",

@@ -11,7 +11,9 @@
  * Phase 3c.5.
  */
 
-const CARD_2 = "#0f0f15";
+// Brand tokens matched to seedance.visualseffect.com homepage —
+// glass surfaces over the shared #0a0a0a app background.
+const CARD_2 = "rgba(255,255,255,0.06)";
 const TEXT   = "#FFFFFF";
 const SUB    = "#94a3b8";
 const HAIR   = "rgba(255,255,255,0.08)";

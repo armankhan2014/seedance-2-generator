@@ -30,17 +30,20 @@ import SocialChipsPublic from "@/components/saas/SocialChipsPublic";
 
 export const revalidate = 300;
 
-// ── Shared brand tokens (mirrors /profile) ────────────────────────
+// ── Shared brand tokens (matches seedance.visualseffect.com home) ──
+// Glass card surfaces (bg-glass-bg + backdrop-blur-3xl) over the
+// shared #0a0a0a app background — same pattern HomepageV2 uses.
 const BG          = "#0a0a0a";
-const CARD        = "#111118";
-const CARD_2      = "#0f0f15";
+const CARD        = "rgba(255,255,255,0.04)";  // bg-glass-bg
+const CARD_2      = "rgba(255,255,255,0.06)";
+const GLASS_BLUR  = "blur(64px)";              // backdrop-blur-3xl
 const LIME        = "#D9FF00";
 const LIME_DARK   = "#A6CC00";
 const TEXT        = "#FFFFFF";
 const SUB         = "#94a3b8";
 const MUTED       = "#64748b";
 const VERIFIED    = "#e91e8c";
-const HAIR        = "rgba(255,255,255,0.08)";
+const HAIR        = "rgba(255,255,255,0.08)";  // border-glass-border
 const LIME_RING   = "rgba(217,255,0,0.40)";
 
 // Sole entry point: look up a user by their @handle (case-insensitive),
@@ -145,6 +148,8 @@ export default async function PublicProfilePage({ params }) {
         {/* HERO */}
         <section style={{
           background: CARD,
+          backdropFilter: GLASS_BLUR,
+          WebkitBackdropFilter: GLASS_BLUR,
           border: `1px solid ${HAIR}`,
           borderRadius: 20,
           overflow: "hidden",
@@ -247,6 +252,8 @@ export default async function PublicProfilePage({ params }) {
           }} className="u-grid">
             <section style={{
               background: CARD,
+              backdropFilter: GLASS_BLUR,
+              WebkitBackdropFilter: GLASS_BLUR,
               border: `1px solid ${HAIR}`,
               borderRadius: 16,
               padding: 18,
@@ -272,6 +279,8 @@ export default async function PublicProfilePage({ params }) {
             <aside style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <section style={{
                 background: CARD,
+                backdropFilter: GLASS_BLUR,
+                WebkitBackdropFilter: GLASS_BLUR,
                 border: `1px solid ${HAIR}`,
                 borderRadius: 16,
                 padding: 18,
@@ -340,6 +349,8 @@ function PrivateLock({ username }) {
     <section style={{
       marginTop: 20,
       background: CARD,
+      backdropFilter: GLASS_BLUR,
+      WebkitBackdropFilter: GLASS_BLUR,
       border: `1px solid ${HAIR}`,
       borderRadius: 16,
       padding: 40,
