@@ -1,214 +1,204 @@
 "use client";
 
 /**
- * ReferenceImageGuide — Phase 1.5
+ * ReferenceImageGuide — Phase 1.6
  *
- * Visual-first version. The teaching surface now uses inline SVG
- * portrait illustrations for every example so users learn what a
- * good reference looks like by SEEING it, not by uploading and
- * trial-and-erroring. Upload + quality check stays below the
- * visual guide as a secondary action.
+ * Visual redesign per Arman's feedback: drop the busy tile grid,
+ * keep three big illustrated example "photos":
  *
- * Brand lime accents (#d9ff00) for OK states, amber for "could be
- * better", red for "won't work". Dark surface matches the existing
- * seedance saas design tokens. Inline SVG = no external assets, no
- * licensing concerns, ships instantly.
+ *   1) BAD  — distant figure, busy background (full body shot)
+ *   2) BAD  — group photo with cluttered scene
+ *   3) GOOD — passport-style close-up, clear face
+ *
+ * Each card is a single big illustration with one short label and
+ * an obvious check / cross badge. No grids, no rows of tiny tiles,
+ * no technical chrome. Users see three pictures and immediately
+ * understand the difference.
+ *
+ * Upload + face quality check stays available below the visuals
+ * but is intentionally secondary — the visual lesson does the
+ * teaching.
  */
 
 import { useEffect, useRef, useState } from "react";
 import { detectFaces, loadImageElement, sampleLuminance } from "@/lib/face-detector";
 
-const BRAND_LIME = "#d9ff00";
-const AMBER = "#f59e0b";
+const LIME = "#d9ff00";
 const RED = "#ef4444";
 
 /* ─────────────────────────────────────────────────────────────────
- * SVG portrait illustrations
+ * The three example illustrations.
  *
- * Each kind renders the SAME base portrait (centred head, shoulders,
- * eyes, nose, mouth) and then layers the scenario-specific overlay
- * (sunglasses bar, side rotation, distance scale, background noise,
- * etc.). Keeping the base consistent makes the comparison stark —
- * users see the SAME face and instantly read which constraint is
- * being violated.
+ * Each is a large viewBox-300x300 SVG painted to look like a real
+ * reference photo — soft gradients, simple silhouettes, recognisable
+ * scenes. No abstract chrome. Inline so the component ships zero
+ * external assets.
  * ────────────────────────────────────────────────────────────────*/
 
-function PortraitSvg({ kind = "good", size = 96 }) {
-  // Background tint per scenario.
-  const bg = kind === "good" ? "#1f3022" : "#2a1f1f";
-
-  // Side-angle / tilt rotation.
-  const rotate = kind === "side-angle" ? "rotate(-30 50 50)" : "";
-
-  // Distance scaling — "too-far" shrinks the whole portrait
-  // toward the centre to convey a face that's small in frame.
-  const distanceScale = kind === "too-far" ? 0.45 : 1.0;
-  const distanceTransform =
-    kind === "too-far"
-      ? `translate(${50 * (1 - distanceScale)} ${52 * (1 - distanceScale)}) scale(${distanceScale})`
-      : "";
-
+function PhotoBadDistant() {
   return (
-    <svg
-      viewBox="0 0 100 100"
-      width={size}
-      height={size}
-      role="img"
-      aria-hidden="true"
-      style={{ display: "block", borderRadius: 10 }}
-    >
-      {/* Background. Bad scenarios get a darker red tint, good gets
-          a soft green tint — instant pre-attentive cue. */}
-      <rect width="100" height="100" fill={bg} />
-
-      {/* Busy-background overlay — scribbles + extra silhouettes
-          so the example reads as "cluttered scene". */}
-      {kind === "busy-bg" && (
-        <g opacity="0.4">
-          <circle cx="20" cy="20" r="6" fill="#6a6a6a" />
-          <circle cx="78" cy="22" r="4" fill="#6a6a6a" />
-          <circle cx="14" cy="62" r="5" fill="#6a6a6a" />
-          <circle cx="86" cy="70" r="6" fill="#6a6a6a" />
-          <rect x="6" y="40" width="10" height="3" fill="#6a6a6a" />
-          <rect x="84" y="48" width="10" height="3" fill="#6a6a6a" />
-          <path d="M5 90 L95 90" stroke="#5a5a5a" strokeWidth="1.5" />
-          {/* Extra silhouette shoulders to imply other people. */}
-          <ellipse cx="14" cy="100" rx="14" ry="10" fill="#3d3d3d" />
-          <ellipse cx="86" cy="100" rx="14" ry="10" fill="#3d3d3d" />
-        </g>
-      )}
-
-      {/* Bad-lighting overlay — strong directional shadow. */}
-      {kind === "bad-light" && (
-        <rect x="0" y="0" width="50" height="100" fill="rgba(0,0,0,0.55)" />
-      )}
-
-      {/* Multiple-faces overlay — render a SECOND head behind the
-          primary one. */}
-      {kind === "multiple" && (
-        <g>
-          <circle cx="78" cy="42" r="18" fill="#3d3d3d" />
-          <circle cx="73" cy="40" r="2" fill="#fff" />
-          <circle cx="84" cy="40" r="2" fill="#fff" />
-          <path
-            d="M70 52 Q78 56 86 52"
-            stroke="#aaa"
-            strokeWidth="1.5"
-            fill="none"
-          />
-        </g>
-      )}
-
-      {/* The portrait itself — transformed for tilt / distance. */}
-      <g transform={`${rotate} ${distanceTransform}`.trim()}>
-        {/* Shoulders */}
-        <path
-          d="M18 100 Q18 70 50 70 Q82 70 82 100 Z"
-          fill="#3d3d3d"
-        />
-        {/* Head */}
-        <circle cx="50" cy="42" r="22" fill="#4a4a4a" />
-        {/* Hair shape (just a darker arc on top) */}
-        <path
-          d="M28 36 Q50 14 72 36 L72 30 Q50 18 28 30 Z"
-          fill="#2a2a2a"
-        />
-
-        {/* Eyes (omitted when sunglasses overlay is on top) */}
-        {kind !== "sunglasses" && (
-          <>
-            <circle cx="42" cy="42" r="2.4" fill="#fff" />
-            <circle cx="58" cy="42" r="2.4" fill="#fff" />
-            <circle cx="42" cy="42" r="0.9" fill="#222" />
-            <circle cx="58" cy="42" r="0.9" fill="#222" />
-          </>
-        )}
-
-        {/* Nose */}
-        <line
-          x1="50" y1="44" x2="50" y2="50"
-          stroke="#bbb" strokeWidth="1.4" strokeLinecap="round"
-        />
-
-        {/* Mouth */}
-        <path
-          d="M44 56 Q50 60 56 56"
-          stroke="#bbb" strokeWidth="1.5"
-          fill="none" strokeLinecap="round"
-        />
+    <svg viewBox="0 0 300 300" width="100%" height="100%" role="img" aria-hidden="true">
+      <defs>
+        <linearGradient id="sky-d" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"  stopColor="#5a87b5" />
+          <stop offset="100%" stopColor="#c8d7e3" />
+        </linearGradient>
+        <linearGradient id="ground-d" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"  stopColor="#6b6452" />
+          <stop offset="100%" stopColor="#3a3528" />
+        </linearGradient>
+      </defs>
+      {/* Sky */}
+      <rect width="300" height="220" fill="url(#sky-d)" />
+      {/* Ground */}
+      <rect y="220" width="300" height="80" fill="url(#ground-d)" />
+      {/* Distant buildings (silhouettes — implies busy scene) */}
+      <rect x="10"  y="160" width="40"  height="60" fill="#2e2e2e" />
+      <rect x="55"  y="175" width="35"  height="45" fill="#363636" />
+      <rect x="95"  y="140" width="50"  height="80" fill="#2a2a2a" />
+      <rect x="150" y="170" width="30"  height="50" fill="#333" />
+      <rect x="185" y="150" width="55"  height="70" fill="#2b2b2b" />
+      <rect x="245" y="180" width="45"  height="40" fill="#363636" />
+      {/* Distant trees for texture */}
+      <circle cx="60" cy="200" r="14" fill="#1f3022" />
+      <circle cx="220" cy="210" r="12" fill="#1f3022" />
+      <circle cx="265" cy="205" r="11" fill="#1f3022" />
+      {/* The TINY full-body figure — barely a person */}
+      <g transform="translate(150 215)">
+        <circle cx="0" cy="0" r="5" fill="#222" />          {/* head */}
+        <rect x="-4" y="5" width="8" height="14" fill="#1c1c1c" />  {/* torso */}
+        <line x1="0" y1="19" x2="-5" y2="32" stroke="#1c1c1c" strokeWidth="2.5" />  {/* leg */}
+        <line x1="0" y1="19" x2="5"  y2="32" stroke="#1c1c1c" strokeWidth="2.5" />  {/* leg */}
+        <line x1="0" y1="9"  x2="-7" y2="16" stroke="#1c1c1c" strokeWidth="2" />    {/* arm */}
+        <line x1="0" y1="9"  x2="7"  y2="16" stroke="#1c1c1c" strokeWidth="2" />    {/* arm */}
       </g>
+      {/* Hint of clouds */}
+      <ellipse cx="50"  cy="55" rx="38" ry="9" fill="#f0f0f0" opacity="0.55" />
+      <ellipse cx="220" cy="40" rx="44" ry="10" fill="#f0f0f0" opacity="0.55" />
+    </svg>
+  );
+}
 
-      {/* Sunglasses overlay — black bar covering both eyes. */}
-      {kind === "sunglasses" && (
-        <g>
-          <rect x="34" y="38" width="32" height="8" rx="3" fill="#0a0a0a" />
-          <line
-            x1="34" y1="42" x2="66" y2="42"
-            stroke="#222" strokeWidth="1"
-          />
-        </g>
-      )}
+function PhotoBadGroup() {
+  return (
+    <svg viewBox="0 0 300 300" width="100%" height="100%" role="img" aria-hidden="true">
+      <defs>
+        <linearGradient id="room-g" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"  stopColor="#8a6d4a" />
+          <stop offset="100%" stopColor="#3a2d1f" />
+        </linearGradient>
+      </defs>
+      {/* Room interior */}
+      <rect width="300" height="300" fill="url(#room-g)" />
+      {/* Cluttered decor — picture frames + plant */}
+      <rect x="20"  y="40" width="48" height="36" fill="#5a4630" stroke="#1c1308" strokeWidth="3" />
+      <rect x="80"  y="55" width="44" height="32" fill="#5a4630" stroke="#1c1308" strokeWidth="3" />
+      <rect x="220" y="30" width="60" height="44" fill="#5a4630" stroke="#1c1308" strokeWidth="3" />
+      {/* Plant */}
+      <g transform="translate(15 260)">
+        <rect x="0" y="0" width="22" height="20" fill="#3d2817" />
+        <ellipse cx="11" cy="-2" rx="22" ry="14" fill="#2f4a26" />
+        <ellipse cx="3"  cy="-6" rx="12" ry="10" fill="#3a5a2c" />
+        <ellipse cx="20" cy="-4" rx="11" ry="9"  fill="#3a5a2c" />
+      </g>
+      {/* The cluster of FIVE heads — clearly multiple people */}
+      <g>
+        {/* back row, slightly higher */}
+        <PersonBust cx="80"  cy="160" skin="#a8856a" shirt="#3d4a5a" />
+        <PersonBust cx="135" cy="155" skin="#c7a387" shirt="#4d3b2e" />
+        <PersonBust cx="195" cy="160" skin="#8c6748" shirt="#5a5a3e" />
+        {/* front row, two slightly lower in frame */}
+        <PersonBust cx="105" cy="200" skin="#b9967c" shirt="#3a3a3a" />
+        <PersonBust cx="170" cy="205" skin="#a17a5b" shirt="#6b3d3d" />
+      </g>
+    </svg>
+  );
+}
 
-      {/* "Too-far" — frame the tiny portrait so the empty space
-          around it reads as wasted distance. */}
-      {kind === "too-far" && (
-        <g opacity="0.5">
-          <rect
-            x="6" y="6" width="88" height="88"
-            fill="none" stroke="#6a6a6a"
-            strokeWidth="1" strokeDasharray="3 3"
-          />
-        </g>
-      )}
+/* Helper: one person bust (head + neck + shoulders) used in the group photo */
+function PersonBust({ cx, cy, skin, shirt }) {
+  return (
+    <g>
+      {/* shoulders / shirt */}
+      <ellipse cx={cx} cy={cy + 50} rx="36" ry="22" fill={shirt} />
+      {/* neck */}
+      <rect x={cx - 6} y={cy + 22} width="12" height="14" fill={skin} />
+      {/* head */}
+      <circle cx={cx} cy={cy} r="18" fill={skin} />
+      {/* hair top */}
+      <path
+        d={`M ${cx - 18} ${cy - 4} Q ${cx} ${cy - 24} ${cx + 18} ${cy - 4} L ${cx + 18} ${cy - 10} Q ${cx} ${cy - 20} ${cx - 18} ${cy - 10} Z`}
+        fill="#1f1813"
+      />
+      {/* eyes */}
+      <circle cx={cx - 6} cy={cy + 1} r="1.6" fill="#1a1a1a" />
+      <circle cx={cx + 6} cy={cy + 1} r="1.6" fill="#1a1a1a" />
+      {/* mouth */}
+      <path d={`M ${cx - 4} ${cy + 10} Q ${cx} ${cy + 12} ${cx + 4} ${cy + 10}`} stroke="#5a3a2a" strokeWidth="1.2" fill="none" />
+    </g>
+  );
+}
+
+function PhotoGoodPassport() {
+  return (
+    <svg viewBox="0 0 300 300" width="100%" height="100%" role="img" aria-hidden="true">
+      <defs>
+        <radialGradient id="bg-g" cx="50%" cy="40%" r="70%">
+          <stop offset="0%"  stopColor="#e9e3d5" />
+          <stop offset="100%" stopColor="#aea693" />
+        </radialGradient>
+      </defs>
+      {/* Plain neutral background — passport-style */}
+      <rect width="300" height="300" fill="url(#bg-g)" />
+      {/* Big shoulders, fills the bottom of the frame */}
+      <ellipse cx="150" cy="320" rx="160" ry="60" fill="#3a4a5a" />
+      {/* Neck */}
+      <rect x="138" y="185" width="24" height="32" fill="#caa382" />
+      {/* Hair back (sits behind head) */}
+      <ellipse cx="150" cy="115" rx="76" ry="62" fill="#231a14" />
+      {/* HEAD — large, fills most of the canvas like a real passport photo */}
+      <circle cx="150" cy="130" r="68" fill="#caa382" />
+      {/* Hair top */}
+      <path
+        d="M 78 110 Q 150 28 222 110 Q 222 80 200 60 Q 150 30 100 60 Q 78 80 78 110 Z"
+        fill="#1c130d"
+      />
+      {/* Eyebrows */}
+      <path d="M 116 124 Q 128 119 142 124" stroke="#1c130d" strokeWidth="3" fill="none" strokeLinecap="round" />
+      <path d="M 158 124 Q 172 119 184 124" stroke="#1c130d" strokeWidth="3" fill="none" strokeLinecap="round" />
+      {/* Eyes */}
+      <ellipse cx="129" cy="135" rx="6.5" ry="4.5" fill="#fff" />
+      <ellipse cx="171" cy="135" rx="6.5" ry="4.5" fill="#fff" />
+      <circle  cx="129" cy="136" r="3" fill="#3a2a18" />
+      <circle  cx="171" cy="136" r="3" fill="#3a2a18" />
+      <circle  cx="130" cy="135" r="1" fill="#fff" />
+      <circle  cx="172" cy="135" r="1" fill="#fff" />
+      {/* Nose */}
+      <path d="M 150 142 Q 144 158 148 168 Q 150 170 152 168 Q 156 158 150 142" fill="#b08866" />
+      {/* Mouth */}
+      <path d="M 132 178 Q 150 188 168 178" stroke="#7a3a2a" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+      <path d="M 132 178 Q 150 184 168 178" fill="#9a4a3a" />
     </svg>
   );
 }
 
 /* ─────────────────────────────────────────────────────────────────
- * Example catalogue — visual scenario + caption.
- * ────────────────────────────────────────────────────────────────*/
-
-const GOOD_EXAMPLES = [
-  { kind: "good", label: "Looking forward",  caption: "Both eyes visible, face squared to camera" },
-  { kind: "good", label: "Plain background", caption: "Nothing distracting behind you" },
-  { kind: "good", label: "Even lighting",    caption: "Soft daylight — no harsh shadows" },
-  { kind: "good", label: "Face fills frame", caption: "Forehead to chin clearly visible" },
-];
-
-const BAD_EXAMPLES = [
-  { kind: "sunglasses",  label: "No sunglasses",   caption: "AI needs to see your eyes" },
-  { kind: "side-angle",  label: "Don't tilt",      caption: "Face the camera straight on" },
-  { kind: "too-far",     label: "Don't stand far", caption: "Move closer — fill the frame" },
-  { kind: "busy-bg",     label: "No clutter",      caption: "Skip group photos + busy backgrounds" },
-  { kind: "bad-light",   label: "No hard shadows", caption: "Avoid half-lit faces" },
-  { kind: "multiple",    label: "One person only", caption: "Crop out everyone else" },
-];
-
-/* ─────────────────────────────────────────────────────────────────
- * Quality scoring — same logic as v1, just packaged neatly.
+ * Verdict math (unchanged — uses BlazeFace results)
  * ────────────────────────────────────────────────────────────────*/
 
 function scoreFace({ result, luminance }) {
   const issues = [];
-  const details = {};
   if (!result || result.count === 0 || !result.primary) {
-    return {
-      verdict: "block",
-      issues: ["No face detected in this photo. Try a clear, front-facing portrait."],
-      details: {},
-    };
+    return { verdict: "block", issues: ["No face detected. Try a clear, front-facing portrait."] };
   }
   const p = result.primary;
-  details.faceCount = result.count;
-  details.faceAreaPct = p.areaPct;
-  details.confidence = p.confidence;
   if (result.count > 1) {
     issues.push(`We see ${result.count} faces — use a photo with just one person.`);
-    return { verdict: "block", issues, details };
+    return { verdict: "block", issues };
   }
   if (p.areaPct < 8) {
-    issues.push("Face is too small in the frame. Move closer to the camera.");
-    return { verdict: "block", issues, details };
+    issues.push("Face is too small. Move closer to the camera.");
+    return { verdict: "block", issues };
   } else if (p.areaPct < 20) {
     issues.push("Face is a bit small — a closer shot will help.");
   }
@@ -217,26 +207,18 @@ function scoreFace({ result, luminance }) {
     const eyeMidX = (leftEye.x + rightEye.x) / 2;
     const eyeDist = Math.abs(leftEye.x - rightEye.x) || 1;
     const noseOffset = Math.abs(nose.x - eyeMidX) / eyeDist;
-    details.noseOffset = noseOffset;
-    if (noseOffset > 0.40) {
-      issues.push("Try facing the camera directly — this looks like a side angle.");
-    } else if (noseOffset > 0.25) {
-      issues.push("Slight angle — looking straight at the camera works best.");
-    }
+    if (noseOffset > 0.40)      issues.push("Face the camera directly — looks like a side angle.");
+    else if (noseOffset > 0.25) issues.push("Slight angle — looking straight at the camera works best.");
   }
   if (typeof luminance === "number") {
-    details.luminance = luminance;
-    if (luminance < 0.20) {
-      issues.push("This photo looks dark on the face. Try better lighting.");
-    } else if (luminance > 0.92) {
-      issues.push("Highlights look blown out — try softer lighting.");
-    }
+    if (luminance < 0.20) issues.push("Photo looks dark on the face — try better lighting.");
+    else if (luminance > 0.92) issues.push("Highlights blown out — try softer lighting.");
   }
   if (p.confidence < 0.80) {
     issues.push("Make sure your full face is visible — no hands, hats, or sunglasses.");
   }
-  if (issues.length === 0) return { verdict: "pass", issues: [], details };
-  return { verdict: "warn", issues, details };
+  if (issues.length === 0) return { verdict: "pass", issues: [] };
+  return { verdict: "warn", issues };
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -249,7 +231,7 @@ export default function ReferenceImageGuide({
   className,
   style: extraStyle,
 }) {
-  const [phase, setPhase] = useState("intro"); // intro | checking | result
+  const [phase, setPhase] = useState("intro");
   const [error, setError] = useState(null);
   const [file, setFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -262,55 +244,27 @@ export default function ReferenceImageGuide({
   const handlePick = async (f) => {
     setError(null);
     if (!f) return;
-    if (!f.type.startsWith("image/")) {
-      setError("That's not an image file. Try a JPG, PNG, or WebP.");
-      return;
-    }
-    if (f.size > maxFileMB * 1024 * 1024) {
-      setError(`That file is over ${maxFileMB} MB. Try a smaller one.`);
-      return;
-    }
+    if (!f.type.startsWith("image/")) { setError("That's not an image file."); return; }
+    if (f.size > maxFileMB * 1024 * 1024) { setError(`Over ${maxFileMB} MB. Try smaller.`); return; }
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     const url = URL.createObjectURL(f);
-    setFile(f);
-    setPreviewUrl(url);
-    setPhase("checking");
-    setVerdict(null);
+    setFile(f); setPreviewUrl(url); setPhase("checking"); setVerdict(null);
     try {
       const img = await loadImageElement(url);
       const result = await detectFaces(img);
-      const luminance = result?.primary
-        ? sampleLuminance(img, result.primary.bbox)
-        : null;
-      const scored = scoreFace({ result, luminance });
-      setVerdict(scored);
+      const luminance = result?.primary ? sampleLuminance(img, result.primary.bbox) : null;
+      setVerdict(scoreFace({ result, luminance }));
       setPhase("result");
     } catch (err) {
       console.warn("[ReferenceImageGuide] check failed:", err);
-      setVerdict({
-        verdict: "pass",
-        issues: ["Couldn't auto-check the photo — proceeding anyway."],
-        details: {},
-      });
+      setVerdict({ verdict: "pass", issues: ["Couldn't auto-check — proceeding."] });
       setPhase("result");
     }
   };
 
-  const onFileInput = (e) => handlePick(e.target.files?.[0]);
-  const onDrop = (e) => {
-    e.preventDefault();
-    setIsDragging(false);
-    handlePick(e.dataTransfer.files?.[0]);
-  };
-  const onDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
-  const onDragLeave = () => setIsDragging(false);
   const reset = () => {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setFile(null);
-    setPreviewUrl(null);
-    setVerdict(null);
-    setPhase("intro");
-    setError(null);
+    setFile(null); setPreviewUrl(null); setVerdict(null); setPhase("intro"); setError(null);
     if (inputRef.current) inputRef.current.value = "";
   };
   const accept = () => { if (file && onAccept) onAccept(file); };
@@ -319,82 +273,80 @@ export default function ReferenceImageGuide({
     <div
       className={className}
       style={{
-        background: "#0a0a0a",
+        background: "#0f0f0f",
         color: "#f5f5f5",
-        border: "1px solid rgba(255,255,255,0.08)",
-        borderRadius: 14,
-        padding: 22,
+        border: "1px solid rgba(255,255,255,0.06)",
+        borderRadius: 16,
+        padding: 24,
         fontFamily: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
         ...extraStyle,
       }}
     >
-      {/* ── Header ────────────────────────────────────────────────── */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-        <span style={{
-          width: 7, height: 7, borderRadius: 999,
-          background: BRAND_LIME, boxShadow: `0 0 8px ${BRAND_LIME}`,
-        }} />
-        <h2 style={{
-          fontSize: 14, fontWeight: 800, letterSpacing: "0.12em",
-          textTransform: "uppercase", margin: 0, color: "#888",
-        }}>
-          Reference photo guide
-        </h2>
-      </div>
-      <p style={{
-        fontSize: 13, color: "#bbb",
-        margin: "0 0 22px", lineHeight: 1.55,
+      {/* ── Big simple headline ─────────────────────────────────── */}
+      <h2 style={{
+        fontSize: 20, fontWeight: 800, margin: "0 0 6px", letterSpacing: "-0.01em",
       }}>
-        For accurate face matching, use a clear passport-style portrait.
-        Match the <strong style={{ color: BRAND_LIME }}>green</strong> examples
-        below — avoid the <strong style={{ color: RED }}>red</strong> ones.
+        Use a photo like this
+      </h2>
+      <p style={{ fontSize: 13, color: "#888", margin: "0 0 22px", lineHeight: 1.5 }}>
+        A close-up where your face fills the frame.
       </p>
 
-      {/* ── HERO: Side-by-side comparison ───────────────────────── */}
-      <HeroComparison />
-
-      {/* ── Detailed rule tiles ────────────────────────────────── */}
       {phase === "intro" && (
         <>
-          <RowHeader label="Like this" colour={BRAND_LIME} icon="✓" />
-          <TileGrid examples={GOOD_EXAMPLES} colour={BRAND_LIME} icon="✓" />
+          {/* ── Three big photo examples ─────────────────────────── */}
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: 14,
+            marginBottom: 24,
+          }}>
+            <ExampleCard
+              kind="bad"
+              label="Too far · busy background"
+              Illustration={PhotoBadDistant}
+            />
+            <ExampleCard
+              kind="bad"
+              label="Group photo · full body"
+              Illustration={PhotoBadGroup}
+            />
+            <ExampleCard
+              kind="good"
+              label="Close-up · passport-style"
+              Illustration={PhotoGoodPassport}
+            />
+          </div>
 
-          <RowHeader label="Not like this" colour={RED} icon="✗" />
-          <TileGrid examples={BAD_EXAMPLES} colour={RED} icon="✗" />
-        </>
-      )}
-
-      {/* ── Upload zone / check states ─────────────────────────── */}
-      <div style={{ marginTop: 22 }}>
-        {phase === "intro" && (
+          {/* ── Upload affordance ─────────────────────────────────── */}
           <DropZone
             isDragging={isDragging}
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
+            onDrop={(e) => { e.preventDefault(); setIsDragging(false); handlePick(e.dataTransfer.files?.[0]); }}
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
             onPick={() => inputRef.current?.click()}
             error={error}
           />
-        )}
-        {phase === "checking" && previewUrl && (
-          <CheckingState previewUrl={previewUrl} />
-        )}
-        {phase === "result" && previewUrl && verdict && (
-          <ResultState
-            previewUrl={previewUrl}
-            verdict={verdict}
-            onUseAnyway={accept}
-            onTryAgain={reset}
-          />
-        )}
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/png,image/jpeg,image/webp"
-          onChange={onFileInput}
-          style={{ display: "none" }}
+        </>
+      )}
+
+      {phase === "checking" && previewUrl && <CheckingState previewUrl={previewUrl} />}
+      {phase === "result"   && previewUrl && verdict && (
+        <ResultState
+          previewUrl={previewUrl}
+          verdict={verdict}
+          onUseAnyway={accept}
+          onTryAgain={reset}
         />
-      </div>
+      )}
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        onChange={(e) => handlePick(e.target.files?.[0])}
+        style={{ display: "none" }}
+      />
     </div>
   );
 }
@@ -403,128 +355,53 @@ export default function ReferenceImageGuide({
  * Sub-components
  * ────────────────────────────────────────────────────────────────*/
 
-function HeroComparison() {
+function ExampleCard({ kind, label, Illustration }) {
+  const isGood = kind === "good";
+  const tint = isGood ? LIME : RED;
   return (
-    <div style={{
-      display: "grid",
-      gridTemplateColumns: "1fr 1fr",
-      gap: 10,
-      marginBottom: 18,
-    }}>
-      <HeroSide
-        kind="good"
-        title="Like this"
-        sub="Clear, front-facing portrait"
-        colour={BRAND_LIME}
-        icon="✓"
-      />
-      <HeroSide
-        kind="sunglasses"
-        title="Not this"
-        sub="Sunglasses + side angle + clutter"
-        colour={RED}
-        icon="✗"
-        bgScribble
-      />
-    </div>
-  );
-}
-
-function HeroSide({ kind, title, sub, colour, icon, bgScribble }) {
-  return (
-    <div style={{
-      position: "relative",
-      border: `1px solid ${colour}55`,
-      borderRadius: 12,
-      padding: "18px 14px 14px",
-      background: `linear-gradient(180deg, ${colour}10 0%, transparent 70%)`,
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      textAlign: "center",
-    }}>
+    <figure style={{ margin: 0 }}>
       <div style={{
-        position: "absolute", top: 10, right: 10,
-        display: "inline-flex", alignItems: "center", gap: 5,
-        padding: "3px 8px", borderRadius: 999,
-        background: `${colour}22`, color: colour,
-        fontSize: 10, fontWeight: 900, letterSpacing: "0.06em",
-        textTransform: "uppercase",
+        position: "relative",
+        aspectRatio: "1 / 1",
+        borderRadius: 14,
+        overflow: "hidden",
+        border: `2px solid ${tint}`,
+        boxShadow: `0 0 0 4px ${tint}1a`,
+        background: "#0a0a0a",
       }}>
-        <span style={{
+        <Illustration />
+        {/* Big corner badge — ✓ for good, ✗ for bad. */}
+        <div style={{
+          position: "absolute",
+          top: 10, right: 10,
+          width: 32, height: 32, borderRadius: 999,
+          background: tint, color: isGood ? "#0a0a0a" : "#fff",
           display: "inline-flex", alignItems: "center", justifyContent: "center",
-          width: 14, height: 14, borderRadius: 999,
-          background: colour, color: "#0a0a0a", fontSize: 10, fontWeight: 900,
-        }}>{icon}</span>
-        {kind === "good" ? "Good" : "Avoid"}
+          fontSize: 18, fontWeight: 900,
+          boxShadow: "0 4px 12px rgba(0,0,0,0.55)",
+        }}>
+          {isGood ? "✓" : "✗"}
+        </div>
+        {/* For BAD examples, layer a translucent red wash + diagonal
+            cross-out for a stronger "no" signal. */}
+        {!isGood && (
+          <div style={{
+            position: "absolute", inset: 0,
+            background: "rgba(239,68,68,0.10)",
+            pointerEvents: "none",
+          }} />
+        )}
       </div>
-      <PortraitSvg kind={kind} size={120} />
-      <div style={{
-        marginTop: 10, fontSize: 14, fontWeight: 800, color: "#f5f5f5",
-      }}>
-        {title}
-      </div>
-      <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>{sub}</div>
-    </div>
-  );
-}
-
-function RowHeader({ label, colour, icon }) {
-  return (
-    <div style={{
-      marginTop: 18, marginBottom: 8,
-      display: "flex", alignItems: "center", gap: 8,
-    }}>
-      <span style={{
-        display: "inline-flex", alignItems: "center", justifyContent: "center",
-        width: 18, height: 18, borderRadius: 999,
-        background: colour, color: "#0a0a0a",
-        fontSize: 11, fontWeight: 900,
-      }}>{icon}</span>
-      <span style={{
-        fontSize: 11, fontWeight: 800, letterSpacing: "0.12em",
-        textTransform: "uppercase", color: colour,
+      <figcaption style={{
+        textAlign: "center",
+        marginTop: 8,
+        fontSize: 12.5,
+        fontWeight: 700,
+        color: isGood ? LIME : "#bbb",
       }}>
         {label}
-      </span>
-    </div>
-  );
-}
-
-function TileGrid({ examples, colour, icon }) {
-  return (
-    <div style={{
-      display: "grid",
-      gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-      gap: 8,
-    }}>
-      {examples.map((ex) => (
-        <div key={ex.kind + ex.label} style={{
-          position: "relative",
-          background: "rgba(255,255,255,0.025)",
-          border: `1px solid ${colour}30`,
-          borderRadius: 10, padding: 10,
-          display: "flex", flexDirection: "column", gap: 4,
-        }}>
-          <div style={{
-            position: "absolute", top: 6, right: 6,
-            display: "inline-flex", alignItems: "center", justifyContent: "center",
-            width: 16, height: 16, borderRadius: 999,
-            background: colour, color: "#0a0a0a",
-            fontSize: 10, fontWeight: 900,
-          }}>{icon}</div>
-          <PortraitSvg kind={ex.kind} size={64} />
-          <div style={{
-            marginTop: 4, fontSize: 12, fontWeight: 700, color: "#f5f5f5",
-          }}>
-            {ex.label}
-          </div>
-          <div style={{ fontSize: 10.5, color: "#888", lineHeight: 1.4 }}>
-            {ex.caption}
-          </div>
-        </div>
-      ))}
-    </div>
+      </figcaption>
+    </figure>
   );
 }
 
@@ -539,22 +416,22 @@ function DropZone({ isDragging, onDrop, onDragOver, onDragLeave, onPick, error }
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onPick(); }}
       style={{
-        border: `2px dashed ${isDragging ? BRAND_LIME : "rgba(255,255,255,0.18)"}`,
+        border: `2px dashed ${isDragging ? LIME : "rgba(255,255,255,0.18)"}`,
         background: isDragging ? "rgba(212,255,64,0.06)" : "rgba(255,255,255,0.02)",
         borderRadius: 12, padding: "26px 18px", textAlign: "center",
         cursor: "pointer", outline: "none",
         transition: "background 140ms ease, border-color 140ms ease",
       }}
     >
-      <div style={{ fontSize: 30, lineHeight: 1, marginBottom: 8 }}>📸</div>
+      <div style={{ fontSize: 28, lineHeight: 1, marginBottom: 8 }}>📸</div>
       <div style={{ fontSize: 14, fontWeight: 700, color: "#f5f5f5" }}>
-        Drop a photo here, or tap to choose
+        Upload your photo
       </div>
       <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
-        JPG / PNG / WebP up to 8 MB. We&rsquo;ll auto-check it against the rules above.
+        JPG, PNG, or WebP — we&rsquo;ll check it for you
       </div>
       {error && (
-        <div style={{ marginTop: 12, fontSize: 12, color: RED }}>
+        <div style={{ marginTop: 10, fontSize: 12, color: RED }}>
           {error}
         </div>
       )}
@@ -577,17 +454,17 @@ function CheckingState({ previewUrl }) {
       />
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: "#f5f5f5", marginBottom: 4 }}>
-          Analysing your photo…
+          Checking your photo…
         </div>
         <div style={{ fontSize: 11, color: "#888" }}>
-          One moment — first run downloads ~600 KB of face-detection model.
+          One moment.
         </div>
         <div style={{
           marginTop: 8, height: 4, borderRadius: 999,
           background: "rgba(255,255,255,0.08)", overflow: "hidden",
         }}>
           <div style={{
-            width: "40%", height: "100%", background: BRAND_LIME,
+            width: "40%", height: "100%", background: LIME,
             animation: "ref-guide-slide 1.4s ease-in-out infinite",
           }} />
         </div>
@@ -602,10 +479,10 @@ function CheckingState({ previewUrl }) {
 
 function ResultState({ previewUrl, verdict, onUseAnyway, onTryAgain }) {
   const v = verdict.verdict;
-  const tint = v === "pass" ? BRAND_LIME : v === "warn" ? AMBER : RED;
+  const tint = v === "pass" ? LIME : v === "warn" ? "#f59e0b" : RED;
   const title =
     v === "pass" ? "Looks good — ready to use" :
-    v === "warn" ? "Could be better, but it'll work" :
+    v === "warn" ? "It'll work, but could be better" :
     "This photo won't work — please try another";
   return (
     <div style={{
@@ -654,16 +531,16 @@ function ResultState({ previewUrl, verdict, onUseAnyway, onTryAgain }) {
             fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
           }}
         >
-          Try another photo
+          Try another
         </button>
         {v !== "block" && (
           <button
             type="button"
             onClick={onUseAnyway}
             style={{
-              background: v === "pass" ? BRAND_LIME : "rgba(212,255,64,0.10)",
-              color: v === "pass" ? "#0a0a0a" : BRAND_LIME,
-              border: `1px solid ${BRAND_LIME}`,
+              background: v === "pass" ? LIME : "rgba(212,255,64,0.10)",
+              color: v === "pass" ? "#0a0a0a" : LIME,
+              border: `1px solid ${LIME}`,
               borderRadius: 8, padding: "8px 16px",
               fontSize: 12, fontWeight: 800, cursor: "pointer", fontFamily: "inherit",
               letterSpacing: "0.02em",
