@@ -23,6 +23,9 @@ import toast from "@/lib/toast";
 import PromptBuilder from "@/components/saas/PromptBuilder";
 import ImageBuilder from "@/components/saas/ImageBuilder";
 import SeedanceHeroCard from "@/components/saas/SeedanceHeroCard";
+import ReferenceImageGuideModal, {
+  shouldAutoShowReferenceGuide,
+} from "@/components/saas/ReferenceImageGuideModal";
 import SmartPrompt from "@/components/saas/SmartPrompt";
 import {
   StoryBuilder,
@@ -392,6 +395,12 @@ export default function Home() {
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
   const [isUploadingAudio, setIsUploadingAudio] = useState(false);
   const fileInputRef = useRef(null);
+  // Reference-photo guide modal — appears the first time the user
+  // clicks "Upload image" in a session. Dismiss is per-session via
+  // sessionStorage; "Don't show this every session" persists in
+  // localStorage. The "ℹ Reference Tips" button always opens it
+  // regardless of the gate.
+  const [refGuideOpen, setRefGuideOpen] = useState(false);
   const videoInputRef = useRef(null);
   const audioInputRef = useRef(null);
   // Ref on the uploaded-thumbnails grid so we can scroll the new image
@@ -1370,7 +1379,16 @@ export default function Home() {
                         signIn();
                         return;
                       }
-                      fileInputRef.current?.click();
+                      // First-time-this-session pre-upload guide: open
+                      // the modal instead of the file picker. The
+                      // modal's "Got it" CTA wires straight to the
+                      // picker so the user still ends up in the same
+                      // place after a brief educational moment.
+                      if (shouldAutoShowReferenceGuide()) {
+                        setRefGuideOpen(true);
+                      } else {
+                        fileInputRef.current?.click();
+                      }
                     }}
                     disabled={isUploading || imagesList.length >= 9}
                     className="flex-1 h-10 bg-primary-500/10 border border-primary-500/20 text-primary-500 rounded-md flex items-center justify-center gap-2 text-xs font-semibold hover:bg-primary-500 hover:text-black transition-colors overflow-hidden"
@@ -1386,6 +1404,22 @@ export default function Home() {
                         Upload image
                       </>
                     )}
+                  </button>
+                  {/* "ℹ Reference Tips" — secondary button sat right
+                      next to Upload image so users always have the
+                      passport-style guidance one tap away, even after
+                      they've ticked "don't show again" on the popup.
+                      Sized to match the upload button's 40px height. */}
+                  <button
+                    type="button"
+                    onClick={() => setRefGuideOpen(true)}
+                    title="Reference photo tips"
+                    aria-label="Reference photo tips"
+                    className="h-10 px-3 sm:px-4 bg-transparent border border-primary-500/40 text-primary-500 rounded-md flex items-center justify-center gap-1.5 text-xs font-semibold hover:bg-primary-500/10 transition-colors whitespace-nowrap"
+                  >
+                    <span aria-hidden="true">ℹ</span>
+                    <span className="hidden sm:inline">Reference Tips</span>
+                    <span className="sm:hidden">Tips</span>
                   </button>
                 </div>
 
@@ -2157,6 +2191,16 @@ export default function Home() {
           </div>
         );
       })()}
+      <ReferenceImageGuideModal
+        open={refGuideOpen}
+        onClose={() => setRefGuideOpen(false)}
+        onGotIt={() => {
+          setRefGuideOpen(false);
+          // Brief breath after the modal close animation so the OS
+          // file picker doesn't slam in on top of it.
+          setTimeout(() => fileInputRef.current?.click(), 120);
+        }}
+      />
     </>
   );
 }
