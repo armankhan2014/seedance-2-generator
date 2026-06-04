@@ -1,75 +1,33 @@
 "use client";
 
 /**
- * ReferenceImageGuide — Phase 1.7
+ * ReferenceImageGuide — Phase 2
  *
- * Visual rewrite to match Arman's reference poster: cream background,
- * "GOOD – USE THESE" on the left in green, "BAD – AVOID THESE" on the
- * right in red, each section is a row of real-looking portrait photos
- * with a one-line label below. Bottom strip: tip checklist.
+ * Visual teaching surface is now the user's own SEEDANCE REF poster
+ * served same-origin from /public/reference-guide/seedance-ref.png.
+ * The poster already covers every case (good/bad rows, more bad
+ * examples, tips, recommended set) in one cohesive design — no
+ * reason for the component to recreate it with placeholders.
  *
- * Photos: i.pravatar.cc — free portrait avatar service, returns
- * passport-style headshots by ID. The BAD column reuses the SAME four
- * IDs as GOOD but with CSS filters / overlays applied to simulate
- * quality issues (blur, dark, overexposed, sunglasses). Same model in
- * both columns makes the contrast obvious.
- *
- * Upload + face-quality check stays available below the visual guide
- * but is intentionally secondary — the visual lesson does the teaching.
+ * Below the poster sits the upload zone + BlazeFace quality check
+ * pipeline, unchanged from prior phase.
  */
 
 import { useEffect, useRef, useState } from "react";
 import { detectFaces, loadImageElement, sampleLuminance } from "@/lib/face-detector";
 
-const LIME = "#16a34a";   // muted green for "GOOD" — matches the cream surface
-const RED  = "#dc2626";   // crisp red for "BAD"
-const CREAM_BG  = "#f5f1ea";
+const LIME = "#16a34a";
+const AMBER = "#f59e0b";
+const RED = "#dc2626";
+const CREAM_BG = "#f5f1ea";
 const CREAM_CARD = "#ffffff";
 const INK = "#1f2937";
 const MUTED = "#6b7280";
 
-// Pravatar avatar IDs we trust to render as clean passport portraits.
-// All Caucasian male / brown skin tone variants picked from the
-// curated set so the "GOOD" row looks coherent.
-const FACE_IDS = [12, 33, 51, 68];
-const pravatar = (id) => `https://i.pravatar.cc/400?img=${id}`;
+const POSTER_SRC = "/reference-guide/seedance-ref.png";
 
 /* ─────────────────────────────────────────────────────────────────
- * Example rows. The same image URL appears in both columns — the
- * BAD column applies CSS filters / overlay markup to degrade it.
- * ────────────────────────────────────────────────────────────────*/
-
-const GOOD_ROW = [
-  { id: FACE_IDS[0], label: "Clear & sharp",      sub: "High res, in focus" },
-  { id: FACE_IDS[1], label: "Good lighting",       sub: "Soft, even daylight" },
-  { id: FACE_IDS[2], label: "Plain background",    sub: "Nothing behind you" },
-  { id: FACE_IDS[3], label: "Looking forward",     sub: "Eyes on the camera" },
-];
-
-const BAD_ROW = [
-  { id: FACE_IDS[0], label: "Blurry",       sub: "Out of focus", filter: "blur(7px)" },
-  { id: FACE_IDS[1], label: "Too dark",     sub: "Poor lighting", filter: "brightness(0.25)" },
-  { id: FACE_IDS[2], label: "Overexposed",  sub: "Highlights blown", filter: "brightness(1.85) saturate(0.35) contrast(0.85)" },
-  { id: FACE_IDS[3], label: "Sunglasses",   sub: "Eyes covered", overlay: "sunglasses" },
-];
-
-const MORE_BAD_ROW = [
-  { id: 47, label: "Side angle",     sub: "Not facing camera",   transform: "rotate(-22deg) scale(0.95)" },
-  { id: 56, label: "Too far away",   sub: "Face too small in frame", transform: "scale(0.45) translate(0, 10%)", bg: "#cdcfd1" },
-  { id: 32, label: "Multiple faces", sub: "Use a solo photo",   overlay: "duplicate" },
-  { id: 21, label: "Heavy filter",   sub: "Alters real features", filter: "hue-rotate(-18deg) saturate(2.2) sepia(0.4) contrast(1.15)" },
-];
-
-const TIPS = [
-  "Use a real, recent photo — no heavy edits or filters",
-  "Face fills most of the frame, forehead to chin visible",
-  "Look straight at the camera, no tilt",
-  "Soft even lighting, no harsh shadows",
-  "Plain background — nobody else in the frame",
-];
-
-/* ─────────────────────────────────────────────────────────────────
- * Verdict math (BlazeFace) — unchanged from prior phase.
+ * BlazeFace verdict scoring (unchanged)
  * ────────────────────────────────────────────────────────────────*/
 function scoreFace({ result, luminance }) {
   const issues = [];
@@ -161,118 +119,50 @@ export default function ReferenceImageGuide({
         color: INK,
         border: `1px solid rgba(0,0,0,0.08)`,
         borderRadius: 16,
-        padding: "28px 24px 24px",
+        padding: 16,
         fontFamily: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
         ...extraStyle,
       }}
     >
-      {/* ── Centered headline ───────────────────────────────────── */}
-      <h2 style={{
-        margin: 0,
-        textAlign: "center",
-        fontSize: 22,
-        fontWeight: 900,
-        letterSpacing: "0.01em",
-        color: INK,
-      }}>
-        Face Reference Guide
-      </h2>
-      <p style={{
-        textAlign: "center",
-        fontSize: 13,
-        color: MUTED,
-        margin: "6px 0 22px",
-      }}>
-        Good vs Bad examples for best results
-      </p>
-
       {phase === "intro" && (
         <>
-          {/* ── First row: GOOD on left, BAD on right ───────────── */}
+          {/* ── The poster ─ everything the user needs to learn is
+              already on this one image. Hosted same-origin so it's
+              cache-friendly + survives offline visits. */}
           <div style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 22,
-            marginBottom: 22,
-          }}>
-            <ExampleColumn
-              kind="good"
-              title="USE THESE"
-              rows={[GOOD_ROW]}
-            />
-            <ExampleColumn
-              kind="bad"
-              title="AVOID THESE"
-              rows={[BAD_ROW]}
-            />
-          </div>
-
-          {/* ── Second row: MORE BAD examples (full-width) ─────── */}
-          <ExampleColumn
-            kind="bad"
-            title="MORE BAD EXAMPLES"
-            rows={[MORE_BAD_ROW]}
-            fullWidth
-          />
-
-          {/* ── Tips panel ───────────────────────────────────── */}
-          <div style={{
-            marginTop: 22,
-            background: CREAM_CARD,
-            border: "1px solid rgba(0,0,0,0.08)",
+            width: "100%",
+            aspectRatio: "1536 / 1024",
             borderRadius: 12,
-            padding: "16px 18px",
+            overflow: "hidden",
+            background: CREAM_CARD,
+            border: "1px solid rgba(0,0,0,0.06)",
+            marginBottom: 16,
           }}>
-            <div style={{
-              fontSize: 11,
-              fontWeight: 900,
-              letterSpacing: "0.10em",
-              textTransform: "uppercase",
-              color: INK,
-              marginBottom: 10,
-            }}>
-              💡 Tips for best results
-            </div>
-            <ul style={{
-              listStyle: "none",
-              margin: 0,
-              padding: 0,
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: "6px 18px",
-            }}>
-              {TIPS.map((t) => (
-                <li key={t} style={{
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: 8,
-                  fontSize: 12.5,
-                  color: "#374151",
-                  lineHeight: 1.4,
-                }}>
-                  <span style={{
-                    flexShrink: 0,
-                    color: LIME,
-                    fontWeight: 900,
-                    marginTop: 1,
-                  }}>✓</span>
-                  {t}
-                </li>
-              ))}
-            </ul>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={POSTER_SRC}
+              alt="Seedance face reference guide — Good vs Bad examples"
+              width={1400}
+              height={933}
+              loading="eager"
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "contain",
+                display: "block",
+              }}
+            />
           </div>
 
           {/* ── Upload zone ──────────────────────────────────── */}
-          <div style={{ marginTop: 18 }}>
-            <DropZone
-              isDragging={isDragging}
-              onDrop={(e) => { e.preventDefault(); setIsDragging(false); handlePick(e.dataTransfer.files?.[0]); }}
-              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-              onDragLeave={() => setIsDragging(false)}
-              onPick={() => inputRef.current?.click()}
-              error={error}
-            />
-          </div>
+          <DropZone
+            isDragging={isDragging}
+            onDrop={(e) => { e.preventDefault(); setIsDragging(false); handlePick(e.dataTransfer.files?.[0]); }}
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onPick={() => inputRef.current?.click()}
+            error={error}
+          />
         </>
       )}
 
@@ -301,148 +191,6 @@ export default function ReferenceImageGuide({
  * Sub-components
  * ────────────────────────────────────────────────────────────────*/
 
-function ExampleColumn({ kind, title, rows, fullWidth }) {
-  const colour = kind === "good" ? LIME : RED;
-  const icon   = kind === "good" ? "✓" : "✗";
-  const headerLabel =
-    kind === "good"
-      ? "GOOD"
-      : "BAD";
-  return (
-    <section>
-      <div style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        marginBottom: 10,
-      }}>
-        <div style={{
-          width: 24,
-          height: 24,
-          borderRadius: 999,
-          background: colour,
-          color: "#fff",
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 14,
-          fontWeight: 900,
-        }}>
-          {icon}
-        </div>
-        <div style={{
-          fontSize: 14,
-          fontWeight: 900,
-          letterSpacing: "0.04em",
-          color: colour,
-        }}>
-          {headerLabel} – {title}
-        </div>
-      </div>
-
-      {rows.map((row, ri) => (
-        <div
-          key={ri}
-          style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(${row.length}, 1fr)`,
-            gap: 10,
-          }}
-        >
-          {row.map((item, ci) => (
-            <ExamplePhotoCard
-              key={ci}
-              item={item}
-              kind={kind}
-              fullWidth={fullWidth}
-            />
-          ))}
-        </div>
-      ))}
-    </section>
-  );
-}
-
-function ExamplePhotoCard({ item, kind, fullWidth }) {
-  const colour = kind === "good" ? LIME : RED;
-  return (
-    <figure style={{ margin: 0 }}>
-      <div style={{
-        position: "relative",
-        width: "100%",
-        aspectRatio: "1 / 1",
-        borderRadius: 10,
-        overflow: "hidden",
-        background: item.bg || "#e5e7eb",
-        boxShadow: "0 1px 2px rgba(0,0,0,0.08)",
-      }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={pravatar(item.id)}
-          alt=""
-          width={400}
-          height={400}
-          loading="lazy"
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            display: "block",
-            filter: item.filter,
-            transform: item.transform,
-            transformOrigin: "center",
-          }}
-        />
-        {/* Sunglasses overlay — a single dark bar across the eyes */}
-        {item.overlay === "sunglasses" && (
-          <div style={{
-            position: "absolute",
-            left: "18%", right: "18%",
-            top: "38%", height: "14%",
-            borderRadius: 6,
-            background: "linear-gradient(180deg, #111 0%, #2a2a2a 50%, #111 100%)",
-            boxShadow: "0 2px 4px rgba(0,0,0,0.4)",
-          }} />
-        )}
-        {/* Duplicate-face overlay — render a smaller copy of the face
-            next to the primary one to convey "multiple faces". */}
-        {item.overlay === "duplicate" && (
-          <div style={{
-            position: "absolute",
-            inset: 0,
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-          }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={pravatar(item.id)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={pravatar(item.id + 1)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          </div>
-        )}
-      </div>
-      <figcaption style={{
-        marginTop: 6,
-        fontSize: fullWidth ? 12 : 12.5,
-        fontWeight: 800,
-        color: colour,
-        lineHeight: 1.25,
-      }}>
-        {item.label}
-      </figcaption>
-      {item.sub && (
-        <div style={{
-          fontSize: 10.5,
-          color: MUTED,
-          marginTop: 1,
-          lineHeight: 1.3,
-        }}>
-          {item.sub}
-        </div>
-      )}
-    </figure>
-  );
-}
-
 function DropZone({ isDragging, onDrop, onDragOver, onDragLeave, onPick, error }) {
   return (
     <div
@@ -466,7 +214,7 @@ function DropZone({ isDragging, onDrop, onDragOver, onDragLeave, onPick, error }
         Upload your photo
       </div>
       <div style={{ fontSize: 11.5, color: MUTED, marginTop: 4 }}>
-        JPG, PNG, or WebP — we&rsquo;ll check it against the rules above
+        JPG, PNG, or WebP — we&rsquo;ll auto-check it against the rules above
       </div>
       {error && (
         <div style={{ marginTop: 10, fontSize: 12, color: RED }}>
@@ -517,7 +265,7 @@ function CheckingState({ previewUrl }) {
 
 function ResultState({ previewUrl, verdict, onUseAnyway, onTryAgain }) {
   const v = verdict.verdict;
-  const tint = v === "pass" ? LIME : v === "warn" ? "#f59e0b" : RED;
+  const tint = v === "pass" ? LIME : v === "warn" ? AMBER : RED;
   const title =
     v === "pass" ? "Looks good — ready to use" :
     v === "warn" ? "It'll work, but could be better" :
