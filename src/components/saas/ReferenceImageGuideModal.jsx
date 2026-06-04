@@ -101,18 +101,40 @@ export default function ReferenceImageGuideModal({
 
   // Lock body scroll + remember the focused element so we can return
   // focus when the dialog closes.
+  //
+  // iOS Safari quirk: `overflow: hidden` on body doesn't actually
+  // stop scrolling in Safari for iOS — the only reliable trick is
+  // `position: fixed; top: -<scrollY>` and then restoring the
+  // scroll position on close. Without this, when the user
+  // dismisses the bottom sheet, the page underneath has jumped to
+  // the top.
   useEffect(() => {
     if (!open) return;
     prevFocusRef.current = typeof document !== "undefined" ? document.activeElement : null;
     if (typeof document === "undefined") return;
-    const prev = document.body.style.overflow;
+    const scrollY = window.scrollY;
+    const prevPosition = document.body.style.position;
+    const prevTop = document.body.style.top;
+    const prevWidth = document.body.style.width;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = "100%";
     document.body.style.overflow = "hidden";
     // Mark session-shown immediately so a second .open() in the same
     // tab doesn't auto-fire (the caller's gate already used this).
     if (recordSessionShown) {
       try { window.sessionStorage.setItem(REF_GUIDE_SESSION_KEY, "1"); } catch { /* ignore */ }
     }
-    return () => { document.body.style.overflow = prev; };
+    return () => {
+      document.body.style.position = prevPosition;
+      document.body.style.top = prevTop;
+      document.body.style.width = prevWidth;
+      document.body.style.overflow = prevOverflow;
+      // Restore the scroll position the user was at before the modal
+      // opened. `instant` (not smooth) so it's invisible.
+      window.scrollTo({ top: scrollY, left: 0, behavior: "instant" });
+    };
   }, [open, recordSessionShown]);
 
   // Escape to close.
@@ -202,12 +224,19 @@ export default function ReferenceImageGuideModal({
           width: "100%",
           maxHeight: "94vh",
           overflowY: "auto",
+          // iOS Safari: keep momentum scrolling inside the sheet
+          // smooth, and stop overscroll from reaching the locked
+          // body underneath.
+          WebkitOverflowScrolling: "touch",
+          overscrollBehavior: "contain",
           background: CREAM_BG,
           color: INK,
           // Mobile bottom-sheet: rounded top corners only. Desktop
           // overrides via @media above.
           borderRadius: "20px 20px 0 0",
-          padding: "20px 18px 20px",
+          // Bottom padding respects the iPhone home-indicator safe
+          // area so the Got it CTA never sits under the gesture bar.
+          padding: "20px 18px max(20px, env(safe-area-inset-bottom, 20px))",
           fontFamily: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
           boxShadow: "0 -8px 32px rgba(0,0,0,0.4)",
           animation: "ref-modal-rise 280ms cubic-bezier(0.2, 0.9, 0.2, 1)",
