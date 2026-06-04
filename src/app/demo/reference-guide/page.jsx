@@ -20,13 +20,13 @@ export default function ReferenceGuideDemoPage() {
     <main
       style={{
         minHeight: "100vh",
-        background: "#0a0a0a",
-        color: "#f5f5f5",
+        background: "#e5e1d8",
+        color: "#1f2937",
         padding: "40px 24px 80px",
         fontFamily: "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif",
       }}
     >
-      <div style={{ maxWidth: 720, margin: "0 auto" }}>
+      <div style={{ maxWidth: 960, margin: "0 auto" }}>
         <div
           style={{
             fontSize: 10, fontWeight: 800, letterSpacing: "0.18em",
