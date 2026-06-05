@@ -46,6 +46,55 @@ const nextConfig = {
         destination: "https://music.visualseffect.com/m/:id",
         permanent: true,
       },
+
+      // ── Sign-in URL typo catch-alls (added 2026-06-05) ────────────
+      // NextAuth's pages config sets signIn: "/" — there is no
+      // /signin route at all; the homepage itself hosts the sign-in
+      // surface (Google + Apple buttons). Users typing /signin,
+      // /sigin (the actual keyboard misfire that caught a paying
+      // user 2026-06-05), /login, etc. were hitting a real 404.
+      //
+      // 302 (temporary) so we can change destinations later without
+      // browser cache sticking. The `?from=signin` query is a soft
+      // hint the homepage can read to scroll to or surface the
+      // auth buttons (not required — Sign In is in the navbar
+      // regardless).
+      {
+        source: "/signin",
+        destination: "/?from=signin",
+        permanent: false,
+      },
+      {
+        source: "/sigin",
+        destination: "/?from=signin",
+        permanent: false,
+      },
+      {
+        source: "/sign-in",
+        destination: "/?from=signin",
+        permanent: false,
+      },
+      {
+        source: "/login",
+        destination: "/?from=signin",
+        permanent: false,
+      },
+      {
+        source: "/log-in",
+        destination: "/?from=signin",
+        permanent: false,
+      },
+      // Logout shortcut — clean URL many users type by habit.
+      {
+        source: "/logout",
+        destination: "/api/auth/signout",
+        permanent: false,
+      },
+      {
+        source: "/sign-out",
+        destination: "/api/auth/signout",
+        permanent: false,
+      },
     ];
   },
 
