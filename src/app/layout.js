@@ -3,7 +3,10 @@ import { Inter } from "next/font/google";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import "./globals.css";
+import "@/components/eco-nav/eco-nav-tokens.css";
 import { Providers } from "@/components/Providers";
+import { AppsPanelProvider } from "@/components/eco-nav/AppsPanelContext";
+import SeedanceEcosystemNav from "@/components/eco-nav/SeedanceEcosystemNav";
 import Navbar from "@/components/saas/Navbar";
 import SignInModal from "@/components/saas/SignInModal";
 import MobileBottomNav from "@/components/saas/MobileBottomNav";
@@ -88,10 +91,16 @@ export default async function RootLayout({ children }) {
       </head>
       <body className={inter.className} style={{ background: "#0a0a0a", color: "#FFFFFF" }}>
         <Providers session={session}>
-          <Suspense fallback={null}>
-            <Navbar />
-          </Suspense>
-          {children}
+          {/* Universal ecosystem strip — same component as
+              community.visualseffect.com, NextAuth-backed wrapper.
+              Sits above the existing Seedance Navbar (which keeps
+              its role as the in-app section nav). */}
+          <AppsPanelProvider>
+            <SeedanceEcosystemNav />
+            <Suspense fallback={null}>
+              <Navbar />
+            </Suspense>
+            {children}
           {/* Mobile bottom nav — mirrors community's bar so users keep
               their bearings across the subdomain. Pure server component,
               zero runtime JS. Auto-hides above 720px. */}
@@ -105,6 +114,7 @@ export default async function RootLayout({ children }) {
           {/* Capacitor bridge — back-button, push registration, app
               state events. No-op in regular browsers. */}
           <CapacitorBridge />
+          </AppsPanelProvider>
         </Providers>
       </body>
     </html>
