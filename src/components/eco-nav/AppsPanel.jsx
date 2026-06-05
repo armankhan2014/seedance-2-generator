@@ -136,10 +136,30 @@ export default function AppsPanel({
               }}
             >
               {resume.map((r, i) => {
-                const a = APPS.find((x) => x.id === r.appId);
+                // Accept both shapes:
+                //   • DEMO_RESUME exports use `appId`.
+                //   • /api/me/active-sessions exports use `app`
+                //     (matches the API contract — id is reserved for
+                //     the row id like `creation:abc123`).
+                const idLookup = r.appId || r.app;
+                const a = APPS.find((x) => x.id === idLookup);
                 if (!a) return null;
+                // Derive `sub` if the item didn't supply one — the
+                // API ships kind + updatedAt, the demo ships sub.
+                const sub =
+                  r.sub ||
+                  (r.kind === "render-in-progress"
+                    ? "Render in progress"
+                    : r.kind === "last-shared-prompt"
+                      ? "Last shared prompt"
+                      : null);
                 return (
-                  <ResumeCard key={i} app={a} item={r} onClick={onClose} />
+                  <ResumeCard
+                    key={r.id || i}
+                    app={a}
+                    item={{ ...r, sub }}
+                    onClick={onClose}
+                  />
                 );
               })}
             </div>

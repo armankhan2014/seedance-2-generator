@@ -19,32 +19,51 @@ export default function SeedanceEcosystemNav({ children = null }) {
   const user = session?.user || null;
   const [credits, setCredits] = useState(null);
   const [liveImage, setLiveImage] = useState(null);
+  const [resume, setResume] = useState([]);
 
-  // Reuse the same endpoint the existing Navbar polls. Single fetch
-  // on session-id change keeps it cheap; the existing Navbar's own
-  // refresh-on-mount continues independently so we don't introduce
-  // a second polling loop here.
+  // Two sources:
+  //   (1) /api/user/profile — local endpoint that powers the existing
+  //       Navbar's credit pill. Same DB, same balance, but local so
+  //       it stays fast even if community is temporarily unreachable.
+  //   (2) https://community.visualseffect.com/api/me/active-sessions —
+  //       cross-origin via credentials: "include" (session cookie is
+  //       Domain=.visualseffect.com). Hub-side aggregation so the apps
+  //       panel can show Jump back in cards. CORS-allowed.
   useEffect(() => {
     if (!user?.id) {
       setCredits(null);
       setLiveImage(null);
+      setResume([]);
       return;
     }
     let cancelled = false;
-    (async () => {
+    const refresh = async () => {
       try {
-        const res = await fetch("/api/user/profile", { cache: "no-store" });
-        if (!res.ok) return;
-        const data = await res.json();
+        const [profile, sessions] = await Promise.all([
+          fetch("/api/user/profile", { cache: "no-store" }).then((r) =>
+            r.ok ? r.json() : null
+          ),
+          fetch(
+            "https://community.visualseffect.com/api/me/active-sessions",
+            { credentials: "include", cache: "no-store" }
+          ).then((r) => (r.ok ? r.json() : null)),
+        ]);
         if (cancelled) return;
-        if (typeof data.credits === "number") setCredits(data.credits);
-        if (data.image) setLiveImage(data.image);
+        if (profile?.credits !== undefined) setCredits(profile.credits);
+        if (profile?.image) setLiveImage(profile.image);
+        if (sessions && Array.isArray(sessions.items))
+          setResume(sessions.items);
       } catch {
         /* ignore — eco-strip degrades to no-credits */
       }
-    })();
+    };
+    refresh();
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") refresh();
+    }, 90_000);
     return () => {
       cancelled = true;
+      clearInterval(id);
     };
   }, [user?.id]);
 
@@ -62,6 +81,7 @@ export default function SeedanceEcosystemNav({ children = null }) {
       user={userObj}
       status={status}
       credits={credits}
+      resume={resume}
       onSignOut={() => signOut({ callbackUrl: "/" })}
       profileHref="/account"
       settingsHref="/account"
