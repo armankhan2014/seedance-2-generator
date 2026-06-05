@@ -341,28 +341,16 @@ export default function ReferenceImageGuideModal({
           Don&rsquo;t show this every session
         </label>
 
-        {/* CTAs — primary "Got it" + secondary "Show full guide" link */}
+        {/* Got it CTA. The old "Show full guide ↗" secondary link
+            sent users to /demo/reference-guide which contained dev-
+            facing test notes and confused a real user (2026-06-05).
+            Link removed; the staging route /demo/reference-guide
+            was deleted in the same commit. */}
         <div style={{
           marginTop: 14,
           display: "flex",
-          flexWrap: "wrap",
-          gap: 10,
-          justifyContent: "space-between",
-          alignItems: "center",
+          justifyContent: "flex-end",
         }}>
-          <a
-            href="/demo/reference-guide"
-            target="_blank"
-            rel="noreferrer"
-            style={{
-              color: GREEN,
-              fontSize: 12.5,
-              fontWeight: 700,
-              textDecoration: "none",
-            }}
-          >
-            Show full guide ↗
-          </a>
           <button
             type="button"
             onClick={handleGotIt}
