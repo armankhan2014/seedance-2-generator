@@ -3,10 +3,15 @@ import { Inter } from "next/font/google";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import "./globals.css";
-import "@/components/eco-nav/eco-nav-tokens.css";
+// 2026-06-05 — Removed the EcosystemNav (the "VISUALSEFFECT" /
+// ✦credits / ⊞ apps / avatar dropdown strip that sat above the
+// SeedanceStudio Navbar). Stacking the two navbars made auth state
+// render twice ("dual login"). Original <Navbar /> is now the sole
+// top bar. The eco-nav module + its CSS tokens + AppsPanelProvider
+// + SeedanceEcosystemNav wrapper still live in src/components/eco-
+// nav/ — kept on disk in case we want a unified bar back as a
+// single replacement (not stacked) later.
 import { Providers } from "@/components/Providers";
-import { AppsPanelProvider } from "@/components/eco-nav/AppsPanelContext";
-import SeedanceEcosystemNav from "@/components/eco-nav/SeedanceEcosystemNav";
 import Navbar from "@/components/saas/Navbar";
 import SignInModal from "@/components/saas/SignInModal";
 import MobileBottomNav from "@/components/saas/MobileBottomNav";
@@ -91,16 +96,15 @@ export default async function RootLayout({ children }) {
       </head>
       <body className={inter.className} style={{ background: "#0a0a0a", color: "#FFFFFF" }}>
         <Providers session={session}>
-          {/* Universal ecosystem strip — same component as
-              community.visualseffect.com, NextAuth-backed wrapper.
-              Sits above the existing Seedance Navbar (which keeps
-              its role as the in-app section nav). */}
-          <AppsPanelProvider>
-            <SeedanceEcosystemNav />
-            <Suspense fallback={null}>
-              <Navbar />
-            </Suspense>
-            {children}
+          {/* Single top navbar — the long-standing SeedanceStudio
+              bar with Generate / Gallery / Pricing / Edits / Music
+              / Community + Contact Us + Sign In + avatar. The
+              short-lived stacked EcosystemNav strip was removed on
+              2026-06-05 because it duplicated the auth state. */}
+          <Suspense fallback={null}>
+            <Navbar />
+          </Suspense>
+          {children}
           {/* Mobile bottom nav — mirrors community's bar so users keep
               their bearings across the subdomain. Pure server component,
               zero runtime JS. Auto-hides above 720px. */}
@@ -114,7 +118,6 @@ export default async function RootLayout({ children }) {
           {/* Capacitor bridge — back-button, push registration, app
               state events. No-op in regular browsers. */}
           <CapacitorBridge />
-          </AppsPanelProvider>
         </Providers>
       </body>
     </html>
