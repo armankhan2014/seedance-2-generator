@@ -37,10 +37,19 @@ const GAP_MS_MIN_DESKTOP = 30_000;
 const GAP_MS_MAX_DESKTOP = 60_000;
 const GAP_MS_MIN_MOBILE  = 60_000;
 const GAP_MS_MAX_MOBILE  = 90_000;
-const SHOW_DURATION_MS   = 6_000;
+const SHOW_DURATION_DESKTOP_MS = 6_000;
+const SHOW_DURATION_MOBILE_MS  = 5_000;   // a beat shorter — mobile attention is fast
 const SESSION_CAP_DESKTOP = 10;
 const SESSION_CAP_MOBILE  = 8;
 const DISMISS_COOLDOWN_MS = 30 * 60_000;       // 30 min after manual ×
+// Phone polish:
+//   • Don't spawn a popup while the user is mid-scroll — would feel
+//     like the page is fighting them. SCROLL_PAUSE_MS is how long we
+//     wait after the last scroll event before resuming the timer.
+//   • Swipe-down threshold for touch-dismiss: 50 px of downward
+//     finger travel triggers the slide-out animation.
+const SCROLL_PAUSE_MS    = 800;
+const SWIPE_DISMISS_PX   = 50;
 
 // localStorage keys
 const LS_SHOWN_KEY      = "seedance_shown_popup_users";
@@ -171,6 +180,9 @@ export default function SocialProofPopup() {
   const pathname = usePathname();
   const [current, setCurrent] = useState(null);   // currently-rendered user (or null)
   const [exiting, setExiting] = useState(false);  // slide-out animation flag
+  // Phone polish — track swipe-down progress so we can pull the
+  // popup down with the finger before committing to a dismiss.
+  const [touchDeltaY, setTouchDeltaY] = useState(0);
 
   // Mutable bookkeeping — refs so we never re-render needlessly.
   const queueRef    = useRef([]);
@@ -179,6 +191,10 @@ export default function SocialProofPopup() {
   const timerRef    = useRef(null);
   const fetchedRef  = useRef(false);
   const mountedAtRef = useRef(0);
+  // Mobile: defer popup spawning while the user is mid-scroll.
+  const lastScrollAtRef = useRef(0);
+  // Mobile: touch-tracking for swipe-to-dismiss.
+  const touchStartYRef = useRef(null);
 
   const allowedHere = shouldShowOnPath(pathname);
 
@@ -190,10 +206,17 @@ export default function SocialProofPopup() {
     if (isDisabled()) return;
 
     mountedAtRef.current = Date.now();
-    const mobile  = isMobile();
-    const cap     = mobile ? SESSION_CAP_MOBILE : SESSION_CAP_DESKTOP;
-    const gapMin  = mobile ? GAP_MS_MIN_MOBILE : GAP_MS_MIN_DESKTOP;
-    const gapMax  = mobile ? GAP_MS_MAX_MOBILE : GAP_MS_MAX_DESKTOP;
+    const mobile     = isMobile();
+    const cap        = mobile ? SESSION_CAP_MOBILE : SESSION_CAP_DESKTOP;
+    const gapMin     = mobile ? GAP_MS_MIN_MOBILE : GAP_MS_MIN_DESKTOP;
+    const gapMax     = mobile ? GAP_MS_MAX_MOBILE : GAP_MS_MAX_DESKTOP;
+    const duration   = mobile ? SHOW_DURATION_MOBILE_MS : SHOW_DURATION_DESKTOP_MS;
+
+    // Mobile: track scroll activity so we can hold popups while the
+    // user is actively scrolling — popping in mid-swipe feels like
+    // the page is fighting them.
+    const onScroll = () => { lastScrollAtRef.current = Date.now(); };
+    if (mobile) window.addEventListener("scroll", onScroll, { passive: true });
 
     const fetchQueue = async () => {
       if (fetchedRef.current) return queueRef.current;
@@ -215,6 +238,15 @@ export default function SocialProofPopup() {
 
     const showNext = async () => {
       if (countRef.current >= cap) return;
+      // Phone: defer if user is mid-scroll. Re-check every 250 ms
+      // until they pause for at least SCROLL_PAUSE_MS, then proceed.
+      if (mobile) {
+        const sinceScroll = Date.now() - lastScrollAtRef.current;
+        if (sinceScroll < SCROLL_PAUSE_MS) {
+          timerRef.current = window.setTimeout(showNext, 250);
+          return;
+        }
+      }
       const q = queueRef.current.length > 0 ? queueRef.current : await fetchQueue();
       if (!q || q.length === 0) return;
       // Find the next un-shown one (defensive — readShownIds may have
@@ -243,17 +275,18 @@ export default function SocialProofPopup() {
       appendShownId(next.id);
       trackShown(next.id);
 
-      // Auto-dismiss after SHOW_DURATION_MS.
+      // Auto-dismiss after the device-appropriate duration.
       timerRef.current = window.setTimeout(() => {
         setExiting(true);
         // Wait for slide-out animation, then schedule the next.
         window.setTimeout(() => {
           setCurrent(null);
+          setTouchDeltaY(0);
           if (countRef.current < cap) {
             timerRef.current = window.setTimeout(showNext, rand(gapMin, gapMax));
           }
         }, 260);
-      }, SHOW_DURATION_MS);
+      }, duration);
     };
 
     // First popup delay.
@@ -261,6 +294,7 @@ export default function SocialProofPopup() {
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
+      if (mobile) window.removeEventListener("scroll", onScroll);
     };
   }, [allowedHere]);
 
@@ -269,7 +303,37 @@ export default function SocialProofPopup() {
     if (timerRef.current) clearTimeout(timerRef.current);
     setExiting(true);
     setDismissCooldown();
-    window.setTimeout(() => setCurrent(null), 260);
+    window.setTimeout(() => { setCurrent(null); setTouchDeltaY(0); }, 260);
+  };
+
+  // ── Touch handlers — swipe DOWN to dismiss on phone ────────────
+  // The popup sits at the bottom of the viewport on phone, so the
+  // most natural dismiss gesture is a downward swipe (Tinder /
+  // banking app pattern). Tracks finger Y delta; commits the
+  // dismiss once the user clears SWIPE_DISMISS_PX.
+  const onTouchStart = (e) => {
+    const t = e.touches?.[0];
+    if (!t) return;
+    touchStartYRef.current = t.clientY;
+  };
+  const onTouchMove = (e) => {
+    const startY = touchStartYRef.current;
+    if (startY == null) return;
+    const t = e.touches?.[0];
+    if (!t) return;
+    const dy = Math.max(0, t.clientY - startY); // only track downward
+    setTouchDeltaY(dy);
+  };
+  const onTouchEnd = () => {
+    if (touchStartYRef.current == null) return;
+    const dy = touchDeltaY;
+    touchStartYRef.current = null;
+    if (dy >= SWIPE_DISMISS_PX) {
+      handleDismiss();
+    } else {
+      // Not enough — spring back to rest.
+      setTouchDeltaY(0);
+    }
   };
 
   if (!allowedHere || !current) return null;
@@ -277,6 +341,16 @@ export default function SocialProofPopup() {
   const profileHref = current.username ? `/u/${current.username}` : "/";
   const initials = (current.name || "")
     .split(/\s+/).map((s) => s[0]).join("").slice(0, 2).toUpperCase() || "·";
+
+  // Live translate Y — combines the slide-out animation flag with
+  // the in-progress swipe-down delta so the popup follows the
+  // finger before either committing to dismiss or springing back.
+  // Opacity fades proportionally to the swipe so the affordance is
+  // visible without surprising the user with a sudden vanish.
+  const swipeY = exiting ? 120 : touchDeltaY;
+  const swipeOpacity = exiting
+    ? 0
+    : Math.max(0, 1 - touchDeltaY / 160);
 
   return (
     <div
@@ -287,6 +361,10 @@ export default function SocialProofPopup() {
         zIndex: 70,
         left: 16,
         right: 16,
+        // Sit above the MobileBottomNav on phone (which is ~70 px
+        // + safe-area-inset). The CSS @media block below pushes
+        // bottom up on small screens; desktop keeps the 16 px
+        // anchor.
         bottom: 16,
         maxWidth: 340,
         margin: 0,
@@ -297,6 +375,9 @@ export default function SocialProofPopup() {
       <a
         href={profileHref}
         onClick={() => trackClicked(current.id)}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
         style={{
           display: "flex",
           alignItems: "center",
@@ -313,9 +394,16 @@ export default function SocialProofPopup() {
           boxShadow:
             "0 18px 40px rgba(0,0,0,0.45), 0 0 0 1px rgba(217,255,0,0.04)",
           fontFamily: "Inter, system-ui, sans-serif",
-          transform: exiting ? "translateY(120%)" : "translateY(0)",
-          opacity:   exiting ? 0 : 1,
-          transition: "transform 260ms cubic-bezier(0.2,0.9,0.2,1), opacity 260ms ease-out",
+          transform: `translateY(${swipeY === 120 ? "120%" : `${swipeY}px`})`,
+          opacity:   swipeOpacity,
+          // Only animate when committing to a state (exiting / open) —
+          // mid-swipe we want 1:1 finger tracking, no easing lag.
+          transition: touchDeltaY > 0
+            ? "none"
+            : "transform 260ms cubic-bezier(0.2,0.9,0.2,1), opacity 260ms ease-out",
+          // Prevent the browser from interpreting the vertical swipe
+          // as a page scroll — we want it to dismiss the popup.
+          touchAction: "pan-y",
         }}
       >
         {/* Avatar */}
@@ -373,20 +461,23 @@ export default function SocialProofPopup() {
           </div>
         </div>
 
-        {/* Close */}
+        {/* Close — sized to iOS HIG-friendly 36×36 hit area
+            (the visible × stays small but the touch target is
+            comfortable). The +grip dot row above the avatar is the
+            implicit swipe-down affordance on phone. */}
         <button
           type="button"
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDismiss(); }}
           aria-label="Dismiss"
           style={{
             flexShrink: 0,
-            width: 24,
-            height: 24,
+            width: 36,
+            height: 36,
             borderRadius: "50%",
             background: "rgba(255,255,255,0.06)",
             border: "none",
-            color: "rgba(255,255,255,0.65)",
-            fontSize: 14,
+            color: "rgba(255,255,255,0.75)",
+            fontSize: 18,
             lineHeight: 1,
             cursor: "pointer",
             display: "inline-flex",
@@ -399,10 +490,17 @@ export default function SocialProofPopup() {
         </button>
       </a>
 
-      {/* Desktop positioning: bottom-LEFT (not centred) per spec.
-          On mobile we keep the full-width-bottom feel — left/right
-          stay 16 px in the anchor above. */}
+      {/* Two-mode position:
+            • Desktop (>=641px) — bottom-LEFT per spec, 16 px anchor
+            • Mobile (<641px)   — full-width bottom, lifted above the
+              MobileBottomNav (which is ~70 px tall + safe-area-inset)
+              so the popup never overlaps the navigation pills */}
       <style>{`
+        @media (max-width: 640px) {
+          .social-proof-anchor {
+            bottom: calc(env(safe-area-inset-bottom, 0px) + 84px) !important;
+          }
+        }
         @media (min-width: 641px) {
           .social-proof-anchor {
             right: auto !important;
