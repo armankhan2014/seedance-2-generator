@@ -15,6 +15,7 @@ import { Providers } from "@/components/Providers";
 import Navbar from "@/components/saas/Navbar";
 import SignInModal from "@/components/saas/SignInModal";
 import MobileBottomNav from "@/components/saas/MobileBottomNav";
+import SocialProofPopup from "@/components/saas/SocialProofPopup";
 // Tawk.to disabled 2026-05-22 — Arman no longer wants the live chat widget
 // on seedance.visualseffect.com. Component file at src/components/TawkTo.jsx
 // kept for now in case it's re-enabled later; remove that file too if you
@@ -118,6 +119,10 @@ export default async function RootLayout({ children }) {
           {/* Capacitor bridge — back-button, push registration, app
               state events. No-op in regular browsers. */}
           <CapacitorBridge />
+          {/* Social-proof popup — bottom-left toast cycling through
+              recent signups (real first, dummies as filler).
+              Self-throttles, self-dedupes via localStorage + IP. */}
+          <SocialProofPopup />
         </Providers>
       </body>
     </html>

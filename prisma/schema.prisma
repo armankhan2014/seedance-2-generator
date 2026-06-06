@@ -139,6 +139,12 @@ model User {
   musicTracks       MusicTrack[]
   creditTxns        CreditTransaction[]
   editorProjects    EditorProject[]
+  // Social-proof popup tracking (Phase 1 social-proof MVP, added
+  // 2026-06-06). One row per (visitorIp, userId) combination — when
+  // a popup featuring this user is served to a given IP, a row
+  // lands here, and that IP never sees this user again. CASCADE so
+  // dummy cleanup doesn't orphan tracker rows.
+  socialProofShowings SocialProofShown[]
 
   // Daily-signups dashboard query is the hot read path
   // (SELECT WHERE createdAt >= NOW() - INTERVAL '24 hours' ORDER BY createdAt DESC)
@@ -147,6 +153,30 @@ model User {
   @@index([country])
   @@index([signupSource])
   @@index([referredById])
+}
+
+// Social-proof popup tracking. Append-only log of "this visitor IP
+// saw a popup for this user". The (visitorIp, shownUserId) pair is
+// the no-repeat key — once a row exists, that user is excluded from
+// every future popup served to that IP. Insert uses ON CONFLICT DO
+// NOTHING so concurrent shows don't double-write.
+//
+// This handles the server-side dedupe layer. The browser layer
+// (localStorage `seedance_shown_popup_users`) catches same-device
+// revisits even on mobile IP rotation. Combined: never-repeat
+// across cleared cookies, incognito, switched browsers, etc.
+//
+// Schema lives in
+// prisma/manual-migrations/2026-06-06-add-social-proof-shown.sql.
+model SocialProofShown {
+  id          String   @id @default(cuid())
+  visitorIp   String
+  shownUserId String
+  shownAt     DateTime @default(now()) @db.Timestamptz
+  user        User     @relation(fields: [shownUserId], references: [id], onDelete: Cascade)
+
+  @@unique([visitorIp, shownUserId], map: "SocialProofShown_ip_user_unique")
+  @@index([visitorIp, shownAt(sort: Desc)], map: "SocialProofShown_ip_time_idx")
 }
 
 // Per-user social-link row. Mirrors the canonical definition that
