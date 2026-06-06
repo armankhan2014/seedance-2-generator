@@ -13,6 +13,7 @@
 import { useEffect, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
 import EcosystemNav from "./EcosystemNav";
+import UniversalNotificationsBell from "./UniversalNotificationsBell";
 
 export default function SeedanceEcosystemNav({ children = null }) {
   const { data: session, status } = useSession();
@@ -86,9 +87,9 @@ export default function SeedanceEcosystemNav({ children = null }) {
       profileHref="/account"
       settingsHref="/account"
       signInHref="/signin"
-      // Seedance has no in-app bell yet — wrapper omits and the strip
-      // collapses gracefully. Hook up when /api/notifications lands.
-      bell={null}
+      // Universal bell polls community cross-origin so the same
+      // notifications show up here as on community itself.
+      bell={<UniversalNotificationsBell />}
       avatar={
         userObj?.image ? (
           // eslint-disable-next-line @next/next/no-img-element
