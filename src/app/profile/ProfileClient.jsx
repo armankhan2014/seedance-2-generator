@@ -172,9 +172,10 @@ export default function ProfilePage() {
       website:   "",
     },
     privacy: {
-      profile:     "public",          // public | followers | private
-      hideStats:   false,
-      hideSocials: false,
+      profile:           "public",          // public | followers | private
+      hideStats:         false,
+      hideSocials:       false,
+      socialProofOptOut: false,             // Phase 2 — hide from popup pool
     },
     notifications: {
       emailReplies:    true,
@@ -229,6 +230,7 @@ export default function ProfilePage() {
       privacy: {
         ...d.privacy,
         profile: profile?.isPrivate ? "private" : "public",
+        socialProofOptOut: profile?.socialProofOptOut ?? d.privacy.socialProofOptOut,
       },
     }));
   }, [profile, session, derivedFirst, derivedLast, realName, realEmail, realImage]);
@@ -422,6 +424,7 @@ export default function ProfilePage() {
           location:          draft.location,
           pronouns:          draft.pronouns,
           profileVisibility: draft.privacy.profile,
+          socialProofOptOut: draft.privacy.socialProofOptOut,
           // Flatten { instagram: "armankhan", tiktok: "", ... } →
           // [{ platform: "instagram", handle: "armankhan" }, ...].
           // Empty handles are dropped server-side; sending the full
@@ -1627,6 +1630,11 @@ function EditProfileDrawer({
               label="Hide social links from public view"
               checked={draft.privacy.hideSocials}
               onChange={(v) => set("privacy.hideSocials", v)}
+            />
+            <CheckboxField
+              label="Don't show me in social-proof popups"
+              checked={draft.privacy.socialProofOptOut}
+              onChange={(v) => set("privacy.socialProofOptOut", v)}
             />
           </Section>
 

@@ -145,6 +145,10 @@ model User {
   // lands here, and that IP never sees this user again. CASCADE so
   // dummy cleanup doesn't orphan tracker rows.
   socialProofShowings SocialProofShown[]
+  // Phase 2 — per-user opt-out from appearing in social-proof
+  // popups. Default false so existing users opt-in by absence;
+  // toggle is surfaced in the Edit Profile Privacy section.
+  socialProofOptOut Boolean @default(false)
 
   // Daily-signups dashboard query is the hot read path
   // (SELECT WHERE createdAt >= NOW() - INTERVAL '24 hours' ORDER BY createdAt DESC)
@@ -173,10 +177,25 @@ model SocialProofShown {
   visitorIp   String
   shownUserId String
   shownAt     DateTime @default(now()) @db.Timestamptz
+  // Phase 2 — set true when the visitor clicks the popup.
+  // Powers CTR in the admin dashboard.
+  clicked     Boolean  @default(false)
   user        User     @relation(fields: [shownUserId], references: [id], onDelete: Cascade)
 
   @@unique([visitorIp, shownUserId], map: "SocialProofShown_ip_user_unique")
   @@index([visitorIp, shownAt(sort: Desc)], map: "SocialProofShown_ip_time_idx")
+}
+
+// Phase 2 — single-row runtime config for the social-proof system.
+// Id is locked to 1 (an INSERT … ON CONFLICT seed runs in the
+// migration). Admin /admin/social-proof writes to this row.
+//   enabled    — master kill switch (false → queue returns [])
+//   sourceMode — "real" | "dummy" | "both" (default both)
+model SocialProofConfig {
+  id         Int      @id
+  enabled    Boolean  @default(true)
+  sourceMode String   @default("both")
+  updatedAt  DateTime @default(now()) @updatedAt @db.Timestamptz
 }
 
 // Per-user social-link row. Mirrors the canonical definition that

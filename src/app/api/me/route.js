@@ -228,6 +228,14 @@ export async function PATCH(req) {
       }
       updates.isPrivate = body.isPrivate;
     }
+    // Phase 2 social-proof — per-user opt-out from appearing in the
+    // bottom-left popups across seedance.
+    if ("socialProofOptOut" in body) {
+      if (typeof body.socialProofOptOut !== "boolean") {
+        return NextResponse.json({ error: "socialProofOptOut must be boolean" }, { status: 400 });
+      }
+      updates.socialProofOptOut = body.socialProofOptOut;
+    }
     // Username (@handle) change — special-cased because of the
     // 30-day cooldown + uniqueness check + casing rules. The client
     // can call /api/me/username/availability for live feedback, but
@@ -437,6 +445,9 @@ const BASE_SELECT = {
   // can change again" hint in the Edit-drawer field.
   username:          true,
   usernameChangedAt: true,
+  // Phase 2 social-proof opt-out — read into the Edit drawer
+  // privacy section.
+  socialProofOptOut: true,
   // Linked OAuth providers (Phase 3d). Names only — never expose
   // access_token, refresh_token, id_token, or oauth_token_secret.
   accounts: {

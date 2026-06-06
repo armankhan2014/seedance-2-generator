@@ -72,6 +72,35 @@ export function invalidateIpCache(ip) {
   ipCache.delete(ip);
 }
 
+// ── Single-row admin config — Phase 2 ─────────────────────────────
+// One-minute memo so the admin panel save lands in queue behaviour
+// fast without hammering Postgres on every request.
+let configCache = { row: null, fetchedAt: 0 };
+const CONFIG_TTL_MS = 60_000;
+
+export async function getConfig() {
+  const now = Date.now();
+  if (configCache.row && now - configCache.fetchedAt < CONFIG_TTL_MS) {
+    return configCache.row;
+  }
+  let row;
+  try {
+    row = await prisma.socialProofConfig.findUnique({ where: { id: 1 } });
+  } catch {
+    row = null;
+  }
+  // Safe default if the row was never seeded — keeps the popup
+  // working as if Phase 2 isn't on yet.
+  if (!row) row = { id: 1, enabled: true, sourceMode: "both" };
+  configCache = { row, fetchedAt: now };
+  return row;
+}
+
+// Invalidate after the admin saves new config.
+export function invalidateConfigCache() {
+  configCache = { row: null, fetchedAt: 0 };
+}
+
 // ── Candidate pools ───────────────────────────────────────────────
 // Cached at module scope so a busy homepage gets one round-trip per
 // minute instead of per-request. Real signups TTL is shorter than
@@ -104,13 +133,16 @@ async function getRealCandidates() {
   const now = Date.now();
   if (realCache.rows && now - realCache.fetchedAt < REAL_TTL_MS) return realCache.rows;
   // Real signups in the last 24 h. Pull more than we need so
-  // post-dedupe we still have a healthy queue.
+  // post-dedupe we still have a healthy queue. Opted-out users
+  // never enter the candidate pool — they're filtered at the
+  // source so they're never accidentally cached.
   const since = new Date(now - 24 * 60 * 60 * 1000);
   const rows = await prisma.user.findMany({
     where: {
-      isDummy:   false,
-      createdAt: { gte: since },
-      name:      { not: null },
+      isDummy:           false,
+      socialProofOptOut: false,
+      createdAt:         { gte: since },
+      name:              { not: null },
     },
     select:  POPUP_SELECT,
     orderBy: { createdAt: "desc" },
@@ -130,15 +162,23 @@ async function getDummyCandidates() {
   // back to first-name-only if location is missing).
   const rows = await prisma.user.findMany({
     where: {
-      isDummy: true,
-      name:    { not: null },
-      image:   { not: null },
+      isDummy:           true,
+      socialProofOptOut: false,
+      name:              { not: null },
+      image:             { not: null },
     },
     select: POPUP_SELECT,
     take:   200,
   });
   dummyCache = { rows, fetchedAt: now };
   return rows;
+}
+
+// Public — invalidate candidate caches when an admin changes the
+// source mode (so the new filter lands on the next request).
+export function invalidateCandidateCaches() {
+  realCache  = { rows: null, fetchedAt: 0 };
+  dummyCache = { rows: null, fetchedAt: 0 };
 }
 
 // ── Fisher-Yates ─────────────────────────────────────────────────
@@ -161,9 +201,18 @@ function shuffle(arr) {
  * @returns array of popup-shaped objects
  */
 export async function getPopupQueue({ ip, selfUserId = null, limit = 15 } = {}) {
+  const cfg = await getConfig();
+  // Master kill switch — admin disabled the system entirely.
+  if (!cfg.enabled) return [];
+
+  // Skip fetches the source mode doesn't need. Saves Postgres
+  // round-trips when the admin runs "real only" / "dummy only".
+  const wantReal  = cfg.sourceMode !== "dummy";
+  const wantDummy = cfg.sourceMode !== "real";
+
   const [real, dummies, shownIds] = await Promise.all([
-    getRealCandidates(),
-    getDummyCandidates(),
+    wantReal  ? getRealCandidates()  : Promise.resolve([]),
+    wantDummy ? getDummyCandidates() : Promise.resolve([]),
     getShownIdsForIp(ip),
   ]);
 
@@ -214,5 +263,22 @@ export async function trackShown({ ip, userId }) {
     }
   } finally {
     invalidateIpCache(ip);
+  }
+}
+
+/**
+ * Mark the (ip, userId) row as clicked. No-op if the row doesn't
+ * exist yet (the click somehow beat the track call) — we never
+ * want a missed track to throw a 500 on the click side.
+ */
+export async function markClicked({ ip, userId }) {
+  if (!ip || !userId) return;
+  try {
+    await prisma.socialProofShown.updateMany({
+      where: { visitorIp: ip, shownUserId: userId },
+      data:  { clicked: true },
+    });
+  } catch (err) {
+    console.warn("[social-proof] markClicked:", err?.message);
   }
 }

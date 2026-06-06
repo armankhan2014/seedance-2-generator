@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 //
 // Studio Admin dashboard — production. Client component that receives
 // real Prisma data via initialData from page.jsx. The 8-tab UI ported
@@ -108,12 +109,12 @@ function Header() {
         gap: 12, flexWrap: "wrap",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <a href="/" style={{
+          <Link href="/" style={{
             width: 36, height: 36, borderRadius: 8,
             background: C.accentSoft, border: `1px solid ${C.borderHover}`,
             display: "flex", alignItems: "center", justifyContent: "center",
             fontSize: 18, textDecoration: "none",
-          }} title="Back to site">🎬</a>
+          }} title="Back to site">🎬</Link>
           <div>
             <div style={{ fontSize: 12, fontWeight: 800, color: C.accent, letterSpacing: "0.18em", textTransform: "uppercase" }}>
               Studio Admin
@@ -148,7 +149,31 @@ function Header() {
             }}
             title="Daily signups tracker (location, source, IP)"
           >
-            <span aria-hidden="true">📊</span> Today's Signups
+            <span aria-hidden="true">📊</span> Today&rsquo;s Signups
+          </a>
+          {/* Phase 2 social-proof admin control panel. Same lime
+              pill style so the three shortcuts (Signups, Social
+              Proof, Backup Now) read as a row. */}
+          <a
+            href="/admin/social-proof"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "8px 14px",
+              borderRadius: 999,
+              background: "transparent",
+              color: C.accent,
+              border: `1px solid ${C.accent}`,
+              fontSize: 12,
+              fontWeight: 800,
+              letterSpacing: "0.02em",
+              textDecoration: "none",
+              whiteSpace: "nowrap",
+            }}
+            title="Social-proof popup controls + stats + reset"
+          >
+            <span aria-hidden="true">📣</span> Social Proof
           </a>
           <BackupNowButton />
         </div>

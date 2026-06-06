@@ -96,11 +96,19 @@ function setDismissCooldown() {
 
 // Track call — sendBeacon with fetch fallback so it never blocks.
 function trackShown(userId) {
+  return beacon("/api/social-proof/track", userId);
+}
+// Phase 2 — when the visitor clicks the popup, mark the row as
+// clicked so the admin dashboard can compute CTR.
+function trackClicked(userId) {
+  return beacon("/api/social-proof/click", userId);
+}
+function beacon(url, userId) {
   if (!userId) return;
   try {
     const blob = new Blob([JSON.stringify({ userId })], { type: "application/json" });
-    if (navigator.sendBeacon?.("/api/social-proof/track", blob)) return;
-    fetch("/api/social-proof/track", {
+    if (navigator.sendBeacon?.(url, blob)) return;
+    fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ userId }),
@@ -268,6 +276,7 @@ export default function SocialProofPopup() {
     >
       <a
         href={profileHref}
+        onClick={() => trackClicked(current.id)}
         style={{
           display: "flex",
           alignItems: "center",
