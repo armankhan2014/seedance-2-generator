@@ -28,8 +28,11 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 
 // ── Tuning constants ─────────────────────────────────────────────
-const FIRST_DELAY_MS_MIN = 5_000;
-const FIRST_DELAY_MS_MAX = 10_000;
+// Tightened first-popup delay on 2026-06-06 (was 5-10 s) so visitors
+// who land directly on /pricing or /u/[handle] see the social proof
+// before they bounce. Subsequent gap stays unchanged.
+const FIRST_DELAY_MS_MIN = 3_000;
+const FIRST_DELAY_MS_MAX = 7_000;
 const GAP_MS_MIN_DESKTOP = 30_000;
 const GAP_MS_MAX_DESKTOP = 60_000;
 const GAP_MS_MIN_MOBILE  = 60_000;
@@ -44,12 +47,29 @@ const LS_SHOWN_KEY      = "seedance_shown_popup_users";
 const LS_DISABLE_KEY    = "seedance_disable_social_proof";
 const LS_DISMISS_KEY    = "seedance_social_proof_dismissed_until";
 
-// Routes where the popup makes sense. Skip everything else (admin,
-// API, profile editor, generation flows where the user is mid-task).
-const ALLOWED_PATHS = ["/", "/pricing", "/gallery"];
+// Routes where the popup makes sense. Two match styles:
+//   • EXACT paths     — match the pathname verbatim
+//   • PREFIX patterns — match any path that starts with the prefix
+//                       (lets us cover /u/<any-handle> with one entry)
+//
+// Skip everything not in either list — admin, API, profile editor,
+// settings, the generation/edits/music studios where the user is
+// mid-task and a popup would feel intrusive.
+const ALLOWED_PATHS = new Set([
+  "/",
+  "/pricing",
+  "/gallery",
+  "/creations",
+  "/privacy",
+  "/terms",
+]);
+const ALLOWED_PREFIXES = [
+  "/u/",  // public profile pages — social proof reads natural here
+];
 function shouldShowOnPath(pathname) {
   if (!pathname) return false;
-  return ALLOWED_PATHS.includes(pathname);
+  if (ALLOWED_PATHS.has(pathname)) return true;
+  return ALLOWED_PREFIXES.some((p) => pathname.startsWith(p));
 }
 
 function isMobile() {
