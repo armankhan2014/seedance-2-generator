@@ -183,6 +183,23 @@ export default function SocialProofPopup() {
   // Phone polish — track swipe-down progress so we can pull the
   // popup down with the finger before committing to a dismiss.
   const [touchDeltaY, setTouchDeltaY] = useState(0);
+  // Live mobile flag — drives the inline `bottom` value so we can
+  // skip the CSS @media cascade entirely. The @media rule in the
+  // style block below stays as a defence-in-depth fallback for
+  // browsers where matchMedia is gated.
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 640px)");
+    const sync = () => setMobile(mq.matches);
+    sync();
+    if (mq.addEventListener) mq.addEventListener("change", sync);
+    else mq.addListener?.(sync);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", sync);
+      else mq.removeListener?.(sync);
+    };
+  }, []);
 
   // Mutable bookkeeping — refs so we never re-render needlessly.
   const queueRef    = useRef([]);
@@ -358,14 +375,19 @@ export default function SocialProofPopup() {
       aria-live="polite"
       style={{
         position: "fixed",
-        zIndex: 70,
+        // Above the MobileBottomNav (which is z-index ~50 with
+        // safe-area padding). Bump up the popup so it sits over
+        // anything else in the corner.
+        zIndex: 90,
         left: 16,
         right: 16,
-        // Sit above the MobileBottomNav on phone (which is ~70 px
-        // + safe-area-inset). The CSS @media block below pushes
-        // bottom up on small screens; desktop keeps the 16 px
-        // anchor.
-        bottom: 16,
+        // Mobile: clear the bottom nav + iPhone home indicator.
+        // 84 px = MobileBottomNav (~70 px) + small breathing gap;
+        // env() adds the home-indicator inset on iPhone X+.
+        // Desktop: 16 px from the bottom-left corner.
+        bottom: mobile
+          ? "calc(env(safe-area-inset-bottom, 0px) + 84px)"
+          : 16,
         maxWidth: 340,
         margin: 0,
         pointerEvents: "none",
