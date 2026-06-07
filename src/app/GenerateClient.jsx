@@ -344,21 +344,30 @@ export default function Home() {
   const [showBuilder, setShowBuilder] = useState(false);
   const [showImageBuilder, setShowImageBuilder] = useState(false);
   const [aspectRatio, setAspectRatio] = useState(ASPECT_RATIOS[0].value);
-  // Pre-fill from sessionStorage (in-app "Use This Prompt") AND from
-  // URL query (cross-origin "Use this prompt" coming in from
-  // community.visualseffect.com/prompts/<id>). The URL receiver is
-  // why this needs to fire AFTER aspectRatio's useState is declared
-  // — community sends ?ratio=16:9 etc and we need setAspectRatio
-  // to be in scope. URL params win when both are present.
+  // Pre-fill from three sources, first-wins:
+  //   1. ?promptId=<id> — community "Use this prompt" handoff (NEW).
+  //      We fetch the full prompt body from
+  //      community.visualseffect.com/api/prompts/<id> (CORS-enabled)
+  //      so the URL stays short. The old approach embedded the entire
+  //      prompt in the URL, which triggered URI_TOO_LONG at Vercel's
+  //      edge for any prompt above ~8KB. Caught 2026-06-07.
+  //   2. ?prompt= — legacy short-form direct embed. Still honoured
+  //      so older shared links keep working.
+  //   3. sessionStorage('pendingPrompt') — in-app handoff.
+  // ?ratio= is read in parallel as a quick hint while the fetch lands.
   useEffect(() => {
+    let cancelled = false;
     let pendingPrompt = null;
     let pendingRatio = null;
+    let promptId = null;
     try {
       const sp = new URLSearchParams(window.location.search);
       const p = sp.get("prompt");
       const r = sp.get("ratio");
+      const id = sp.get("promptId");
       if (p) pendingPrompt = p;
       if (r) pendingRatio = r;
+      if (id) promptId = id;
     } catch {}
     if (!pendingPrompt) {
       try {
@@ -371,13 +380,37 @@ export default function Home() {
       setAspectRatio(pendingRatio);
     }
     try { sessionStorage.removeItem("pendingPrompt"); } catch {}
-    // Clean the URL so a reload doesn't re-prefill (and so the
-    // 50KB prompt doesn't sit in the address bar forever).
-    if (pendingPrompt || pendingRatio) {
+    // Clean the URL so a reload doesn't re-prefill.
+    if (pendingPrompt || pendingRatio || promptId) {
       try {
         window.history.replaceState({}, "", window.location.pathname);
       } catch {}
     }
+    // promptId fetch — only when the direct ?prompt= wasn't present.
+    // Best-effort: a failed fetch just leaves the textarea empty
+    // (or whatever the user starts typing); never throws to the UI.
+    if (promptId && !pendingPrompt) {
+      const ORIGIN =
+        process.env.NEXT_PUBLIC_COMMUNITY_ORIGIN ||
+        "https://community.visualseffect.com";
+      (async () => {
+        try {
+          const res = await fetch(
+            `${ORIGIN}/api/prompts/${encodeURIComponent(promptId)}`,
+            { credentials: "omit", mode: "cors" }
+          );
+          if (!res.ok || cancelled) return;
+          const data = await res.json();
+          const body = data?.prompt?.promptText;
+          const ratio = data?.prompt?.aspectRatio;
+          if (body) setPrompt(body);
+          if (ratio && ASPECT_RATIOS.some((a) => a.value === ratio)) {
+            setAspectRatio(ratio);
+          }
+        } catch {}
+      })();
+    }
+    return () => { cancelled = true; };
   }, []);
   const [resolution, setResolution] = useState(RESOLUTIONS[1].value); // 720p default
   const [duration, setDuration] = useState(DURATIONS[0].value);
