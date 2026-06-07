@@ -341,14 +341,44 @@ export default function Home() {
   const [mode, setMode] = useState("image-to-video");
   // Form State
   const [prompt, setPrompt] = useState("");
-  // Pre-fill prompt from sessionStorage (set by "Use This Prompt" button)
-  useEffect(() => {
-    const p = sessionStorage.getItem("pendingPrompt");
-    if (p) { setPrompt(p); sessionStorage.removeItem("pendingPrompt"); }
-  }, []);
   const [showBuilder, setShowBuilder] = useState(false);
   const [showImageBuilder, setShowImageBuilder] = useState(false);
   const [aspectRatio, setAspectRatio] = useState(ASPECT_RATIOS[0].value);
+  // Pre-fill from sessionStorage (in-app "Use This Prompt") AND from
+  // URL query (cross-origin "Use this prompt" coming in from
+  // community.visualseffect.com/prompts/<id>). The URL receiver is
+  // why this needs to fire AFTER aspectRatio's useState is declared
+  // — community sends ?ratio=16:9 etc and we need setAspectRatio
+  // to be in scope. URL params win when both are present.
+  useEffect(() => {
+    let pendingPrompt = null;
+    let pendingRatio = null;
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const p = sp.get("prompt");
+      const r = sp.get("ratio");
+      if (p) pendingPrompt = p;
+      if (r) pendingRatio = r;
+    } catch {}
+    if (!pendingPrompt) {
+      try {
+        const p = sessionStorage.getItem("pendingPrompt");
+        if (p) pendingPrompt = p;
+      } catch {}
+    }
+    if (pendingPrompt) setPrompt(pendingPrompt);
+    if (pendingRatio && ASPECT_RATIOS.some((a) => a.value === pendingRatio)) {
+      setAspectRatio(pendingRatio);
+    }
+    try { sessionStorage.removeItem("pendingPrompt"); } catch {}
+    // Clean the URL so a reload doesn't re-prefill (and so the
+    // 50KB prompt doesn't sit in the address bar forever).
+    if (pendingPrompt || pendingRatio) {
+      try {
+        window.history.replaceState({}, "", window.location.pathname);
+      } catch {}
+    }
+  }, []);
   const [resolution, setResolution] = useState(RESOLUTIONS[1].value); // 720p default
   const [duration, setDuration] = useState(DURATIONS[0].value);
   const [quality, setQuality] = useState(QUALITIES[0].value);
