@@ -1,4 +1,4 @@
-# Hourly Postgres ‚Üí R2 backup
+# Hourly Postgres ‚Äö√ú√≠ R2 backup
 #
 # Runs every hour at :00 UTC. Dumps the Neon database with pg_dump,
 # gzips it, uploads to your R2 bucket under db-backups/, then prunes
@@ -9,15 +9,15 @@
 #   - Daily:  the 00:00 UTC dump from each of the last 30 days
 #   - Monthly: the 1st-of-month 00:00 UTC dump from the last 12 months
 #
-# Secrets required (Settings ‚Üí Secrets and variables ‚Üí Actions):
+# Secrets required (Settings ‚Äö√ú√≠ Secrets and variables ‚Äö√ú√≠ Actions):
 #   DATABASE_URL          - Postgres connection string from Neon
 #   R2_ACCOUNT_ID         - Cloudflare account ID
 #   R2_ACCESS_KEY_ID      - R2 API token (read+write)
 #   R2_SECRET_ACCESS_KEY  - R2 API token secret
 #   R2_BUCKET_NAME        - R2 bucket to store backups in (can reuse the
-#                           production bucket ‚Äî backups go under db-backups/)
+#                           production bucket ‚Äö√Ñ√Æ backups go under db-backups/)
 #
-# Manual trigger: Actions tab ‚Üí "Hourly DB Backup" ‚Üí "Run workflow".
+# Manual trigger: Actions tab ‚Äö√ú√≠ "Hourly DB Backup" ‚Äö√ú√≠ "Run workflow".
 
 name: Hourly DB Backup
 
@@ -37,10 +37,22 @@ jobs:
 
     steps:
       - name: Install Postgres 17 client (must match Neon's server version)
+        # 2026-06-09 ‚Äî Workflow has been failing hourly with the old
+        # APT setup. ubuntu-latest moved to 24.04, which rejects the
+        # legacy `gpg --dearmor ‚Üí /etc/apt/trusted.gpg.d/` pattern
+        # plus the PostgreSQL project rotated their signing approach.
+        # Switching to the official quickstart script the upstream
+        # project documents:
+        #   https://wiki.postgresql.org/wiki/Apt
+        # apt.postgresql.org.sh registers the signed-by repo + key in
+        # the modern location and stays self-updating across Ubuntu
+        # version bumps.
         run: |
-          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/postgresql.gpg
+          set -euxo pipefail
           sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common
+          # The -y flag suppresses the interactive "create main cluster" prompt.
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
           sudo apt-get install -y -qq postgresql-client-17
           /usr/lib/postgresql/17/bin/pg_dump --version
 
@@ -50,15 +62,33 @@ jobs:
           TIMESTAMP=$(date -u +"%Y-%m-%d-%H%M")
           echo "value=$TIMESTAMP" >> "$GITHUB_OUTPUT"
 
-      - name: Dump database
+      - name: Dump database (with retry)
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
-          set -euo pipefail
-          /usr/lib/postgresql/17/bin/pg_dump --no-owner --no-acl --clean --if-exists "$DATABASE_URL" \
-            | gzip -9 \
-            > "/tmp/db-${{ steps.ts.outputs.value }}.sql.gz"
-          ls -lh "/tmp/db-${{ steps.ts.outputs.value }}.sql.gz"
+          # Verbose + fail-fast + propagate failures through the pipe.
+          set -euxo pipefail
+          OUT="/tmp/db-${{ steps.ts.outputs.value }}.sql.gz"
+          # Up to 3 attempts ‚Äî Neon can drop the connection mid-dump
+          # if the compute scales down. Sleep between tries.
+          for attempt in 1 2 3; do
+            echo "::group::pg_dump attempt $attempt"
+            if /usr/lib/postgresql/17/bin/pg_dump \
+                 --no-owner --no-acl --clean --if-exists \
+                 "$DATABASE_URL" | gzip -9 > "$OUT"; then
+              echo "::endgroup::"
+              break
+            fi
+            echo "::endgroup::"
+            echo "Attempt $attempt failed, waiting before retry..."
+            rm -f "$OUT"
+            sleep $((attempt * 10))
+            if [ "$attempt" = "3" ]; then
+              echo "::error::pg_dump failed after 3 attempts"
+              exit 1
+            fi
+          done
+          ls -lh "$OUT"
 
       - name: Upload to R2
         env:
