@@ -15,7 +15,7 @@
  */
 
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 const SECRET = process.env.INTERNAL_BRIDGE_SECRET;
 
