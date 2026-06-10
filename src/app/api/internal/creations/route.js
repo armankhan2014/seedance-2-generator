@@ -83,12 +83,16 @@ export async function GET(req) {
     // aggregator can concat across sources without further shaping.
     const items = rows.map((r) => {
       // Prefer the rendered video, fall back to the cover image when a
-      // creation is still processing.
+      // creation is still processing. Note: some legacy Seedance rows store
+      // the .mp4 URL in `imageUrl` (it predates the `videoFiles` column),
+      // so type detection has to look at the URL extension, not the field
+      // it came from.
       const videoUrl = Array.isArray(r.videoFiles) && r.videoFiles.length > 0 ? r.videoFiles[0] : null;
       const url      = videoUrl ?? r.imageUrl ?? "";
+      const isVideoExt = /\.(mp4|mov|webm|m4v)(\?|$)/i.test(url);
       return {
         id:           `seedance-${r.id}`,
-        type:         videoUrl ? "video" : "image",
+        type:         (videoUrl || isVideoExt) ? "video" : "image",
         url,
         prompt:       r.prompt ?? "",
         modelId:      "seedance-2",
