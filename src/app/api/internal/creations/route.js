@@ -33,26 +33,37 @@ export async function GET(req) {
   }
 
   const url = new URL(req.url);
-  // We accept either a Seedance-internal userId (cuid) OR the user's email
-  // (Studio passes Clerk's email since Clerk userIds don't match Seedance cuids).
+  // Lookup keys, in priority order:
+  //   ?userId=<cuid>   — direct Seedance lookup
+  //   ?emails=a,b,c    — comma-separated list (Studio uses this for Clerk users
+  //                      who have multiple email addresses)
+  //   ?email=<single>  — back-compat single-email form
   const userId = (url.searchParams.get("userId") ?? "").trim();
-  const email  = (url.searchParams.get("email") ?? "").trim().toLowerCase();
-  if (!userId && !email) {
-    return NextResponse.json({ error: "userId or email required" }, { status: 400 });
+  const emailsParam = url.searchParams.get("emails") ?? url.searchParams.get("email") ?? "";
+  const emails = emailsParam
+    .toLowerCase()
+    .split(",")
+    .map((e) => e.trim())
+    .filter(Boolean);
+  if (!userId && emails.length === 0) {
+    return NextResponse.json({ error: "userId or email/emails required" }, { status: 400 });
   }
   const rawLimit = Number.parseInt(url.searchParams.get("limit") ?? "50", 10);
   const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 50;
   const since = Number.parseInt(url.searchParams.get("since") ?? "", 10);
 
   try {
-    // Resolve email → Seedance user.id so the Creation query can hit its
+    // Resolve email(s) → Seedance user.id so the Creation query can hit its
     // `userId` index. No-op when caller already supplied a Seedance userId.
     let resolvedUserId = userId;
-    if (!resolvedUserId && email) {
-      const u = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (!resolvedUserId && emails.length > 0) {
+      const u = await prisma.user.findFirst({
+        where: { email: { in: emails } },
+        select: { id: true },
+      });
       if (!u) {
-        // No Seedance account for this email — return empty rather than 404
-        // so the aggregator can stay graceful.
+        // No Seedance account matches any of the supplied emails — return
+        // empty rather than 404 so the aggregator can stay graceful.
         return NextResponse.json({ ok: true, items: [] });
       }
       resolvedUserId = u.id;
