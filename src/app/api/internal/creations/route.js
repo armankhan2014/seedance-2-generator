@@ -33,18 +33,34 @@ export async function GET(req) {
   }
 
   const url = new URL(req.url);
+  // We accept either a Seedance-internal userId (cuid) OR the user's email
+  // (Studio passes Clerk's email since Clerk userIds don't match Seedance cuids).
   const userId = (url.searchParams.get("userId") ?? "").trim();
-  if (!userId) {
-    return NextResponse.json({ error: "userId required" }, { status: 400 });
+  const email  = (url.searchParams.get("email") ?? "").trim().toLowerCase();
+  if (!userId && !email) {
+    return NextResponse.json({ error: "userId or email required" }, { status: 400 });
   }
   const rawLimit = Number.parseInt(url.searchParams.get("limit") ?? "50", 10);
   const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 50;
   const since = Number.parseInt(url.searchParams.get("since") ?? "", 10);
 
   try {
+    // Resolve email → Seedance user.id so the Creation query can hit its
+    // `userId` index. No-op when caller already supplied a Seedance userId.
+    let resolvedUserId = userId;
+    if (!resolvedUserId && email) {
+      const u = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+      if (!u) {
+        // No Seedance account for this email — return empty rather than 404
+        // so the aggregator can stay graceful.
+        return NextResponse.json({ ok: true, items: [] });
+      }
+      resolvedUserId = u.id;
+    }
+
     const rows = await prisma.creation.findMany({
       where: {
-        userId,
+        userId: resolvedUserId,
         status: { not: "failed" },
         ...(Number.isFinite(since) ? { createdAt: { gte: new Date(since) } } : {}),
       },
