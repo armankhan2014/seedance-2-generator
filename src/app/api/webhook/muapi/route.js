@@ -2,7 +2,18 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { AIService } from "@/lib/services/ai";
 import { sendCreationReadyPush, sendCreationFailedPush } from "@/lib/push";
+import { mirrorToR2IfExternal } from "@/lib/r2-mirror";
 import crypto from "crypto";
+
+// Max time we'll spend mirroring before falling back to the raw MuAPI
+// URL. The webhook ACK has to be fast enough that MuAPI doesn't retry
+// (they treat slow ACKs as 5xx and re-deliver), so we cap the mirror
+// at 20s — typical 8-12 MB Seedance output downloads + uploads in
+// 3-6s on the Vercel lambda. If R2 ever hiccups, the AbortSignal
+// trips, we store the raw URL, and the user's video still works for
+// ~30 days until MuAPI archives it. A future backfill cron can
+// retry-mirror the surviving-but-raw rows.
+const MIRROR_TIMEOUT_MS = 20_000;
 
 export async function POST(req) {
   try {
@@ -39,8 +50,39 @@ export async function POST(req) {
 
     const outputs = data.outputs || data.output || [];
     const outputArr = Array.isArray(outputs) ? outputs : (outputs ? [outputs] : []);
-    const imageUrl = outputArr[0] || null;
+    const rawImageUrl = outputArr[0] || null;
     const hasError = data.error && data.error !== "" && data.error !== null;
+
+    // Mirror MuAPI's output URL into our R2 bucket BEFORE persisting
+    // it to the Creation row. MuAPI's S3 has a "30daysoutputexpiry"
+    // rule that archives outputs to DEEP_ARCHIVE after a month, which
+    // makes the bytes unreachable (GET → 403 AccessDenied). Before
+    // this mirror, every video older than 30 days started breaking
+    // its share links, prompt-library entries, and OG cards. Caught
+    // 2026-06-19 on three already-zombie prompt-library shares.
+    //
+    // The helper HEAD-checks first, caps at 80 MB, and returns null
+    // on any failure so we fall back to the raw MuAPI URL — the user
+    // still gets a working video for the first 30 days, and a
+    // future backfill can retry.
+    let imageUrl = rawImageUrl;
+    if (!hasError && rawImageUrl) {
+      try {
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), MIRROR_TIMEOUT_MS);
+        const mirrored = await mirrorToR2IfExternal(rawImageUrl, {
+          prefix: `creations/${creation.userId}`,
+          signal: ac.signal,
+        });
+        clearTimeout(timer);
+        if (mirrored) imageUrl = mirrored;
+      } catch (e) {
+        console.warn(
+          `[MUAPI_WEBHOOK] R2 mirror failed for ${creation.id}: ${e?.message || e} — falling back to raw URL`
+        );
+        // imageUrl already set to rawImageUrl above — no further action
+      }
+    }
 
     if (hasError) {
       // Atomic transition + refund. failAndRefund uses a conditional
