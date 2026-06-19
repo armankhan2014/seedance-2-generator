@@ -70,9 +70,11 @@ export const AIService = {
   async generate(userId, { mode, prompt, aspect_ratio = "16:9", resolution = "720p", duration = 5, quality = "basic", images_list = [], video_files = [], audio_files = [], musicTrackId = null }) {
     const cost = this.getCreditCost(mode, duration, quality, resolution);
 
-    // Deduct credits upfront — will be refunded automatically if the API call
-    // fails with a 5xx/network error. NOT refunded on 4xx userFault — see the
-    // catch block below for that rule.
+    // Deduct credits upfront — auto-refunded if the API call fails for any
+    // reason that isn't a true user-input error. The only non-refundable
+    // failure codes are 400 / 413 / 422 (bad prompt, oversize payload, schema
+    // violation). 401, 402, 403, 429, 5xx, network, and "INSUFFICIENT_CREDITS"
+    // upstream-wallet errors all refund. See the catch block below.
     await UserService.deductCredits(userId, cost, {
       reason: "video_generate",
       note: `${mode} · ${resolution} · ${quality} · ${duration}s`,
@@ -180,12 +182,18 @@ export const AIService = {
       const responseText = await submitRes.text();
 
       if (!submitRes.ok) {
-        // 4xx = user's payload was rejected (bad prompt, content policy, etc.).
-        // We tag it so the catch block knows NOT to refund — otherwise an
-        // attacker can spam garbage prompts and have credits returned each time.
-        // 5xx and network errors still refund (our infrastructure problem).
+        // Only TRUE user-input errors are non-refundable (bad prompt, oversize
+        // file, validation failure). Everything else — including 402
+        // INSUFFICIENT_CREDITS on OUR upstream wallet, 401 auth, 429 rate
+        // limit — is our problem and must auto-refund. Previously ALL 4xx
+        // were treated as user fault, which silently kept user credits when
+        // OUR MUAPI account ran dry. 2026-06-13.
+        const USER_FAULT_STATUSES = new Set([400, 413, 422]);
+        const bodyLower = (responseText || "").toLowerCase();
+        const isUpstreamWalletEmpty =
+          submitRes.status === 402 || bodyLower.includes("insufficient_credit");
         const err = new Error(`API Submission Failed: ${submitRes.status} ${responseText}`);
-        err.userFault = submitRes.status >= 400 && submitRes.status < 500;
+        err.userFault = USER_FAULT_STATUSES.has(submitRes.status) && !isUpstreamWalletEmpty;
         throw err;
       }
 
