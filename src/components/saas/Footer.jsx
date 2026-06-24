@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useIsIOSApp } from "@/components/IOSAppContext";
 
 const SOCIAL = [
   {
@@ -28,6 +29,9 @@ const LEGAL = [
 
 export default function Footer() {
   const year = new Date().getFullYear();
+  // Drop the Pricing link inside the iOS app (Apple Guideline 3.1.1).
+  const isIOSApp = useIsIOSApp();
+  const nav = isIOSApp ? NAV.filter((n) => n.href !== "/pricing") : NAV;
 
   return (
     <footer style={{
@@ -106,7 +110,7 @@ export default function Footer() {
               Product
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-              {NAV.map(({ label, href }) => (
+              {nav.map(({ label, href }) => (
                 <Link key={href} href={href} style={{
                   fontSize: "0.85rem",
                   color: "#64748b",

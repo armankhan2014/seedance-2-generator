@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { useIsIOSApp } from "@/components/IOSAppContext";
 
 const MAX_REFERENCES = 3;
 const MAX_LOOK_LENGTH = 500;
@@ -44,6 +45,8 @@ async function compressImage(file, { maxDim = 2048, quality = 0.85 } = {}) {
 
 export default function ImageBuilder({ onUse, onClose }) {
   const { data: session, status: sessionStatus } = useSession();
+  // Inside the iOS app we never show prices or buy links (Apple 3.1.1).
+  const isIOSApp = useIsIOSApp();
   const [refs, setRefs] = useState([]); // { file, previewUrl }
   const [look, setLook] = useState("");
   const [loading, setLoading] = useState(false);
@@ -357,11 +360,13 @@ export default function ImageBuilder({ onUse, onClose }) {
                 You need at least 20 credits
               </p>
               <p style={{ fontSize: "0.78rem", color: "#475569", margin: 0, lineHeight: 1.6 }}>
-                Build my reference uses 20 credits per image. Buy a credit pack to unlock it.
+                Build my reference uses 20 credits per image.{!isIOSApp ? " Buy a credit pack to unlock it." : ""}
               </p>
-              <a href="/pricing" style={{ marginTop: "8px", padding: "10px 24px", background: "linear-gradient(135deg,#D9FF00,#A6CC00)", borderRadius: "10px", color: "#000", fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit", textDecoration: "none" }}>
-                View Pricing →
-              </a>
+              {!isIOSApp && (
+                <a href="/pricing" style={{ marginTop: "8px", padding: "10px 24px", background: "linear-gradient(135deg,#D9FF00,#A6CC00)", borderRadius: "10px", color: "#000", fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit", textDecoration: "none" }}>
+                  View Pricing →
+                </a>
+              )}
             </div>
           ) : (
             <>

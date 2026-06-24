@@ -1,7 +1,9 @@
 import { Suspense } from "react";
+import { headers } from "next/headers";
 import { Inter } from "next/font/google";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { uaIsIOSApp } from "@/lib/iosApp";
 import "./globals.css";
 // 2026-06-05 — Removed the EcosystemNav (the "VISUALSEFFECT" /
 // ✦credits / ⊞ apps / avatar dropdown strip that sat above the
@@ -83,6 +85,19 @@ export default async function RootLayout({ children }) {
     // ignore — fall through to client-side hydration
   }
 
+  // Detect the native iOS App Store build from its User-Agent so we can
+  // hide every pricing / buy / checkout surface below (Apple Guideline
+  // 3.1.1 — digital credits must use Apple IAP, so the iOS app sells
+  // nothing; users buy on the web). Reading headers() adds no rendering
+  // cost here — the tree is already dynamic via getServerSession above.
+  // See src/lib/iosApp.js.
+  let isIOSApp = false;
+  try {
+    isIOSApp = uaIsIOSApp((await headers()).get("user-agent"));
+  } catch {
+    // ignore — default to showing pricing (web behaviour)
+  }
+
   return (
     <html lang="en" className="h-dvh w-full" style={{ colorScheme: "dark" }}>
       <head>
@@ -97,7 +112,7 @@ export default async function RootLayout({ children }) {
         <link rel="dns-prefetch" href="https://community.visualseffect.com" />
       </head>
       <body className={inter.className} style={{ background: "#0a0a0a", color: "#FFFFFF" }}>
-        <Providers session={session}>
+        <Providers session={session} isIOSApp={isIOSApp}>
           {/* Single top navbar — the long-standing SeedanceStudio
               bar with Generate / Gallery / Pricing / Edits / Music
               / Community + Contact Us + Sign In + avatar. The

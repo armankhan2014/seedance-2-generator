@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from "react";
 import ContactModal from "./ContactModal";
 import ToastContainer from "./ToastContainer";
 import VerifiedBadge from "./VerifiedBadge";
+import { useIsIOSApp } from "@/components/IOSAppContext";
 // Pure-CSS :hover styles for every nav element. Loaded as a real
 // CSS file so the rules ship in the SSR <head>. Replacing the
 // previous useState-driven hover (which routed every cursor move
@@ -105,10 +106,14 @@ export default function Navbar() {
     : (liveCredits ?? session?.user?.credits ?? 0);
   const displayImage = liveImage || session?.user?.image || null;
 
+  // Hide the Pricing link inside the iOS App Store build (Apple
+  // Guideline 3.1.1 — no web purchases in-app). Web + Android keep it.
+  const isIOSApp = useIsIOSApp();
+
   const links = [
     { href: "/generate", label: "Generate" },
     { href: "/creations", label: "Gallery" },
-    { href: "/pricing", label: "Pricing" },
+    ...(isIOSApp ? [] : [{ href: "/pricing", label: "Pricing" }]),
     // Edits — in-browser video editor on the edits subdomain. Same
     // .visualseffect.com cookie scope = SSO, so signed-in seedance users
     // land signed-in there. external:true matches the Music/Community

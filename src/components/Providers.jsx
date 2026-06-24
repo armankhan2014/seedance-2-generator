@@ -3,6 +3,7 @@
 import { SessionProvider, useSession } from "next-auth/react";
 import { useEffect } from "react";
 import { setupNativePush } from "@/lib/nativePush";
+import { IOSAppProvider } from "@/components/IOSAppContext";
 
 // Receives the server-prefetched session from the root layout so
 // useSession() returns the right answer on the very first render —
@@ -10,11 +11,13 @@ import { setupNativePush } from "@/lib/nativePush";
 // after a successful login. If `session` is null/undefined the
 // SessionProvider falls back to its default behaviour and fetches
 // from /api/auth/session itself.
-export function Providers({ children, session }) {
+export function Providers({ children, session, isIOSApp = false }) {
   return (
     <SessionProvider session={session}>
-      <NativePushBootstrap />
-      {children}
+      <IOSAppProvider value={isIOSApp}>
+        <NativePushBootstrap />
+        {children}
+      </IOSAppProvider>
     </SessionProvider>
   );
 }

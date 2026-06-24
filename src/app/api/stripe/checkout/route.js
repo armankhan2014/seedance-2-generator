@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
+import { uaIsIOSApp } from "@/lib/iosApp";
 import Stripe from "stripe";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2023-10-16" });
@@ -73,6 +74,17 @@ export async function POST(req) {
     const session = await getServerSession(authOptions);
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    // Apple Guideline 3.1.1 — the iOS App Store build must never reach
+    // Stripe checkout. The UI hides all buy buttons, but block at the API
+    // too so a stray request from inside the app can't open a web payment.
+    // See src/lib/iosApp.js.
+    if (uaIsIOSApp(req.headers.get("user-agent"))) {
+      return NextResponse.json(
+        { error: "Purchases are not available in the app. Please buy credits on the website." },
+        { status: 403 }
+      );
     }
 
     const body = await req.json();

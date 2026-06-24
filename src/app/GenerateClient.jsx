@@ -22,6 +22,7 @@ import ArmanGallery from "@/components/saas/ArmanGallery";
 import toast from "@/lib/toast";
 import PromptBuilder from "@/components/saas/PromptBuilder";
 import ImageBuilder from "@/components/saas/ImageBuilder";
+import { useIsIOSApp } from "@/components/IOSAppContext";
 import SeedanceHeroCard from "@/components/saas/SeedanceHeroCard";
 import ReferenceImageGuideModal, {
   shouldAutoShowReferenceGuide,
@@ -334,6 +335,8 @@ function CustomSelect({ label, value, options, onChange, icon: Icon }) {
 
 export default function Home() {
   const { data: session } = useSession();
+  // Soften "out of credits" copy inside the iOS app — no buy CTA (Apple 3.1.1).
+  const isIOSApp = useIsIOSApp();
   // Mode State
   // Default to Image To video — most common starting point for our users.
   // Arman flagged 2026-05-13: landing on Text first felt empty since the
@@ -1415,10 +1418,12 @@ export default function Home() {
                     : "Describe your video…"
                 }
                 onUpgrade={() => {
-                  // No credits — surface a toast, the user can buy
-                  // credits from the existing /billing page.
-                  toast.error?.("You're out of credits. Buy more to keep expanding prompts.") ||
-                    toast("You're out of credits. Buy more to keep expanding prompts.");
+                  // No credits — surface a toast. On web we nudge to buy;
+                  // inside the iOS app we show no buy CTA (Apple 3.1.1).
+                  const msg = isIOSApp
+                    ? "You're out of credits."
+                    : "You're out of credits. Buy more to keep expanding prompts.";
+                  toast.error?.(msg) || toast(msg);
                 }}
               />
             </div>}

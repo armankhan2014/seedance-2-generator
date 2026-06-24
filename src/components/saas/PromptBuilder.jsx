@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useSession, signIn } from "next-auth/react";
+import { useIsIOSApp } from "@/components/IOSAppContext";
 
 // ── Formatted prompt renderer ─────────────────────────────────────────────────
 function FormattedPrompt({ text }) {
@@ -175,6 +176,8 @@ function FormattedPrompt({ text }) {
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function PromptBuilder({ onUse, onClose }) {
   const { data: session, status: sessionStatus } = useSession();
+  // Inside the iOS app we never show prices or buy links (Apple 3.1.1).
+  const isIOSApp = useIsIOSApp();
 
   // describe state
   const [freeText,  setFreeText]  = useState("");
@@ -395,21 +398,23 @@ export default function PromptBuilder({ onUse, onClose }) {
                   Credits required
                 </p>
                 <p style={{ fontSize: "0.78rem", color: "#475569", margin: 0, lineHeight: 1.6 }}>
-                  AI Prompt Builder is available to users with credits. Buy a credit pack to unlock it — credits never expire.
+                  AI Prompt Builder is available to users with credits.{!isIOSApp ? " Buy a credit pack to unlock it — credits never expire." : ""}
                 </p>
-                <a
-                  href="/pricing"
-                  style={{
-                    marginTop: "8px", padding: "10px 24px",
-                    background: "linear-gradient(135deg,#D9FF00,#A6CC00)",
-                    border: "none", borderRadius: "10px",
-                    color: "#fff", fontSize: "0.85rem", fontWeight: 700,
-                    cursor: "pointer", fontFamily: "inherit",
-                    textDecoration: "none", display: "inline-block",
-                  }}
-                >
-                  View Pricing →
-                </a>
+                {!isIOSApp && (
+                  <a
+                    href="/pricing"
+                    style={{
+                      marginTop: "8px", padding: "10px 24px",
+                      background: "linear-gradient(135deg,#D9FF00,#A6CC00)",
+                      border: "none", borderRadius: "10px",
+                      color: "#fff", fontSize: "0.85rem", fontWeight: 700,
+                      cursor: "pointer", fontFamily: "inherit",
+                      textDecoration: "none", display: "inline-block",
+                    }}
+                  >
+                    View Pricing →
+                  </a>
+                )}
               </div>
             );
 
@@ -442,7 +447,7 @@ export default function PromptBuilder({ onUse, onClose }) {
                     borderRadius: "8px", padding: "10px 12px", lineHeight: 1.5,
                   }}>
                     {aiError}
-                    {aiError.includes("credits") && (
+                    {aiError.includes("credits") && !isIOSApp && (
                       <a href="/pricing" style={{ color: "#D9FF00", marginLeft: "6px", fontWeight: 700 }}>
                         Buy credits →
                       </a>

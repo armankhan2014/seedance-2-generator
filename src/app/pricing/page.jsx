@@ -1,4 +1,7 @@
 import { Suspense } from "react";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { uaIsIOSApp } from "@/lib/iosApp";
 import PricingClient from "./PricingClient";
 import Footer from "@/components/saas/Footer";
 
@@ -19,7 +22,15 @@ export const metadata = {
   },
 };
 
-export default function PricingPage() {
+export default async function PricingPage() {
+  // Apple Guideline 3.1.1: the iOS App Store build must not expose any
+  // way to buy credits (those are Stripe/web purchases). Inside the iOS
+  // app the pricing page is unreachable — send users back home. Web and
+  // Android are unaffected. See src/lib/iosApp.js.
+  if (uaIsIOSApp((await headers()).get("user-agent"))) {
+    redirect("/");
+  }
+
   return (
     <>
       <Suspense fallback={null}>
