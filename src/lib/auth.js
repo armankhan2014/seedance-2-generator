@@ -255,7 +255,7 @@ export const authOptions = {
     async session({ session, user }) {
       if (session.user) {
         session.user.id = user.id;
-        session.user.credits = user.credits ?? 10;
+        session.user.credits = user.credits ?? 100;
         // Expose ID-verified state so the navbar avatar can render the
         // pink verified badge overlay (parity with community.visualseffect.com).
         session.user.verified = !!user.verified;

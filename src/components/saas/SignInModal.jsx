@@ -123,7 +123,7 @@ export default function SignInModal() {
                 {emailSent
                   ? "Check your inbox for a sign-in link"
                   : isSignUp
-                  ? "10 free credits included — no card needed"
+                  ? "100 free credits included — no card needed"
                   : "Sign in to continue to Seedance"}
               </div>
             </div>

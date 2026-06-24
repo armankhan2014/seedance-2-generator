@@ -24,6 +24,7 @@ import SocialProofPopup from "@/components/saas/SocialProofPopup";
 import VisitorTracker from "@/components/VisitorTracker";
 import PWARegister from "@/components/PWARegister";
 import CapacitorBridge from "@/components/CapacitorBridge";
+import AndroidAppBanner from "@/components/AndroidAppBanner";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -123,6 +124,10 @@ export default async function RootLayout({ children }) {
               recent signups (real first, dummies as filler).
               Self-throttles, self-dedupes via localStorage + IP. */}
           <SocialProofPopup />
+          {/* Android-only slide-up offering the APK install while the
+              Play Store closed test runs its 14-day clock. Hidden in
+              Capacitor and once dismissed via localStorage. */}
+          <AndroidAppBanner />
         </Providers>
       </body>
     </html>

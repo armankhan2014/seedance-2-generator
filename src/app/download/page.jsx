@@ -134,7 +134,7 @@ export default function DownloadPage() {
             <li>Tap the green download button above on your Android phone</li>
             <li>When prompted, allow <strong style={{ color: "#fff" }}>&ldquo;Install from this source&rdquo;</strong> (one-time setting)</li>
             <li>Open the APK file from your Downloads folder, tap <strong style={{ color: "#fff" }}>Install</strong></li>
-            <li>Launch Seedance, sign in with Google or email, get 10 free credits</li>
+            <li>Launch Seedance, sign in with Google or email, get 100 free credits</li>
           </ol>
         </div>
 
