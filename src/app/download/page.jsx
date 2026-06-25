@@ -2,11 +2,28 @@ import Link from "next/link";
 
 export const metadata = {
   title: "Download Seedance for Android",
-  description: "Install the Seedance AI video generator on Android. Direct APK download — beta access while we finish Play Store review.",
+  description: "Install the Seedance AI video generator on Android. Direct APK install — Play Store beta opens soon.",
+  alternates: { canonical: "https://seedance.visualseffect.com/download" },
   openGraph: {
-    title: "Seedance — AI Video Generator (Android beta)",
-    description: "Type. Tap. Cinema. Generate cinematic AI videos from text, photos, or multi-shot stories.",
-    images: ["/og-image.png"],
+    type: "website",
+    siteName: "Seedance Studio",
+    url: "https://seedance.visualseffect.com/download",
+    title: "Get Seedance for Android — 100 free credits",
+    description: "Type. Tap. Cinema. Generate cinematic AI video from text, photos, or multi-shot stories. Free Android beta — install in 30 seconds.",
+    images: [
+      {
+        url: "https://seedance.visualseffect.com/og-download.png",
+        width: 1200,
+        height: 630,
+        alt: "Seedance — AI Video Generator. Type. Tap. Cinema.",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Get Seedance for Android — 100 free credits",
+    description: "Type. Tap. Cinema. Cinematic AI video in 30 seconds. Free Android beta.",
+    images: ["https://seedance.visualseffect.com/og-download.png"],
   },
 };
 
