@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { UserService } from "@/lib/services/user";
+import { uaIsIOSApp } from "@/lib/iosApp";
 
 // 1 credit per AI prompt build call. Charged before we hit Anthropic so
 // the user can't run unlimited paid Claude calls on a single credit.
@@ -110,8 +111,15 @@ export async function POST(req) {
       await UserService.deductCredits(session.user.id, PROMPT_BUILD_COST, { reason: "prompt_build" });
     } catch (e) {
       if (e.message === "Insufficient credits") {
+        // Inside the iOS app we never steer to a purchase (Apple 3.1.1).
+        const iosApp = uaIsIOSApp(req.headers.get("user-agent"));
         return NextResponse.json(
-          { error: "You need credits to use AI Prompt Builder. Buy credits to unlock.", upgradeRequired: true },
+          {
+            error: iosApp
+              ? "You're out of credits."
+              : "You need credits to use AI Prompt Builder. Buy credits to unlock.",
+            upgradeRequired: !iosApp,
+          },
           { status: 403 }
         );
       }

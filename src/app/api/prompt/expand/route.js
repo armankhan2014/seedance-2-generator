@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { UserService } from "@/lib/services/user";
+import { uaIsIOSApp } from "@/lib/iosApp";
 
 // One-shot expansion endpoint for the in-textarea "✦ Expand my idea"
 // button on /generate. Takes a SHORT (1–29 word) user idea + the
@@ -235,10 +236,15 @@ export async function POST(req) {
       await UserService.deductCredits(session.user.id, EXPAND_COST, { reason: "prompt_expand" });
     } catch (e) {
       if (e.message === "Insufficient credits") {
+        // Inside the iOS app we never steer to a purchase (Apple 3.1.1) —
+        // no "buy credits" wording, no upgrade CTA.
+        const iosApp = uaIsIOSApp(req.headers.get("user-agent"));
         return NextResponse.json(
           {
-            error: "You need credits to expand prompts. Buy credits to unlock.",
-            upgradeRequired: true,
+            error: iosApp
+              ? "You're out of credits."
+              : "You need credits to expand prompts. Buy credits to unlock.",
+            upgradeRequired: !iosApp,
           },
           { status: 403 }
         );

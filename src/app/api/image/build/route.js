@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth";
 import { UserService } from "@/lib/services/user";
+import { uaIsIOSApp } from "@/lib/iosApp";
 import { buildReferenceImage } from "@/lib/services/imageBuilderGemini";
 import { prisma } from "@/lib/prisma";
 import { revalidateTag } from "next/cache";
@@ -117,7 +118,11 @@ export async function POST(req) {
     await UserService.deductCredits(session.user.id, CREDIT_COST, { reason: "image_build" });
   } catch (err) {
     if (err.message === "Insufficient credits") {
-      return NextResponse.json({ error: "Not enough credits. Buy a credit pack to continue." }, { status: 402 });
+      // Inside the iOS app we never steer to a purchase (Apple 3.1.1).
+      const msg = uaIsIOSApp(req.headers.get("user-agent"))
+        ? "You're out of credits."
+        : "Not enough credits. Buy a credit pack to continue.";
+      return NextResponse.json({ error: msg }, { status: 402 });
     }
     return NextResponse.json({ error: "Could not debit credits." }, { status: 500 });
   }
