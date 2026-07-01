@@ -296,13 +296,28 @@ export default function Navbar() {
 
             {session ? (
               <>
-                {/* Credits badge — hover handled by .sd-nav-credits CSS. */}
-                <span
-                  className="sd-nav-credits"
-                  style={{ opacity: creditsRefreshing ? 0.6 : 1 }}
-                >
-                  {creditsRefreshing ? "⏳" : "⚡"} {displayCredits.toLocaleString()} credits
-                </span>
+                {/* Credits badge — hover handled by .sd-nav-credits CSS.
+                    Inside the iOS app the badge is a real link to /profile so
+                    a tap is never dead (Apple rejected an unresponsive credits
+                    button under 2.1(b)). Profile is also where account-delete
+                    and the credit balance live. On web it stays a plain badge. */}
+                {isIOSApp ? (
+                  <Link
+                    href="/profile"
+                    className="sd-nav-credits"
+                    style={{ opacity: creditsRefreshing ? 0.6 : 1, textDecoration: "none", cursor: "pointer" }}
+                    title="View your credits and account"
+                  >
+                    {creditsRefreshing ? "⏳" : "⚡"} {displayCredits.toLocaleString()} credits
+                  </Link>
+                ) : (
+                  <span
+                    className="sd-nav-credits"
+                    style={{ opacity: creditsRefreshing ? 0.6 : 1 }}
+                  >
+                    {creditsRefreshing ? "⏳" : "⚡"} {displayCredits.toLocaleString()} credits
+                  </span>
+                )}
 
                 {/* Avatar dropdown trigger — hover handled by .sd-nav-profile CSS;
                     open state added via class so the dropdown's persistent

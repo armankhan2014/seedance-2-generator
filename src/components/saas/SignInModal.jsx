@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
+import { useIsIOSApp } from "@/components/IOSAppContext";
 
 const SOCIAL = [
   {
@@ -26,6 +27,13 @@ const SOCIAL = [
 ];
 
 export default function SignInModal() {
+  // Inside the iOS App Store build we ONLY offer the email magic-link.
+  // Social OAuth (Google/Facebook/Apple/GitHub) redirects out to the system
+  // browser, which (a) breaks the session hand-back into the app's WebView
+  // and (b) was rejected under App Store Guideline 4 (external browser sign-in)
+  // and 2.1(a) (unresponsive Facebook/Apple buttons). The magic-link returns
+  // into the app via Universal Links, so it's the only in-app-safe method.
+  const isIOSApp = useIsIOSApp();
   const [open, setOpen]       = useState(false);
   const [mode, setMode]       = useState("signin"); // "signin" | "signup"
   const [loading, setLoading] = useState(null);
@@ -141,24 +149,36 @@ export default function SignInModal() {
               </div>
             ) : (
               <>
-                {/* Social icons */}
-                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:18}}>
-                  {SOCIAL.map(p=>(
-                    <button key={p.id} className="_sd-social" onClick={()=>handleSocial(p.id)} disabled={!!loading} title={`Continue with ${p.label}`}
-                      style={{height:44,borderRadius:10,background:p.bg,border:`1px solid ${p.border}`,color:p.color,display:"flex",alignItems:"center",justifyContent:"center",cursor:loading?"wait":"pointer",transition:"all .15s",opacity:loading&&loading!==p.id?.45:1,fontFamily:"inherit"}}>
-                      {loading===p.id
-                        ? <div style={{width:15,height:15,border:"2px solid rgba(255,255,255,.2)",borderTopColor:"#D9FF00",borderRadius:"50%",animation:"_sdSpin .65s linear infinite"}}/>
-                        : p.icon}
-                    </button>
-                  ))}
-                </div>
+                {/* Social sign-in — web/Android only. Hidden in the iOS app
+                    (Apple Guideline 4 + 2.1(a)); iOS uses magic-link only. */}
+                {!isIOSApp && (
+                  <>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:18}}>
+                      {SOCIAL.map(p=>(
+                        <button key={p.id} className="_sd-social" onClick={()=>handleSocial(p.id)} disabled={!!loading} title={`Continue with ${p.label}`}
+                          style={{height:44,borderRadius:10,background:p.bg,border:`1px solid ${p.border}`,color:p.color,display:"flex",alignItems:"center",justifyContent:"center",cursor:loading?"wait":"pointer",transition:"all .15s",opacity:loading&&loading!==p.id?.45:1,fontFamily:"inherit"}}>
+                          {loading===p.id
+                            ? <div style={{width:15,height:15,border:"2px solid rgba(255,255,255,.2)",borderTopColor:"#D9FF00",borderRadius:"50%",animation:"_sdSpin .65s linear infinite"}}/>
+                            : p.icon}
+                        </button>
+                      ))}
+                    </div>
 
-                {/* Or divider */}
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
-                  <div style={{flex:1,height:1,background:"rgba(255,255,255,0.06)"}}/>
-                  <span style={{fontSize:".7rem",color:"#2d3748",fontWeight:500,letterSpacing:".06em"}}>or continue with email</span>
-                  <div style={{flex:1,height:1,background:"rgba(255,255,255,0.06)"}}/>
-                </div>
+                    {/* Or divider */}
+                    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+                      <div style={{flex:1,height:1,background:"rgba(255,255,255,0.06)"}}/>
+                      <span style={{fontSize:".7rem",color:"#2d3748",fontWeight:500,letterSpacing:".06em"}}>or continue with email</span>
+                      <div style={{flex:1,height:1,background:"rgba(255,255,255,0.06)"}}/>
+                    </div>
+                  </>
+                )}
+
+                {/* iOS-only hint so the magic-link flow is self-explanatory. */}
+                {isIOSApp && (
+                  <p style={{margin:"0 0 14px",fontSize:".76rem",color:"#64748b",lineHeight:1.6,textAlign:"center"}}>
+                    {"Enter your email and we'll send you a secure sign-in link — no password needed."}
+                  </p>
+                )}
 
                 {/* Form */}
                 <form onSubmit={handleEmail} style={{display:"flex",flexDirection:"column",gap:10}}>
