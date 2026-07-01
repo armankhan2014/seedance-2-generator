@@ -40,6 +40,7 @@ export default function SignInModal() {
   const [email, setEmail]     = useState("");
   const [name, setName]       = useState("");
   const [emailSent, setEmailSent] = useState(false);
+  const [code, setCode]       = useState("");
 
   useEffect(() => {
     const handle = (e) => { setMode(e?.detail?.mode || "signin"); setOpen(true); };
@@ -55,8 +56,8 @@ export default function SignInModal() {
     return () => { window.removeEventListener("keydown", esc); document.body.style.overflow = ""; };
   }, [open]);
 
-  const close = () => { setOpen(false); setEmail(""); setName(""); setEmailSent(false); setLoading(null); };
-  const toggleMode = () => { setMode(m => m === "signin" ? "signup" : "signin"); setEmail(""); setName(""); setEmailSent(false); };
+  const close = () => { setOpen(false); setEmail(""); setName(""); setEmailSent(false); setCode(""); setLoading(null); };
+  const toggleMode = () => { setMode(m => m === "signin" ? "signup" : "signin"); setEmail(""); setName(""); setEmailSent(false); setCode(""); };
 
   const handleSocial = (id) => { setLoading(id); signIn(id, { callbackUrl: "/" }); };
 
@@ -67,6 +68,20 @@ export default function SignInModal() {
     signIn("email", { email, callbackUrl: "/", redirect: false })
       .then(() => { setEmailSent(true); setLoading(null); })
       .catch(() => setLoading(null));
+  };
+
+  // Verify the typed sign-in code. Navigates to NextAuth's email callback in
+  // THIS WebView so the session cookie is set right here in the app — no
+  // reliance on the magic link opening the app via Universal Links.
+  const handleVerifyCode = (e) => {
+    e.preventDefault();
+    const clean = code.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+    if (clean.length < 8) return;
+    setLoading("code");
+    window.location.href =
+      "/api/auth/callback/email?token=" + encodeURIComponent(clean) +
+      "&email=" + encodeURIComponent(email) +
+      "&callbackUrl=" + encodeURIComponent("/");
   };
 
   if (!open) return null;
@@ -137,13 +152,29 @@ export default function SignInModal() {
             </div>
 
             {emailSent ? (
-              <div style={{textAlign:"center",padding:"8px 0 12px"}}>
+              <div style={{textAlign:"center",padding:"4px 0 8px"}}>
                 <div style={{fontSize:38,marginBottom:10}}>📬</div>
-                <p style={{margin:"0 0 6px",fontSize:".9rem",fontWeight:600,color:"#FFFFFF"}}>Magic link sent!</p>
+                <p style={{margin:"0 0 6px",fontSize:".9rem",fontWeight:600,color:"#FFFFFF"}}>Check your email</p>
                 <p style={{margin:"0 0 16px",fontSize:".78rem",color:"#64748b",lineHeight:1.7}}>
-                  We emailed a sign-in link to<br/><strong style={{color:"#D9FF00"}}>{email}</strong>.<br/>Click it to sign in instantly.
+                  We sent a sign-in code to<br/><strong style={{color:"#D9FF00"}}>{email}</strong>.<br/>Enter it below to sign in.
                 </p>
-                <button onClick={()=>{setEmailSent(false);setEmail("");}} style={{fontSize:".78rem",color:"#A6CC00",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",textDecoration:"underline"}}>
+                <form onSubmit={handleVerifyCode} style={{display:"flex",flexDirection:"column",gap:10}}>
+                  <input className="_sd-input" type="text" inputMode="text" autoComplete="one-time-code"
+                    placeholder="Enter code" autoFocus maxLength={12}
+                    value={code} onChange={e=>setCode(e.target.value.toUpperCase())} disabled={loading==="code"}
+                    style={{width:"100%",boxSizing:"border-box",padding:"12px 13px",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.09)",borderRadius:9,color:"#FFFFFF",fontSize:"1.15rem",fontWeight:700,letterSpacing:"6px",textAlign:"center",fontFamily:"inherit",textTransform:"uppercase",transition:"border-color .15s,box-shadow .15s"}}
+                  />
+                  <button type="submit" className="_sd-btn" disabled={code.replace(/[^A-Za-z0-9]/g,"").length<8||loading==="code"}
+                    style={{width:"100%",padding:"11px",background:code.replace(/[^A-Za-z0-9]/g,"").length>=8?"linear-gradient(135deg,#A6CC00,#A6CC00)":"rgba(255,255,255,0.05)",border:"none",borderRadius:9,color:code.replace(/[^A-Za-z0-9]/g,"").length>=8?"#fff":"#334155",fontSize:".875rem",fontWeight:600,fontFamily:"inherit",cursor:code.replace(/[^A-Za-z0-9]/g,"").length>=8&&loading!=="code"?"pointer":"default",transition:"all .15s",display:"flex",alignItems:"center",justifyContent:"center",gap:7,boxShadow:code.replace(/[^A-Za-z0-9]/g,"").length>=8?"0 4px 18px rgba(166, 204, 0,.35)":"none"}}>
+                    {loading==="code"
+                      ? <><div style={{width:14,height:14,border:"2px solid rgba(255,255,255,.3)",borderTopColor:"#fff",borderRadius:"50%",animation:"_sdSpin .65s linear infinite"}}/> Signing in…</>
+                      : <>Verify &amp; sign in <span style={{opacity:.6,fontSize:11}}>→</span></>}
+                  </button>
+                </form>
+                <p style={{margin:"14px 0 0",fontSize:".72rem",color:"#475569",lineHeight:1.6}}>
+                  On this device you can also tap the link in the email to sign in.
+                </p>
+                <button onClick={()=>{setEmailSent(false);setEmail("");setCode("");}} style={{marginTop:12,fontSize:".78rem",color:"#A6CC00",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit",textDecoration:"underline"}}>
                   Use a different email
                 </button>
               </div>

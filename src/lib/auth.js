@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import GoogleProvider   from "next-auth/providers/google";
 import FacebookProvider from "next-auth/providers/facebook";
@@ -67,9 +68,24 @@ if (process.env.GITHUB_ID && process.env.GITHUB_SECRET) {
 if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASS) {
   providers.push(EmailProvider({
     from: process.env.GMAIL_USER,
-    // Custom send function — uses our branded Gmail email instead of NextAuth's default
-    sendVerificationRequest: async ({ identifier: email, url }) => {
-      await sendMagicLinkEmail({ email, url });
+    // 30-minute validity for both the magic link and the typed code.
+    maxAge: 30 * 60,
+    // The verification token doubles as a short, typeable sign-in CODE. This
+    // is what lets users sign in INSIDE the iOS app by typing the code from
+    // the email — no reliance on the magic link opening the app via Universal
+    // Links (iOS suppresses that when the link is tapped inside Safari
+    // webmail, which is how the App Review team reads the demo inbox).
+    // Unambiguous alphabet (no O/0/I/1/L); 31^8 ≈ 8.5e11 combinations over a
+    // 30-min window — safe without extra rate limiting.
+    generateVerificationToken() {
+      const alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+      let code = "";
+      for (let i = 0; i < 8; i++) code += alphabet[crypto.randomInt(alphabet.length)];
+      return code;
+    },
+    // Custom send — branded email now carries BOTH the magic link and the code.
+    sendVerificationRequest: async ({ identifier: email, url, token }) => {
+      await sendMagicLinkEmail({ email, url, code: token });
     },
   }));
 }

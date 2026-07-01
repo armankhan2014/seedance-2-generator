@@ -315,21 +315,32 @@ export async function sendPaymentNotification({ customerEmail, customerName, pla
 /* ─────────────────────────────────────────────────────────────────
  * 4. Magic link sign-in — to user
  * ───────────────────────────────────────────────────────────────── */
-export async function sendMagicLinkEmail({ email, url }) {
+export async function sendMagicLinkEmail({ email, url, code }) {
+  const prettyCode = code ? `${code.slice(0, 4)}&nbsp;&nbsp;${code.slice(4)}` : "";
   const inner = `
     <tr><td style="padding:40px 36px 0">
       ${pulseBadge({ label: "Secure Sign-in" })}
-      ${headline(`Your sign-in <span style="color:${ACCENT_LT}">link</span><br/>is ready`, 28)}
-      ${subline("Click below to sign in to Seedance Studio. The link expires in 24 hours and can only be used once.")}
+      ${headline(`Your sign-in <span style="color:${ACCENT_LT}">code</span>`, 28)}
+      ${subline("Enter this code in the Seedance app to sign in. It expires in 30 minutes and can only be used once.")}
     </td></tr>
-    <tr><td style="padding:8px 36px 0">
+    ${code ? `<tr><td style="padding:22px 36px 0">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+        <tr><td align="center" style="background:rgba(255,255,255,0.04);border:1px solid ${DIVIDER};border-radius:14px;padding:24px 12px">
+          <div style="font-family:${MONO};font-size:34px;font-weight:700;letter-spacing:8px;color:${ACCENT_LT};line-height:1">${prettyCode}</div>
+        </td></tr>
+      </table>
+    </td></tr>` : ""}
+    <tr><td style="padding:26px 36px 0">
+      <p style="margin:0;font-family:${FONT};font-size:12px;color:${MUTED};line-height:1.6">Or tap the button to sign in on this device:</p>
+    </td></tr>
+    <tr><td style="padding:10px 36px 0">
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
         <tr><td align="left">
           ${ctaButton({ url, label: "Sign in to Seedance" })}
         </td></tr>
       </table>
     </td></tr>
-    <tr><td style="padding:24px 36px 0">
+    <tr><td style="padding:22px 36px 0">
       <p style="margin:0;font-family:${FONT};font-size:11px;color:${MUTED};line-height:1.6">
         Or paste this link into your browser:<br/>
         <span style="font-family:${MONO};font-size:11px;color:${TEXT_DIM};word-break:break-all">${url}</span>
@@ -349,10 +360,10 @@ export async function sendMagicLinkEmail({ email, url }) {
 
   await send({
     to: email,
-    subject: "Sign in to Seedance Studio",
+    subject: code ? `${code.slice(0, 4)} ${code.slice(4)} is your Seedance sign-in code` : "Sign in to Seedance Studio",
     html: pageWrapper({
-      title: "Your sign-in link",
-      preheader: "Click to sign in to Seedance Studio · expires in 24 hours",
+      title: "Your sign-in code",
+      preheader: "Enter this code in the Seedance app · expires in 30 minutes",
       inner,
     }),
   });
