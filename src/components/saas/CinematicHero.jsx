@@ -25,6 +25,7 @@
 
 import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useIsIOSApp } from "@/components/IOSAppContext";
 // Real CSS file (not styled-jsx) so Next.js inlines the styles into
 // the page <head> at build time. Eliminates the unstyled-content
 // flash on first paint that styled-jsx leaves behind in App Router.
@@ -43,6 +44,7 @@ const WORDS = [
 
 export default function CinematicHero() {
   const router = useRouter();
+  const isIOSApp = useIsIOSApp();
   const heroRef = useRef(null);
   const canvasRef = useRef(null);
   const morphRef = useRef(null);
@@ -396,7 +398,7 @@ export default function CinematicHero() {
       </div>
 
       <div className="sd-hero-content">
-        <div className="sd-hero-badge">POWERED BY SEEDANCE 2.0</div>
+        <div className="sd-hero-badge">{isIOSApp ? "POWERED BY VISUALSEFFECT" : "POWERED BY SEEDANCE 2.0"}</div>
         <h1 className="sd-hero-h1">
           Turn ideas into<br />
           <span className="sd-hero-morph-container">

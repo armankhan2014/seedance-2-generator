@@ -1213,7 +1213,7 @@ export default function Home() {
           animate={{ opacity: 1, y: 0 }}
           className="text-3xl md:text-5xl font-bold text-foreground tracking-tight"
         >
-          Seedance v2.0 Playground
+          {isIOSApp ? "VisualsEffect" : "Seedance"} v2.0 Playground
         </motion.h1>
         <motion.p
           initial={{ opacity: 0, y: -10 }}
@@ -1223,7 +1223,7 @@ export default function Home() {
         >
           Experience the next generation of AI video creation. Transform your
           text and images into high-quality cinematic videos using our advanced
-          Seedance v2.0 engine.
+          {isIOSApp ? " VisualsEffect" : " Seedance"} v2.0 engine.
         </motion.p>
       </div>
 
@@ -1237,9 +1237,9 @@ export default function Home() {
               from /public) so iOS Safari's cross-origin autoplay
               block doesn't show the play overlay on iPhone. */}
           <SeedanceHeroCard
-            providerLabel="SEEDANCE"
-            modelName="Seedance 2 Pro"
-            subline="Minimal Video Engine"
+            providerLabel={isIOSApp ? "VISUALSEFFECT" : "SEEDANCE"}
+            modelName={isIOSApp ? "VisualsEffect 2.0" : "Seedance 2 Pro"}
+            subline={isIOSApp ? "AI Video Engine" : "Minimal Video Engine"}
             videoUrl="/hero-videos/seedance.mp4"
           />
 

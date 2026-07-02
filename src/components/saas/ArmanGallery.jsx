@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { FaExpandAlt, FaCalendarAlt } from "react-icons/fa";
 import { FiDownload, FiPlus, FiMinus, FiClipboard, FiCheck, FiChevronDown, FiChevronUp, FiArrowRight } from "react-icons/fi";
 import { downloadMedia } from "@/lib/utils";
+import { useIsIOSApp } from "@/components/IOSAppContext";
 
 const ADMIN_EMAIL = "armankhan0826@gmail.com";
 // First N cards preload metadata eagerly; the rest defer until in-view
@@ -327,6 +328,7 @@ function VideoModal({ video, onClose }) {
 }
 
 export default function ArmanGallery({ initialVideos = [] }) {
+  const isIOSApp = useIsIOSApp();
   const { data: session, status: sessionStatus } = useSession();
   const isAdmin = session?.user?.email === ADMIN_EMAIL;
 
@@ -381,7 +383,7 @@ export default function ArmanGallery({ initialVideos = [] }) {
           <div>
             <h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-foreground mb-2">Gallery</h2>
             <p className="text-muted font-medium text-xs uppercase tracking-widest leading-loose max-w-xl">
-              Real AI-generated videos created with Seedance v2.0.<br className="hidden md:block" />
+              Real AI-generated videos created with {isIOSApp ? "VisualsEffect" : "Seedance v2.0"}.<br className="hidden md:block" />
               Click any card to watch in full and download.
             </p>
           </div>

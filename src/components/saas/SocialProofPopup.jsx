@@ -161,7 +161,7 @@ const ACTIONS = [
   "just signed up 🎬",
   "just joined ✨",
   "started creating videos 🎥",
-  "joined Seedance ✨",
+  "joined the studio ✨",
 ];
 function actionFor(index) {
   return ACTIONS[index % ACTIONS.length];

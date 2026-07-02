@@ -147,7 +147,7 @@ export default function SignInModal() {
                   ? "Check your inbox for a sign-in link"
                   : isSignUp
                   ? "100 free credits included — no card needed"
-                  : "Sign in to continue to Seedance"}
+                  : (isIOSApp ? "Sign in to continue to VisualsEffect" : "Sign in to continue to Seedance")}
               </div>
             </div>
 

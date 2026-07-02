@@ -82,7 +82,7 @@ export default function Footer() {
                   color: "#FFFFFF",
                   letterSpacing: "-0.02em",
                 }}>
-                  Seedance Studio
+                  {isIOSApp ? "VisualsEffect Studio" : "Seedance Studio"}
                 </span>
               </div>
             </Link>
@@ -93,7 +93,7 @@ export default function Footer() {
               lineHeight: 1.6,
               maxWidth: "220px",
             }}>
-              AI video generation powered by Seedance 2.0. Create stunning videos in seconds.
+              AI video generation powered by {isIOSApp ? "VisualsEffect" : "Seedance 2.0"}. Create stunning videos in seconds.
             </p>
           </div>
 
@@ -230,11 +230,11 @@ export default function Footer() {
           gap: "12px",
         }}>
           <p style={{ margin: 0, fontSize: "0.75rem", color: "#1e293b" }}>
-            © {year} Seedance Studio. All rights reserved.
+            © {year} {isIOSApp ? "VisualsEffect Studio" : "Seedance Studio"}. All rights reserved.
           </p>
           <p style={{ margin: 0, fontSize: "0.75rem", color: "#1e293b" }}>
             Powered by{" "}
-            <span style={{ color: "#334155", fontWeight: 600 }}>Seedance 2.0</span>
+            <span style={{ color: "#334155", fontWeight: 600 }}>{isIOSApp ? "VisualsEffect" : "Seedance 2.0"}</span>
           </p>
         </div>
 

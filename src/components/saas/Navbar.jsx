@@ -269,7 +269,7 @@ export default function Navbar() {
         }}>
           {/* Logo */}
           <Link href="/" style={{ textDecoration: "none", fontSize: "1rem", fontWeight: 800, color: "#fff", flexShrink: 0 }}>
-            Seedance<span style={{ background: "linear-gradient(135deg,#D9FF00,#A6CC00)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Studio</span>
+            {isIOSApp ? "VisualsEffect" : "Seedance"}<span style={{ background: "linear-gradient(135deg,#D9FF00,#A6CC00)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Studio</span>
           </Link>
 
           {/* Desktop nav */}

@@ -335,7 +335,7 @@ export default function PromptBuilder({ onUse, onClose }) {
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
             <div>
               <p style={S.title}>✨ Prompt Builder</p>
-              <p style={S.subtitle}>No experience needed — build a Seedance-ready prompt in seconds.</p>
+              <p style={S.subtitle}>No experience needed — build a {isIOSApp ? "cinematic" : "Seedance-ready"} prompt in seconds.</p>
             </div>
             <button onClick={onClose} style={{
               background: "none", border: "none", color: "#475569",
@@ -363,7 +363,7 @@ export default function PromptBuilder({ onUse, onClose }) {
                   Sign in to use AI Prompt Builder
                 </p>
                 <p style={{ fontSize: "0.78rem", color: "#475569", margin: 0, lineHeight: 1.6 }}>
-                  Describe your idea in plain English and AI will write a full cinematic Seedance prompt for you.
+                  Describe your idea in plain English and AI will write a full cinematic{isIOSApp ? "" : " Seedance"} prompt for you.
                 </p>
                 <button
                   onClick={() => window.dispatchEvent(new CustomEvent("openSignIn"))}
@@ -422,7 +422,7 @@ export default function PromptBuilder({ onUse, onClose }) {
             return (
               <>
                 <p style={{ fontSize: "0.82rem", color: "#64748b", marginBottom: "10px", lineHeight: 1.6 }}>
-                  Describe your vision in plain English. AI writes a full cinematic Seedance prompt.
+                  Describe your vision in plain English. AI writes a full cinematic{isIOSApp ? "" : " Seedance"} prompt.
                 </p>
                 <label style={S.label}>Your idea</label>
                 <textarea
@@ -466,7 +466,7 @@ export default function PromptBuilder({ onUse, onClose }) {
                           fontSize: "0.65rem", fontWeight: 700, color: "#64748b",
                           textTransform: "uppercase", letterSpacing: "0.08em",
                         }}>
-                          🎬 Your Seedance prompt
+                          🎬 Your {isIOSApp ? "cinematic" : "Seedance"} prompt
                         </span>
                         <button
                           onClick={handleCopy}
