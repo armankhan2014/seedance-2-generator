@@ -48,6 +48,12 @@ const WORD_RE = /\S+/g;
  *                                    notation instead of inventing placeholders.
  * @param {string}   placeholder    — textarea placeholder
  * @param {number}   maxWords       — soft cap; we display the count, never block typing
+ * @param {number}   maxChars       — HARD cap enforced by MuAPI (10,000). We
+ *                                    display the char count and clamp new
+ *                                    input at this cap. Users used to only
+ *                                    find out post-submit when the API 422'd
+ *                                    (11k+ char scripts) — costs a round-trip
+ *                                    and confuses them. 2026-07-05.
  * @param {boolean}  disabled       — disables the textarea + button (e.g. while generating)
  * @param {function} onUpgrade      — called when the API returns upgradeRequired: true
  *                                    (lets the parent open the credits / sign-in modal)
@@ -59,6 +65,7 @@ export default function SmartPrompt({
   images = [],
   placeholder = "Describe your video…",
   maxWords = 20000,
+  maxChars = 10000,
   disabled = false,
   onUpgrade,
 }) {
@@ -82,6 +89,17 @@ export default function SmartPrompt({
     const m = value.match(WORD_RE);
     return m ? m.length : 0;
   }, [value]);
+  const charCount = value?.length || 0;
+  const charNearCap = charCount >= maxChars * 0.9;   // warn at 90%
+  const charAtCap = charCount >= maxChars;
+
+  // Hard clamp — if a paste/type would push value past maxChars, trim to
+  // the cap before handing back to onChange. Users can't produce a prompt
+  // longer than MuAPI accepts, so no more surprise 422 refund churn.
+  const handleChange = (next) => {
+    const clamped = (next?.length ?? 0) > maxChars ? next.slice(0, maxChars) : next;
+    onChange?.(clamped);
+  };
 
   // Stable key for the current image set — used to detect when
   // images have changed since the last expand.
@@ -173,9 +191,10 @@ export default function SmartPrompt({
     >
       <textarea
         value={value}
-        onChange={(e) => onChange?.(e.target.value)}
+        onChange={(e) => handleChange(e.target.value)}
         placeholder={placeholder}
         disabled={disabled || busy}
+        maxLength={maxChars}
         rows={8}
         spellCheck={true}
         style={{
@@ -215,11 +234,17 @@ export default function SmartPrompt({
         <span
           style={{
             fontSize: 12,
-            color: COLOR_MUTED,
+            color: charNearCap ? "#dc2626" : COLOR_MUTED,
+            fontWeight: charNearCap ? 600 : 400,
             fontVariantNumeric: "tabular-nums",
           }}
+          title={
+            charAtCap
+              ? "Prompt at the 10,000-character maximum — trim to keep typing."
+              : `Characters remaining: ${(maxChars - charCount).toLocaleString()}`
+          }
         >
-          {wordCount.toLocaleString()} / {maxWords.toLocaleString()} words
+          {wordCount.toLocaleString()} words · {charCount.toLocaleString()} / {maxChars.toLocaleString()} chars
         </span>
 
         {/* Right side: error message (when present) OR Expand button
