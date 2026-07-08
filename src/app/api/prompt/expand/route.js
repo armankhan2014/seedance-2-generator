@@ -27,6 +27,13 @@ const EXPAND_COST = 1;
 // realistic prompt and still bounded for safety.
 const MAX_DESCRIPTION_LEN = 12000;
 const ALLOWED_DURATIONS = new Set([5, 10, 15]);
+// Seedance 2.0 hard limit — anything past this is rejected upstream.
+// Includes spaces, punctuation, and every dash. We aim Claude at a
+// tighter budget (3,500) to leave headroom for the injected FACE LOCK
+// + ANTI-FLASH safety sentences that get spliced in server-side, then
+// truncate defensively at 3,800 if Claude ignores the cap. 2026-07-08.
+const SEEDANCE_HARD_CAP = 3800;
+const SEEDANCE_TARGET_LEN = 3500;
 
 // Gold-standard system prompt — same heavy directorial framing the
 // existing /api/prompt/build route uses. Arman flagged on 2026-05-12
@@ -82,6 +89,8 @@ The user has selected {DURATION} seconds. Match the shot breakdown to that windo
 - 15 seconds → 4–5 timestamped beats — full mini-scene with movement, multiple actions, rich environment
 
 ## FORMAT RULES
+- HARD CHARACTER LIMIT: your entire output MUST be strictly under 3,800 characters (target 3,000–3,500 to leave headroom). Every space, dash, comma, and newline counts. Seedance 2.0 rejects any prompt over 3,800 chars — going over means the user loses credits for nothing.
+- To stay under the cap, favour SHORT dense sentences over long flowery ones. Cut adjectives that don't change the shot. Drop redundant beats. Never sacrifice specifics (colours, timestamps, camera moves) to save space — sacrifice adjectives and mood-words instead.
 - Start with: video length, style, atmosphere, format line
 - Then CHARACTER section
 - Then ENVIRONMENT section
@@ -157,6 +166,23 @@ function buildFaceLock(imageCount) {
     "NO face-swap between characters, NO blending, NO morphing, NO 'similar' — " +
     "keep each face anchored to its source reference for every frame that character appears."
   );
+}
+
+// Defensive last-line truncator — if Claude somehow ignores the
+// FORMAT RULES cap OR the injected safety sentences push the total
+// over 3,800, trim on the nearest sentence boundary before the cap so
+// the output is still coherent instead of chopped mid-word.
+function trimToSeedanceCap(text) {
+  if (!text || text.length <= SEEDANCE_HARD_CAP) return text;
+  const slice = text.slice(0, SEEDANCE_HARD_CAP);
+  // Prefer a sentence boundary (., !, ?) — fall back to newline, then
+  // to a space so we never split a word.
+  const punct = Math.max(slice.lastIndexOf("."), slice.lastIndexOf("!"), slice.lastIndexOf("?"));
+  if (punct > SEEDANCE_HARD_CAP * 0.75) return slice.slice(0, punct + 1);
+  const nl = slice.lastIndexOf("\n");
+  if (nl > SEEDANCE_HARD_CAP * 0.75) return slice.slice(0, nl);
+  const sp = slice.lastIndexOf(" ");
+  return sp > 0 ? slice.slice(0, sp) : slice;
 }
 
 function injectReferenceSafeties(prompt, imageCount) {
@@ -325,7 +351,13 @@ export async function POST(req) {
         },
         body: JSON.stringify({
           model: "claude-haiku-4-5-20251001",
-          max_tokens: 3000,
+          // 3800 chars ÷ ~3.5 chars/token ≈ 1085 tokens. Set the ceiling
+          // just above so Claude has room for the target 3,500-char
+          // output plus safety-sentence headroom, without wasting tokens
+          // on a runaway generation. Was 3000 (~11k chars); at that
+          // ceiling Claude routinely produced ~5–6k-char prompts that
+          // upstream Seedance 2.0 then rejected. 2026-07-08.
+          max_tokens: 1200,
           system: SYSTEM_TEMPLATE.replace("{DURATION}", String(duration)),
           messages: [{ role: "user", content: userContent }],
         }),
@@ -368,6 +400,13 @@ export async function POST(req) {
     if (imageBlocks.length > 0) {
       prompt = injectReferenceSafeties(prompt, imageBlocks.length);
     }
+
+    // Final safety net — even after all the "under 3,800 chars"
+    // instructions Claude occasionally overruns, and the injected
+    // FACE LOCK sentences can push a borderline prompt over. Trim on
+    // the nearest sentence boundary so what reaches Seedance 2.0
+    // always fits under its hard cap. 2026-07-08.
+    prompt = trimToSeedanceCap(prompt);
 
     return NextResponse.json({ prompt });
   } catch (err) {
