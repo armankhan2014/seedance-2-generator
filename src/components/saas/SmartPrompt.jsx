@@ -333,6 +333,10 @@ export default function SmartPrompt({
             style={{
               position: "absolute",
               inset: 0,
+              // pointer-events:none on the container so typing/clicking
+              // over blank text passes straight through to the textarea
+              // below. Individual @imageN spans opt BACK IN via
+              // pointer-events:auto so they can capture hover + click.
               pointerEvents: "none",
               overflow: "hidden",
               padding: "16px 18px 12px 18px",
@@ -344,6 +348,11 @@ export default function SmartPrompt({
               wordWrap: "break-word",
               overflowWrap: "break-word",
               boxSizing: "border-box",
+              // MUST stack above the textarea (z-index: 1). Otherwise
+              // the textarea intercepts every mouse event and the token
+              // spans never see a hover, no matter what pointer-events
+              // says. 2026-07-08 — bug: hover-preview never fired.
+              zIndex: 2,
             }}
           >
             {mirrorNodes}
