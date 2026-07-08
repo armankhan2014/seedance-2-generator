@@ -89,17 +89,30 @@ The user has selected {DURATION} seconds. Match the shot breakdown to that windo
 - 15 seconds → 4–5 timestamped beats — full mini-scene with movement, multiple actions, rich environment
 
 ## FORMAT RULES
-- HARD CHARACTER LIMIT: your entire output MUST be strictly under 3,800 characters (target 3,000–3,500 to leave headroom). Every space, dash, comma, and newline counts. Seedance 2.0 rejects any prompt over 3,800 chars — going over means the user loses credits for nothing.
-- To stay under the cap, favour SHORT dense sentences over long flowery ones. Cut adjectives that don't change the shot. Drop redundant beats. Never sacrifice specifics (colours, timestamps, camera moves) to save space — sacrifice adjectives and mood-words instead.
-- Start with: video length, style, atmosphere, format line
-- Then CHARACTER section
-- Then ENVIRONMENT section
-- Then SHOT BREAKDOWN with timestamps (e.g. 0–3s:, 3–7s:, etc.) — count them to match the user's DURATION
-- Then SOUND DESIGN section
-- Then CAMERA ARCHITECTURE section
+
+### THE TWO NON-NEGOTIABLES
+1. COMPLETE — Every prompt MUST contain ALL SIX sections listed below, in order, fully finished. A prompt that ends mid-way through SHOT BREAKDOWN or omits CAMERA ARCHITECTURE is a failure, worse than a slightly less detailed one.
+2. UNDER 3,800 CHARACTERS — Seedance 2.0 rejects any prompt over 3,800 chars. Target 3,200–3,500 total to leave safety headroom. Every space, dash, comma, and newline counts.
+
+To hit BOTH: use the per-section character budgets below. When you feel a section running past its budget, TIGHTEN within it — cut adjectives, mood-words, redundant beats. NEVER skip a later section to fit an earlier one.
+
+### PER-SECTION BUDGETS (approximate — the total must land near 3,200–3,500)
+| # | Section                                             | Budget (chars) |
+|---|-----------------------------------------------------|----------------|
+| 1 | Opening line (length + style + atmosphere + format) | ~150           |
+| 2 | CHARACTER (with FACE LOCK if reference images given)| ~500           |
+| 3 | ENVIRONMENT                                         | ~550           |
+| 4 | SHOT BREAKDOWN — timestamped beats, DURATION-scaled | ~1,300         |
+| 5 | SOUND DESIGN                                        | ~350           |
+| 6 | CAMERA ARCHITECTURE                                 | ~400           |
+| = | TOTAL                                               | ~3,250         |
+
+### STYLE RULES
 - Output ONLY the prompt — no "here is your prompt", no explanations, no meta-commentary
 - Be SPECIFIC everywhere — no vague words like "dramatic" or "cinematic" without backing them up with exact detail
+- Favour SHORT dense sentences over long flowery ones — every word should either name a shot element or add a concrete specification
 - Invent creative details where the user left gaps — make bold creative decisions
+- Sacrifice adjectives and mood-words to save space. NEVER sacrifice specifics: colours, timestamps, camera moves, lighting sources.
 
 ## CRITICAL — REFERENCE-IMAGE HANDLING
 This is the rule Arman flagged on 2026-05-12 because Seedance was flashing the literal reference image at the start of every video before transitioning to the generated scene.
@@ -351,13 +364,15 @@ export async function POST(req) {
         },
         body: JSON.stringify({
           model: "claude-haiku-4-5-20251001",
-          // 3800 chars ÷ ~3.5 chars/token ≈ 1085 tokens. Set the ceiling
-          // just above so Claude has room for the target 3,500-char
-          // output plus safety-sentence headroom, without wasting tokens
-          // on a runaway generation. Was 3000 (~11k chars); at that
-          // ceiling Claude routinely produced ~5–6k-char prompts that
-          // upstream Seedance 2.0 then rejected. 2026-07-08.
-          max_tokens: 1200,
+          // Sized so Claude can always FINISH all six sections without
+          // hitting the token ceiling mid-sentence. 3,500-char target
+          // output ≈ 1,000 tokens; 1,500 gives 50% headroom so the model
+          // can afford a slightly-over run and then wrap the last
+          // section instead of cutting off inside SHOT BREAKDOWN or
+          // CAMERA ARCHITECTURE. Was 3,000 (~11k chars); dropped to
+          // 1,200 which was tight enough to occasionally truncate mid
+          // section. 2026-07-08.
+          max_tokens: 1500,
           system: SYSTEM_TEMPLATE.replace("{DURATION}", String(duration)),
           messages: [{ role: "user", content: userContent }],
         }),
