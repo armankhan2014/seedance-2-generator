@@ -165,6 +165,11 @@ export default function SmartPrompt({
   // Split the prompt into plain-text + @imageN token spans for the mirror
   // overlay. The trailing zero-width space preserves lines ending with
   // "\n" (otherwise the browser trims them).
+  // Hover-preview state — set when the cursor enters an @imageN token
+  // so we can render a floating thumbnail near it (Higgsfield-style).
+  // { n, x, y } — 1-based image index + viewport coords for the tooltip.
+  const [hoverPreview, setHoverPreview] = useState(null);
+
   const mirrorNodes = useMemo(() => {
     if (!value) return null;
     const parts = [];
@@ -174,19 +179,56 @@ export default function SmartPrompt({
     let i = 0;
     while ((m = re.exec(value)) !== null) {
       if (m.index > last) parts.push(value.slice(last, m.index));
+      const tokenN = parseInt(m[1], 10);
+      const tokenEnd = m.index + m[0].length;
       parts.push(
         <span
           key={`t${i++}`}
-          style={{ color: "#ef4444", fontWeight: 600, textDecoration: "underline", textDecorationColor: "rgba(239,68,68,0.5)" }}
+          onMouseEnter={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            setHoverPreview({
+              n: tokenN,
+              // Anchor the tooltip to the token: below by default, but
+              // if there's no room below (near viewport bottom) flip
+              // above. Horizontal center on the token.
+              x: r.left + r.width / 2,
+              y: r.bottom,
+              // Keep a reference to the top too so the tooltip can
+              // flip above if it'd overflow the viewport.
+              topY: r.top,
+            });
+          }}
+          onMouseLeave={() => setHoverPreview(null)}
+          onClick={() => {
+            // Clicking the coloured token: focus the textarea + drop
+            // the caret right after the token so the user can keep
+            // typing without hunting for the click point.
+            const ta = textareaRef.current;
+            if (!ta) return;
+            ta.focus();
+            ta.setSelectionRange(tokenEnd, tokenEnd);
+          }}
+          style={{
+            color: "#ef4444",
+            fontWeight: 600,
+            textDecoration: "underline",
+            textDecorationColor: "rgba(239,68,68,0.5)",
+            // Opt this span BACK IN to pointer events even though the
+            // mirror overlay is pointer-events:none. Lets hover +
+            // click work on tokens only.
+            pointerEvents: "auto",
+            cursor: "pointer",
+          }}
         >
           {m[0]}
         </span>
       );
-      last = m.index + m[0].length;
+      last = tokenEnd;
     }
     if (last < value.length) parts.push(value.slice(last));
     parts.push("​");
     return parts;
+    // setHoverPreview is stable — no need to include it in deps.
   }, [value]);
 
   const imageCount = images?.length || 0;
@@ -446,6 +488,90 @@ export default function SmartPrompt({
             })}
           </div>
         )}
+
+        {/* Hover preview — floating thumbnail that appears when the user
+            hovers over any @imageN token in the prompt. Position:fixed
+            so it can render above/below the token anywhere on screen.
+            Auto-flips above the token if there's no room below. Points
+            to the image at index (n-1) in the images array; falls back
+            to a small "not uploaded" chip if the token references an
+            image that isn't in the current set. */}
+        {hoverPreview && (() => {
+          const url = images?.[hoverPreview.n - 1];
+          const SIZE = 96;
+          const GAP = 8;
+          // Flip above if the tooltip would overflow the viewport bottom.
+          const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+          const flipAbove = hoverPreview.y + SIZE + 40 > vh;
+          const top = flipAbove ? hoverPreview.topY - SIZE - 34 - GAP : hoverPreview.y + GAP;
+          // Clamp horizontally so the tooltip stays inside the viewport.
+          const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
+          const half = SIZE / 2 + 6;
+          const cx = Math.max(half + 6, Math.min(vw - half - 6, hoverPreview.x));
+          return (
+            <div
+              style={{
+                position: "fixed",
+                left: cx,
+                top,
+                transform: "translateX(-50%)",
+                background: COLOR_BG_DEEP,
+                border: `1px solid ${COLOR_BORDER}`,
+                borderRadius: 8,
+                padding: 5,
+                zIndex: 200,
+                boxShadow: "0 12px 30px rgba(0,0,0,0.6)",
+                pointerEvents: "none",
+              }}
+            >
+              {url ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={url}
+                  alt=""
+                  style={{
+                    width: SIZE,
+                    height: SIZE,
+                    objectFit: "cover",
+                    borderRadius: 5,
+                    display: "block",
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: SIZE,
+                    height: SIZE,
+                    borderRadius: 5,
+                    background: "#1a1a1a",
+                    color: COLOR_MUTED,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 10,
+                    textAlign: "center",
+                    padding: 6,
+                    lineHeight: 1.3,
+                  }}
+                >
+                  no image #{hoverPreview.n} uploaded
+                </div>
+              )}
+              <div
+                style={{
+                  fontSize: 10.5,
+                  color: "#ef4444",
+                  fontWeight: 600,
+                  marginTop: 4,
+                  textAlign: "center",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                @image{hoverPreview.n}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Footer bar — sits flush with the textarea. Holds the word
