@@ -61,7 +61,7 @@ const WORD_RE = /\S+/g;
 export default function SmartPrompt({
   value = "",
   onChange,
-  duration = 5,
+  duration = 15,
   images = [],
   placeholder = "Describe your video…",
   maxWords = 20000,

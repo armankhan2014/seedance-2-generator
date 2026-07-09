@@ -416,7 +416,9 @@ export default function Home() {
     return () => { cancelled = true; };
   }, []);
   const [resolution, setResolution] = useState(RESOLUTIONS[1].value); // 720p default
-  const [duration, setDuration] = useState(DURATIONS[0].value);
+  // Default 15s — Arman's rule (2026-07-08): every prompt/story defaults
+  // to the full 15-second clip unless the user explicitly picks 5 or 10.
+  const [duration, setDuration] = useState(15);
   const [quality, setQuality] = useState(QUALITIES[0].value);
   const [imagesList, setImagesList] = useState([]); // Max 9 URLs for I2V/Reference
   // Library of previously-uploaded images. v2 schema: { url, name, addedAt }[]
@@ -893,7 +895,7 @@ export default function Home() {
       ...prev,
       {
         id: newStoryId("s"),
-        duration: 5,
+        duration: 15,
         castIds: storyCast.map((c) => c.id), // default: all cast in this shot
         prompt: "",
         status: "ready",

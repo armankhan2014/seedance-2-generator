@@ -235,7 +235,9 @@ export async function POST(req) {
     // ── Input ────────────────────────────────────────────────────────────────
     const body = await req.json().catch(() => ({}));
     const description = typeof body.description === "string" ? body.description.trim() : "";
-    const duration = ALLOWED_DURATIONS.has(Number(body.duration)) ? Number(body.duration) : 5;
+    // Fallback 15 (not 5) — default story length is the full 15-second
+    // clip unless the user explicitly selected 5 or 10. 2026-07-08.
+    const duration = ALLOWED_DURATIONS.has(Number(body.duration)) ? Number(body.duration) : 15;
     // Optional uploaded image URLs (from /api/upload → R2). The
     // existing Image-to-Video and Reference-to-Video modes already
     // store these on the client as imagesList. Passing them here lets
