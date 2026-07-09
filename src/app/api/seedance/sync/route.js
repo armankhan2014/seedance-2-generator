@@ -32,10 +32,33 @@ export async function POST(req) {
     const isCompleted = outputArr.length > 0 || statusStr === "succeeded" || statusStr === "completed";
 
     if (isCompleted && imageUrl) {
-      await prisma.creation.updateMany({
-        where: { requestId, userId: session.user.id },
+      // Guard on status:"processing" — this route used to blind-write
+      // completed over ANY status, which resurrected cron-swept rows
+      // without reinstating the charge (Dinesh double-dip, 2026-07-08:
+      // cron refunded a stuck job, video landed late, sync flipped it
+      // back to completed → user kept refund + video). Late deliveries
+      // for swept rows now go through completeLateDelivery, which
+      // re-charges as it resurrects.
+      const flipped = await prisma.creation.updateMany({
+        where: { requestId, userId: session.user.id, status: "processing" },
         data: { status: "completed", imageUrl },
       });
+      if (flipped.count === 0) {
+        const creation = await prisma.creation.findFirst({
+          where: { requestId, userId: session.user.id },
+        });
+        if (creation?.status === "failed") {
+          const revived = await AIService.completeLateDelivery(creation, imageUrl);
+          if (!revived) {
+            // Real failure (content policy etc.) — don't overwrite it.
+            return NextResponse.json({
+              status: "failed",
+              error: creation.error || "Generation failed.",
+              raw: result,
+            });
+          }
+        }
+      }
       return NextResponse.json({ status: "completed", imageUrl, raw: result });
     }
 

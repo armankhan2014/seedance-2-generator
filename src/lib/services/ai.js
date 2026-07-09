@@ -385,6 +385,75 @@ export const AIService = {
     return true;
   },
 
+  // Late delivery for a cron-swept row: MuAPI finished AFTER the hourly
+  // sweep already marked the creation failed and refunded the user. The
+  // video exists — dropping it wastes a paid render, but resurrecting it
+  // without re-charging gives the user both the refund AND the video
+  // (caught on Dinesh's account 2026-07-08, 450cr double-dip). So:
+  //   1. Conditionally flip failed → completed, but ONLY when the error
+  //      is the cron's own marker — a content-policy or API failure must
+  //      stay failed. The compare-and-swap makes concurrent callers
+  //      (webhook / poll / sync) resurrect + re-charge exactly once.
+  //   2. Re-charge the original cost, clamped to the user's current
+  //      balance so we never drive credits negative. Any shortfall is
+  //      recorded in the ledger note for support to see.
+  // Returns true if THIS caller resurrected the row.
+  async completeLateDelivery(creation, imageUrl) {
+    if (!creation || !imageUrl) return false;
+    const resurrected = await prisma.creation.updateMany({
+      where: {
+        id: creation.id,
+        status: "failed",
+        error: { startsWith: "Auto-closed by cron" },
+      },
+      data: { status: "completed", imageUrl, error: null },
+    });
+    if (resurrected.count !== 1) return false;
+
+    try {
+      const cost = this.estimateCostFromCreation(creation);
+      if (cost > 0) {
+        await prisma.$transaction(async (tx) => {
+          const user = await tx.user.findUnique({
+            where: { id: creation.userId },
+            select: { credits: true },
+          });
+          const charge = Math.min(cost, Math.max(0, user?.credits ?? 0));
+          const shortfall = cost - charge;
+          if (charge > 0) {
+            await tx.user.update({
+              where: { id: creation.userId },
+              data: { credits: { decrement: charge } },
+            });
+          }
+          // delta-0 marker still written when the balance is empty so
+          // the audit trail shows the recharge was attempted.
+          await tx.creditTransaction.create({
+            data: {
+              userId: creation.userId,
+              delta: -charge,
+              reason: "late_delivery_recharge",
+              refType: "Creation",
+              refId: creation.id,
+              note:
+                `Video delivered after cron sweep refund — charge reinstated.` +
+                (shortfall > 0 ? ` Shortfall ${shortfall} (balance too low).` : ""),
+            },
+          });
+        });
+        console.log(
+          "[AI_LATE_DELIVERY] Resurrected creation", creation.requestId,
+          "for user", creation.userId, "— re-charged up to", cost, "credits"
+        );
+      }
+    } catch (chargeErr) {
+      // Row is already completed — never roll that back over a charge
+      // hiccup; log loudly so support can reconcile by hand.
+      console.error("[AI_LATE_DELIVERY_CHARGE_FAILED]", creation.id, chargeErr.message);
+    }
+    return true;
+  },
+
   async checkStatus(requestId, userId) {
     // Scope to the calling user — without this, anyone can poll any
     // requestId and read other users' generation status / output URLs.
@@ -455,13 +524,19 @@ export const AIService = {
         data: { status: "completed", imageUrl: finalUrl },
       });
       if (swapped.count === 0) {
-        // Cron / failAndRefund got here first. Don't fight it — read
-        // back the current state so the caller sees consistent data.
+        // Cron / failAndRefund got here first. Read back the current
+        // state so the caller sees consistent data.
         const current = await prisma.creation.findUnique({
           where: { requestId },
           select: { status: true, imageUrl: true, error: true },
         });
         if (current?.status === "failed") {
+          // Cron-swept row + video actually delivered → resurrect and
+          // re-charge instead of hiding a paid render. Non-sweep
+          // failures (content policy etc.) don't match the marker and
+          // still throw below.
+          const revived = await this.completeLateDelivery(creation, finalUrl);
+          if (revived) return { status: "completed", imageUrl: finalUrl };
           throw new Error(current.error || "Generation failed.");
         }
         if (current?.status === "completed") {

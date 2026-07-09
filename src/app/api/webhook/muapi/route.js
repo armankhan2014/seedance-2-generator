@@ -108,14 +108,24 @@ export async function POST(req) {
       // end up with BOTH the refund AND a working video.
       //
       // updateMany.count === 0 here = the cron (or the poll path)
-      // already terminated the row; we silently drop the late delivery
-      // and don't fire the ready-push.
+      // already terminated the row. If it was the cron sweep (not a
+      // real failure), completeLateDelivery resurrects the row AND
+      // re-charges the refunded credits — the user gets the video they
+      // paid for instead of a free refund + dropped render. Real
+      // failures don't match the sweep marker and stay ignored.
       const result = await prisma.creation.updateMany({
         where: { id: creation.id, status: "processing" },
         data: { status: "completed", imageUrl },
       });
       if (result.count === 0) {
-        console.log(`[MUAPI_WEBHOOK] late success for already-terminated creation ${creation.id} — ignored`);
+        const revived = await AIService.completeLateDelivery(creation, imageUrl);
+        if (revived) {
+          sendCreationReadyPush(creation.userId, creation).catch((e) =>
+            console.warn("[MUAPI_WEBHOOK] push failed (late-ready):", e?.message)
+          );
+        } else {
+          console.log(`[MUAPI_WEBHOOK] late success for already-terminated creation ${creation.id} — ignored`);
+        }
       } else {
         // "🎬 Your video is ready" push — fanout to all Studio-origin
         // subscriptions for this user. Same fire-and-forget pattern;
