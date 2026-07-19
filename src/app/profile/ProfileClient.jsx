@@ -39,6 +39,7 @@ import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
 import { detectSocialFromUrl } from "@/lib/socialLinkDetect";
 import { useIsIOSApp } from "@/components/IOSAppContext";
+import IapCredits from "@/components/IapCredits";
 
 // ════════════════════════════════════════════════════════════════
 // BRAND TOKENS — matched to seedance.visualseffect.com homepage:
@@ -109,7 +110,8 @@ function d_socialLinksDefault() {
 // ════════════════════════════════════════════════════════════════
 export default function ProfilePage() {
   const { data: session, status } = useSession();
-  // Hide the "+ Top Up" (→ /pricing) shortcut inside the iOS app (Apple 3.1.1).
+  // Inside the iOS app the "+ Top Up" (→ Stripe /pricing) shortcut is hidden
+  // and replaced by the Apple In-App Purchase shop below (Apple 3.1.1).
   const isIOSApp = useIsIOSApp();
   const [profile, setProfile]   = useState(null);
   const [activeTab, setActiveTab] = useState("creations");
@@ -826,6 +828,14 @@ export default function ProfilePage() {
                 {!isIOSApp && <Link href="/pricing" style={topUpBtn}>+ Top Up</Link>}
               </div>
             </Card>
+
+            {/* Apple In-App Purchase shop — native app only. Renders null
+                when the StoreKit bridge is absent (i.e. on the web). */}
+            {isIOSApp && (
+              <Card>
+                <IapCredits onBalance={refetchProfile} />
+              </Card>
+            )}
 
             {/* Referral */}
             <Card>

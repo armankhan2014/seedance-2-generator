@@ -116,7 +116,7 @@ export async function POST(req) {
         return NextResponse.json(
           {
             error: iosApp
-              ? "You're out of credits."
+              ? "You're out of credits. Buy more from your profile."
               : "You need credits to use AI Prompt Builder. Buy credits to unlock.",
             upgradeRequired: !iosApp,
           },

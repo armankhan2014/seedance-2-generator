@@ -120,7 +120,7 @@ export async function POST(req) {
     if (err.message === "Insufficient credits") {
       // Inside the iOS app we never steer to a purchase (Apple 3.1.1).
       const msg = uaIsIOSApp(req.headers.get("user-agent"))
-        ? "You're out of credits."
+        ? "You're out of credits. Buy more from your profile."
         : "Not enough credits. Buy a credit pack to continue.";
       return NextResponse.json({ error: msg }, { status: 402 });
     }

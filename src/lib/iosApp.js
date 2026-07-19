@@ -1,20 +1,24 @@
-// iOS app detection ------------------------------------------------------
+// Native-app detection ----------------------------------------------------
 //
-// The native iOS wrapper (Capacitor shell in /Users/armankhan/seedance-app)
-// appends the token "SeedanceiOSApp" to its WebView User-Agent — set in
-// seedance-app/capacitor.config.json under `ios.appendUserAgent`. We use
-// that token to recognise when our hosted site is being viewed inside the
-// iOS App Store build.
+// Both native wrappers (Capacitor shell in /Users/armankhan/seedance-app)
+// append a token to their WebView User-Agent — set in
+// seedance-app/capacitor.config.json:
+//   • iOS     → "SeedanceiOSApp"      (ios.appendUserAgent)
+//   • Android → "SeedanceAndroidApp"  (android.appendUserAgent)
+// We use these tokens to recognise when our hosted site is being viewed
+// inside either app-store build.
 //
-// Why this matters: Apple's App Review Guideline 3.1.1 requires that any
-// digital content/credits usable inside the app be sold via Apple's own
+// Why this matters: BOTH Apple (Guideline 3.1.1) and Google Play require
+// that digital content/credits usable inside the app be sold via their own
 // in-app purchase. We sell credits via Stripe on the web, so inside the
-// iOS app we hide ALL pricing / buy / checkout surfaces. Users sign in and
-// spend credits bought on the website; the app shows no prices or buy
-// buttons. This file is the single source of truth for that detection.
+// native apps we hide ALL pricing / buy / checkout surfaces AND show the
+// "VisualsEffect" brand (not "Seedance", ByteDance's model name — Apple 4.1
+// copycat). Users sign in and spend credits bought on the website. This file
+// is the single source of truth for that detection.
 //
-// Pure string check — safe to import from both server and client code
+// Name kept as uaIsIOSApp for historical reasons — it now means "any native
+// app". Pure string check — safe to import from both server and client code
 // (no next/headers, no window access here).
 export function uaIsIOSApp(ua) {
-  return !!ua && /SeedanceiOSApp/i.test(ua);
+  return !!ua && /Seedance(iOS|Android)App/i.test(ua);
 }
