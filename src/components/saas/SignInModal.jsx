@@ -42,9 +42,31 @@ export default function SignInModal() {
   const [emailSent, setEmailSent] = useState(false);
   const [code, setCode]       = useState("");
 
+  // Ecosystem SSO (2026-07-20): sibling apps (visualseffect.com Studio)
+  // send users here to sign in on the shared account. They arrive with
+  // ?signin=1&callbackUrl=<their page>; we auto-open the modal and send
+  // the user back after auth. Only *.visualseffect.com destinations are
+  // honoured (open-redirect guard) — anything else falls back to "/".
+  const [cbUrl, setCbUrl] = useState("/");
+
   useEffect(() => {
     const handle = (e) => { setMode(e?.detail?.mode || "signin"); setOpen(true); };
     window.addEventListener("openSignIn", handle);
+
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const raw = params.get("callbackUrl");
+      if (raw) {
+        const u = new URL(raw, window.location.origin);
+        const okHost = u.hostname === "visualseffect.com" || u.hostname.endsWith(".visualseffect.com");
+        if (u.protocol === "https:" && okHost) setCbUrl(u.toString());
+      }
+      if (params.get("signin") === "1" || raw) {
+        setMode("signin");
+        setOpen(true);
+      }
+    } catch { /* malformed URL — ignore */ }
+
     return () => window.removeEventListener("openSignIn", handle);
   }, []);
 
@@ -59,13 +81,13 @@ export default function SignInModal() {
   const close = () => { setOpen(false); setEmail(""); setName(""); setEmailSent(false); setCode(""); setLoading(null); };
   const toggleMode = () => { setMode(m => m === "signin" ? "signup" : "signin"); setEmail(""); setName(""); setEmailSent(false); setCode(""); };
 
-  const handleSocial = (id) => { setLoading(id); signIn(id, { callbackUrl: "/" }); };
+  const handleSocial = (id) => { setLoading(id); signIn(id, { callbackUrl: cbUrl }); };
 
   const handleEmail = (e) => {
     e.preventDefault();
     if (!email) return;
     setLoading("email");
-    signIn("email", { email, callbackUrl: "/", redirect: false })
+    signIn("email", { email, callbackUrl: cbUrl, redirect: false })
       .then(() => { setEmailSent(true); setLoading(null); })
       .catch(() => setLoading(null));
   };
@@ -81,7 +103,7 @@ export default function SignInModal() {
     window.location.href =
       "/api/auth/callback/email?token=" + encodeURIComponent(clean) +
       "&email=" + encodeURIComponent(email) +
-      "&callbackUrl=" + encodeURIComponent("/");
+      "&callbackUrl=" + encodeURIComponent(cbUrl);
   };
 
   if (!open) return null;

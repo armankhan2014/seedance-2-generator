@@ -266,6 +266,23 @@ export const authOptions = {
   },
 
   callbacks: {
+    // Ecosystem SSO (2026-07-20): sibling apps (visualseffect.com Studio,
+    // films, …) send users here to sign in on the shared account with a
+    // callbackUrl pointing back at their own domain. NextAuth's default
+    // redirect callback rejects cross-origin URLs, so allow any https
+    // *.visualseffect.com destination explicitly; everything else keeps
+    // the default same-origin behaviour.
+    async redirect({ url, baseUrl }) {
+      try {
+        const u = new URL(url, baseUrl);
+        const okHost =
+          u.hostname === "visualseffect.com" ||
+          u.hostname.endsWith(".visualseffect.com");
+        if (u.protocol === "https:" && okHost) return u.toString();
+      } catch { /* fall through to defaults */ }
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      return baseUrl;
+    },
     // With database sessions, NextAuth passes the live DB user record here,
     // so we can read `credits` straight off it — no extra query needed.
     async session({ session, user }) {
