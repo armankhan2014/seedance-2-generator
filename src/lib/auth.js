@@ -84,8 +84,13 @@ if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASS) {
       return code;
     },
     // Custom send — branded email now carries BOTH the magic link and the code.
+    // The link goes to /auth/confirm (human-click interstitial), NOT straight
+    // to the one-time callback: email scanners prefetch links and were able
+    // to consume the token before the user clicked, bouncing real people
+    // back to the sign-in screen (diagnosed 2026-07-23).
     sendVerificationRequest: async ({ identifier: email, url, token }) => {
-      await sendMagicLinkEmail({ email, url, code: token });
+      const confirmUrl = url.replace("/api/auth/callback/email", "/auth/confirm");
+      await sendMagicLinkEmail({ email, url: confirmUrl, code: token });
     },
   }));
 }

@@ -40,6 +40,7 @@ export default function SignInModal() {
   const [email, setEmail]     = useState("");
   const [name, setName]       = useState("");
   const [emailSent, setEmailSent] = useState(false);
+  const [sendError, setSendError] = useState(null);
   const [code, setCode]       = useState("");
 
   // Ecosystem SSO (2026-07-20): sibling apps (visualseffect.com Studio)
@@ -87,9 +88,19 @@ export default function SignInModal() {
     e.preventDefault();
     if (!email) return;
     setLoading("email");
+    setSendError(null);
     signIn("email", { email, callbackUrl: cbUrl, redirect: false })
-      .then(() => { setEmailSent(true); setLoading(null); })
-      .catch(() => setLoading(null));
+      .then((res) => {
+        setLoading(null);
+        // Don't claim "check your inbox" when the server refused — that
+        // left people waiting for an email that never comes.
+        if (res?.error) setSendError("Couldn't send the sign-in email — try again in a moment.");
+        else setEmailSent(true);
+      })
+      .catch(() => {
+        setLoading(null);
+        setSendError("Network hiccup — try again.");
+      });
   };
 
   // Verify the typed sign-in code. Navigates to NextAuth's email callback in
@@ -251,6 +262,9 @@ export default function SignInModal() {
                       ? <><div style={{width:14,height:14,border:"2px solid rgba(255,255,255,.3)",borderTopColor:"#fff",borderRadius:"50%",animation:"_sdSpin .65s linear infinite"}}/> Sending…</>
                       : <>{isSignUp ? "Create account" : "Continue"} <span style={{opacity:.6,fontSize:11}}>→</span></>}
                   </button>
+                  {sendError && (
+                    <p style={{margin:"10px 0 0",fontSize:".76rem",color:"#f87171",textAlign:"center"}}>{sendError}</p>
+                  )}
                 </form>
               </>
             )}
