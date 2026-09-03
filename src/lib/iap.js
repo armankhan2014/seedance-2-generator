@@ -18,9 +18,28 @@ export const IAP_PACKS = [
   { productId: "credits15750", credits: 15750, label: "Studio Max" },
 ];
 
+// Cache the resolved plugin proxy so we don't re-register on every call.
+let _iap;
+
 function bridge() {
   if (typeof window === "undefined") return null;
-  return window.Capacitor?.Plugins?.IAP || null;
+  if (_iap !== undefined) return _iap;
+
+  const Cap = window.Capacitor;
+  // Only the native shells expose a working bridge; the web has no Capacitor.
+  if (!Cap || !(Cap.isNativePlatform?.() ?? Cap.isNative)) {
+    _iap = null;
+    return _iap;
+  }
+  // A native-only plugin loaded from a REMOTE url isn't auto-added to
+  // Capacitor.Plugins — it must be registered on the JS side to get a proxy
+  // that routes to IAPPlugin.swift. registerPlugin is the supported path;
+  // fall back to Plugins.IAP for older bridges that do populate it.
+  _iap =
+    (typeof Cap.registerPlugin === "function" && Cap.registerPlugin("IAP")) ||
+    Cap.Plugins?.IAP ||
+    null;
+  return _iap;
 }
 
 export function iapAvailable() {
