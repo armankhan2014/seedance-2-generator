@@ -138,6 +138,7 @@ model User {
   pushSubscriptions PushSubscription[]
   musicTracks       MusicTrack[]
   creditTxns        CreditTransaction[]
+  playlists         Playlist[]
   editorProjects    EditorProject[]
   // Social-proof popup tracking (Phase 1 social-proof MVP, added
   // 2026-06-06). One row per (visitorIp, userId) combination — when
@@ -642,12 +643,18 @@ model MusicTrack {
   masterFormat   String?
   masterMeta     Json?
 
+  // Library v2 (2026-09-04) — one-tap favourite. Boolean rather than a
+  // 1-5 rating by product choice: the library filter only needs
+  // "starred / not". See manual-migrations/2026-09-04-music-library-v2.
+  starred        Boolean  @default(false)
+
   deletedAt      DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   creations Creation[]
+  playlistEntries PlaylistTrack[]
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([status])
@@ -659,6 +666,57 @@ model MusicTrack {
   @@index([voiceCleanTaskId])
   @@index([vocalsSplitTaskId])
   @@index([masterTaskId])
+  // Serves "my starred tracks, newest first" — the only read that
+  // touches `starred`.
+  @@index([userId, starred, createdAt(sort: Desc)])
+}
+
+// ── Music Library v2 (2026-09-04) ────────────────────────────────
+// User-curated collections of MusicTracks, built for
+// music.visualseffect.com.
+//
+// `public` + `slug` are present but unused today: the product
+// decision was "private now, shareable later", and shipping the
+// columns up front means turning on /playlist/[slug] later needs no
+// second migration. slug is UNIQUE but nullable — Postgres allows
+// many NULLs in a unique index, so every private playlist leaves it
+// NULL.
+model Playlist {
+  id          String    @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  public      Boolean   @default(false)
+  slug        String?   @unique
+  coverUrl    String?
+  deletedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tracks PlaylistTrack[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([public, createdAt(sort: Desc)])
+  @@index([deletedAt])
+}
+
+// Ordered join between Playlist and MusicTrack. `position` drives
+// manual reordering. The (playlistId, trackId) unique makes
+// "add to playlist" idempotent so a double-tap can't duplicate.
+model PlaylistTrack {
+  id         String   @id @default(cuid())
+  playlistId String
+  trackId    String
+  position   Int      @default(0)
+  addedAt    DateTime @default(now())
+
+  playlist Playlist   @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  track    MusicTrack @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, trackId])
+  @@index([playlistId, position])
+  @@index([trackId])
 }
 
 // Web Push subscription for browser notifications. Mirrors the model
