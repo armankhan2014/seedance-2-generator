@@ -40,25 +40,7 @@ export default function IapCredits({ onBalance }) {
     return () => { live = false; };
   }, [available, onBalance]);
 
-  // TEMP DIAGNOSTIC — remove after debugging the native bridge.
-  if (!available) {
-    let dbg = "no window";
-    if (typeof window !== "undefined") {
-      const C = window.Capacitor;
-      dbg = JSON.stringify({
-        hasCap: !!C,
-        native: C?.isNativePlatform?.() ?? C?.isNative ?? null,
-        platform: C?.getPlatform?.() ?? null,
-        hasRegister: typeof C?.registerPlugin,
-        pluginKeys: C?.Plugins ? Object.keys(C.Plugins).slice(0, 20) : null,
-      });
-    }
-    return (
-      <div style={{ fontSize: 11, color: "#ff6b6b", wordBreak: "break-all" }}>
-        IAP debug: {dbg}
-      </div>
-    );
-  }
+  if (!available) return null;
 
   const handleBuy = async (productId) => {
     setError("");
