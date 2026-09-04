@@ -10,12 +10,15 @@
 //   → only then native finish(). See src/lib/appleIap.js for verification.
 
 // Order matters — this is the order packs render in the buy sheet.
+// `bonus` = extra credits-per-dollar versus the Starter pack, rounded, so we
+// can show a "+N% more" value badge even before StoreKit prices load. Derived
+// from the USD ladder (450/$5.99 … 15750/$179.99); keep in sync if prices move.
 export const IAP_PACKS = [
   { productId: "credits450",   credits: 450,   label: "Starter"    },
-  { productId: "credits1350",  credits: 1350,  label: "Creator"    },
-  { productId: "credits3150",  credits: 3150,  label: "Pro",   best: true },
-  { productId: "credits6750",  credits: 6750,  label: "Studio"     },
-  { productId: "credits15750", credits: 15750, label: "Studio Max" },
+  { productId: "credits1350",  credits: 1350,  label: "Creator",    bonus: 6  },
+  { productId: "credits3150",  credits: 3150,  label: "Pro",        bonus: 10, best: true },
+  { productId: "credits6750",  credits: 6750,  label: "Studio",     bonus: 12 },
+  { productId: "credits15750", credits: 15750, label: "Studio Max", bonus: 16 },
 ];
 
 // Cache the resolved plugin proxy so we don't re-register on every call.

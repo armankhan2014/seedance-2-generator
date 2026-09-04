@@ -61,13 +61,32 @@ export default function IapCredits({ onBalance }) {
     }
   };
 
+  const handleRestore = async () => {
+    setError("");
+    setNotice("");
+    setBusy("restore");
+    try {
+      const granted = await redeemPendingIap();
+      setNotice(
+        granted > 0
+          ? `${granted.toLocaleString()} credits restored.`
+          : "No pending purchases to restore."
+      );
+      if (granted > 0) onBalance?.();
+    } catch {
+      setError("Couldn't restore purchases. Please try again.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <div>
       <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".09em", color: SUB }}>
         Buy credits
       </div>
       <p style={{ margin: "8px 0 14px", color: SUB, fontSize: 12.5, lineHeight: 1.5 }}>
-        Credits power every video, image and prompt you generate.
+        Credits power every video, image and prompt you generate. One-time purchase, secured by Apple.
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -80,8 +99,9 @@ export default function IapCredits({ onBalance }) {
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              gap: 12,
+              gap: 10,
               width: "100%",
+              minWidth: 0,
               padding: "13px 14px",
               background: pack.best ? LIME_TINT : CARD,
               border: `1px solid ${pack.best ? LIME_RING : BORDER}`,
@@ -93,15 +113,26 @@ export default function IapCredits({ onBalance }) {
               color: "inherit",
             }}
           >
-            <span>
-              <span style={{ display: "block", fontWeight: 800, fontSize: 15, color: LIME }}>
-                {pack.credits.toLocaleString()} credits
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontWeight: 800, fontSize: 15, color: LIME }}>
+                  {pack.credits.toLocaleString()} credits
+                </span>
+                {pack.best && (
+                  <span style={{
+                    fontSize: 9.5, fontWeight: 800, letterSpacing: ".06em", textTransform: "uppercase",
+                    color: "#0a0a0a", background: LIME, borderRadius: 999, padding: "2px 7px",
+                  }}>
+                    Popular
+                  </span>
+                )}
               </span>
-              <span style={{ display: "block", fontSize: 12, color: SUB, marginTop: 2 }}>
-                {pack.label}{pack.best ? " · Most popular" : ""}
+              <span style={{ display: "block", fontSize: 12, color: SUB, marginTop: 3 }}>
+                {pack.label}
+                {pack.bonus ? <span style={{ color: LIME }}>{`  ·  +${pack.bonus}% more credits`}</span> : ""}
               </span>
             </span>
-            <span style={{ fontWeight: 800, fontSize: 15, whiteSpace: "nowrap" }}>
+            <span style={{ fontWeight: 800, fontSize: 15, whiteSpace: "nowrap", flexShrink: 0 }}>
               {busy === pack.productId ? "…" : (prices[pack.productId] || "")}
             </span>
           </button>
@@ -110,6 +141,18 @@ export default function IapCredits({ onBalance }) {
 
       {notice && <p style={{ margin: "12px 0 0", color: LIME, fontSize: 12.5 }}>{notice}</p>}
       {error  && <p style={{ margin: "12px 0 0", color: "#ff6b6b", fontSize: 12.5 }}>{error}</p>}
+
+      <button
+        onClick={handleRestore}
+        disabled={!!busy}
+        style={{
+          marginTop: 14, background: "none", border: "none", padding: 0,
+          color: SUB, fontSize: 12, textDecoration: "underline", cursor: busy ? "default" : "pointer",
+          font: "inherit", textDecorationColor: BORDER,
+        }}
+      >
+        {busy === "restore" ? "Restoring…" : "Restore purchases"}
+      </button>
     </div>
   );
 }

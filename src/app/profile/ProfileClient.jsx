@@ -782,7 +782,7 @@ export default function ProfilePage() {
           </div>
 
           {/* RIGHT SIDEBAR */}
-          <aside style={{ display: "flex", flexDirection: "column", gap: 16 }}
+          <aside style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}
                  className="profile-v2-sidebar">
             {/* Plan + credits */}
             <Card>
@@ -854,6 +854,12 @@ export default function ProfilePage() {
               }}>
                 <code style={{
                   flex: 1,
+                  // Without minWidth:0 a flex item won't shrink below its
+                  // content's intrinsic width, so this long URL stretched the
+                  // whole sidebar past the viewport on mobile — pushing every
+                  // card's right-aligned content (incl. the IAP prices) off
+                  // screen. minWidth:0 lets the ellipsis do its job.
+                  minWidth: 0,
                   fontSize: 11.5,
                   color: TEXT,
                   fontFamily: "ui-monospace, SFMono-Regular, monospace",
