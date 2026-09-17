@@ -109,6 +109,17 @@ export default function SignInModal() {
   const handleVerifyCode = (e) => {
     e.preventDefault();
     const clean = code.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+    // App Review bypass: a code starting with REVIEW is an App/Play Store
+    // reviewer token — route it to /api/auth/reviewer, which mints a session
+    // cookie in THIS WebView (no demo inbox / email code needed). The server
+    // still validates the full token against REVIEWER_TOKEN, so a wrong value
+    // just 403s. Normal 8-char codes use an alphabet with no "I", so they can
+    // never begin with "REVIEW" — zero collision risk.
+    if (clean.startsWith("REVIEW")) {
+      setLoading("code");
+      window.location.href = "/api/auth/reviewer?token=" + encodeURIComponent(clean);
+      return;
+    }
     if (clean.length < 8) return;
     setLoading("code");
     window.location.href =
